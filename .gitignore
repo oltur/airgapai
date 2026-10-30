@@ -1,0 +1,13 @@
+docs/raw-transcript.jsonl
+docs/conversation.md
+CLAUDE.md
+
+# model weights, SBOM exports, cluster state
+*.gguf
+*.safetensors
+/bootstrap/dist/
+/observability/data/
+.env
+*.key
+*.pem
+kubeconfig*
