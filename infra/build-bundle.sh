@@ -84,7 +84,8 @@ ls /tmp/rpms | wc -l
 EOF
 scp -q "${opts[@]}" "alma@$ip:/tmp/rpms/*" "$tree/rpms/"
 
-cp "$here/guest/install.sh" "$tree/"
+cp -r "$here/guest/." "$tree/"
+"$here/../test/build-probe-image.sh" "$tree/probe.tar"
 cp "$dl/rke2.linux-amd64.tar.gz" "$dl/rke2-images.linux-amd64.tar.zst" "$tree/"
 (cd "$tree" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS)
 rm -f "$iso"

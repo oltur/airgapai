@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets hours bundle vm-up vm-ssh vm-down
+.PHONY: help setup check test-secrets hours bundle vm-up vm-ssh vm-down test-hardening
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -35,3 +35,6 @@ vm-ssh: ## Open a shell on the VM
 
 vm-down: ## Remove the VM
 	@infra/vm-down.sh
+
+test-hardening: ## Test Pod Security, default deny and DNS on the VM, with controls
+	@infra/vm-ssh.sh sudo bash -s <test/hardening.sh

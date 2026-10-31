@@ -1,0 +1,10 @@
+# Flannel normally finds its interface from the default route, which here is a black hole.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-canal
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    flannel:
+      iface: eth0

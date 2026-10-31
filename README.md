@@ -18,8 +18,8 @@ Phase 1 of 4: the air gap, in progress. **The claim above is not proven yet.** T
 guard is done, and a [default-deny spike](docs/adr/0003-default-deny-with-calico-gnp.md) has passed
 on a throwaway VM with internet access. RKE2 now
 [installs from an offline bundle](docs/adr/0004-offline-install-and-black-hole-route.md) on an
-isolated network, without hardening and without the formal egress test. No model, retrieval or
-gateway code exists so far.
+isolated network, with [baseline hardening](docs/adr/0005-baseline-hardening.md) but no registry,
+image signing or formal egress test yet. No model, retrieval or gateway code exists so far.
 
 | Phase | What it should demonstrate |
 |---|---|
@@ -58,6 +58,7 @@ make bundle   # build the offline bundle, on the online host
 make vm-up    # create the isolated network and VM, and install RKE2 from the bundle
 make vm-ssh   # log in as alma, who has passwordless sudo
 make vm-down  # remove the VM and anything changed inside it
+make test-hardening  # test Pod Security, default deny and DNS on the VM, with controls
 ```
 
 The VM is at `10.77.0.10` and can be reached only from the host. Its SSH key is
