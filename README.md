@@ -14,8 +14,10 @@ private, non-commercial project, written independently from public specification
 
 ## Status
 
-Phase 0 of 4: repository basics. **The claim above is not proven yet.** No cluster, model,
-retrieval or gateway code exists so far.
+Phase 1 of 4: the air gap, in progress. **The claim above is not proven yet.** The repository
+guard is done, and a [default-deny spike](docs/adr/0003-default-deny-with-calico-gnp.md) has passed
+on a throwaway VM with internet access. No air-gapped build, model, retrieval or gateway code
+exists so far.
 
 | Phase | What it should demonstrate |
 |---|---|

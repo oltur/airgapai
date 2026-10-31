@@ -14,7 +14,7 @@ from pathlib import Path
 IDLE_GAP = timedelta(minutes=15)
 PHASES = [  # name, budget in hours, start
     ("0: repo basics", 5, "2026-10-31T09:13:00+01:00"),
-    ("1: the air gap", 60, None),
+    ("1: the air gap", 60, "2026-10-31T09:41:27+01:00"),
     ("2: light retrieval", 30, None),
     ("3: agent gateway", 55, None),
     ("4: evals and write-up", 30, None),
@@ -70,14 +70,17 @@ def main():
     if not sessions:
         return
     starts = [parse(start) for _, _, start in PHASES if start]
-    active = blocks(event for event in sessions + commit_events() if event >= starts[0])
+    events = sessions + commit_events()
 
     by_phase = defaultdict(timedelta)
     by_day = defaultdict(timedelta)
-    for start, end in active:
-        phase = sum(start >= phase_start for phase_start in starts) - 1
-        by_phase[phase] += end - start
-        by_day[start.date(), phase] += end - start
+    # Blocks are built per phase, so one spanning a phase start is split at that point.
+    for phase, phase_start in enumerate(starts):
+        phase_end = starts[phase + 1] if phase + 1 < len(starts) else None
+        in_phase = (e for e in events if e >= phase_start and (phase_end is None or e < phase_end))
+        for start, end in blocks(in_phase):
+            by_phase[phase] += end - start
+            by_day[start.date(), phase] += end - start
 
     def hours(delta):
         return f"{delta.total_seconds() / 3600:.1f}"

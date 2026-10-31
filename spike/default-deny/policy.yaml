@@ -1,0 +1,25 @@
+# Denies all traffic for pods outside the named system namespaces, except DNS to CoreDNS.
+# Selects on kubernetes.io/metadata.name, which Kubernetes sets on every namespace and which
+# cannot be changed to another value, so a new namespace is covered without any labelling.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: default-deny-workloads
+spec:
+  namespaceSelector: kubernetes.io/metadata.name not in {"kube-system", "kube-public", "kube-node-lease"}
+  types:
+    - Ingress
+    - Egress
+  egress:
+    - action: Allow
+      protocol: UDP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "kube-system"
+        selector: k8s-app == "kube-dns"
+        ports: [53]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "kube-system"
+        selector: k8s-app == "kube-dns"
+        ports: [53]
