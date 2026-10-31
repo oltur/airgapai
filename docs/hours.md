@@ -8,7 +8,7 @@ those tools, and it counts time when Claude was working unattended.
 | Phase | Budget (h) | Active (h) |
 |---|---|---|
 | 0: repo basics | 5 | 0.5 |
-| 1: the air gap | 60 | 3.7 |
+| 1: the air gap | 60 | 4.9 |
 | 2: light retrieval | 30 |  |
 | 3: agent gateway | 55 |  |
 | 4: evals and write-up | 30 |  |
@@ -18,4 +18,4 @@ those tools, and it counts time when Claude was working unattended.
 | Date | Phase | Active (h) |
 |---|---|---|
 | 2026-10-31 | 0 | 0.5 |
-| 2026-10-31 | 1 | 3.7 |
+| 2026-10-31 | 1 | 4.9 |

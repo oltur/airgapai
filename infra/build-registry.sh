@@ -45,7 +45,7 @@ rm -rf "$tree/registry"
 mkdir -p "$tree/registry"
 cat >"$tmp/zot.json" <<JSON
 {"distSpecVersion":"1.1.1","storage":{"rootDirectory":"$tree/registry","gc":false,"dedupe":false},
- "http":{"address":"127.0.0.1","port":"15000"},"log":{"level":"error"}}
+ "http":{"address":"127.0.0.1","port":"15000","compat":["docker2s2"]},"log":{"level":"error"}}
 JSON
 "$tmp/usr/local/bin/zot-linux-amd64" serve "$tmp/zot.json" >"$tmp/zot.log" 2>&1 &
 zot_pid=$!
@@ -64,9 +64,29 @@ sign() { # repo digest key
 sign kyverno/kyverno "${KYVERNO_IMAGE#*@}" "$keys/cosign.key"
 sign kyverno/kyvernopre "${KYVERNOPRE_IMAGE#*@}" "$keys/cosign.key"
 
+copy_signed() { # source repo; copies one platform's image by digest and signs it
+  "$crane" copy --platform linux/amd64 "$1" "$local_reg/$2:bundle"
+  [[ $("$crane" digest "$local_reg/$2:bundle") == "${1#*@}" ]]
+  sign "$2" "${1#*@}" "$keys/cosign.key"
+}
+copy_signed "$FORGEJO_IMAGE" forgejo/forgejo
+copy_signed "$ARGOCD_IMAGE" argoproj/argocd
+copy_signed "$REDIS_IMAGE" library/redis
+
+# The CI image is built here, so its digest changes with each build, as apk resolves packages then.
+cp "$HOME/.local/bin/gitleaks" "$tmp/gitleaks"
+[[ $("$tmp/gitleaks" version) == "$GITLEAKS_VERSION" ]]
+docker buildx build --quiet --provenance=false --sbom=false --build-arg "BASE=$RUNNER_BASE_IMAGE" \
+  --platform linux/amd64 -f "$here/ci-image/Dockerfile" --output "type=oci,dest=$tmp/ci.tar" "$tmp" >/dev/null
+mkdir "$tmp/ci-layout"
+tar -xf "$tmp/ci.tar" -C "$tmp/ci-layout"
+"$crane" push "$tmp/ci-layout" "$local_reg/forgejo/ci-runner:bundle" >/dev/null 2>&1
+ci_digest="$("$crane" digest "$local_reg/forgejo/ci-runner:bundle")"
+sign forgejo/ci-runner "$ci_digest" "$keys/cosign.key"
+
 # Test images: one signed, one with no signature, one signed by a key the policy does not trust.
 "$here/../test/build-probe-image.sh" "$tmp/probe.tar"
-# Zot accepts only OCI manifests, so the probe's layer goes in on an empty OCI base.
+# The probe's layer goes in on an empty OCI base, so it needs no Docker-format support of its own.
 tar -xf "$tmp/probe.tar" -C "$tmp" layer.tar
 "$crane" append --oci-empty-base -f "$tmp/layer.tar" -t "$local_reg/probe:v1" >/dev/null 2>&1
 "$crane" mutate --entrypoint /probe --user 65534 -t "$local_reg/probe:v1" "$local_reg/probe:v1" >/dev/null 2>&1
@@ -108,6 +128,28 @@ mkdir -p "$tree/bootstrap"
 if grep -E '^\s+image: ' "$tree/bootstrap/kyverno.yaml" | grep -v "$target/"; then
   echo "kyverno manifest uses an image outside the bundle"; exit 1
 fi
+sed -i "s#__FORGEJO_IMAGE__#$target/forgejo/forgejo@${FORGEJO_IMAGE#*@}#" "$tree/bootstrap/forgejo.yaml"
+sed -i "s#__RUNNER_IMAGE__#$target/forgejo/ci-runner@$ci_digest#" "$tree/bootstrap/runner.yaml"
+fetch "https://raw.githubusercontent.com/argoproj/argo-cd/$ARGOCD_VERSION/manifests/core-install.yaml" argocd-core-install.yaml "$ARGOCD_MANIFEST_SHA256"
+sed -E "s#quay\.io/argoproj/argocd:$ARGOCD_VERSION#$target/argoproj/argocd@${ARGOCD_IMAGE#*@}#; s#public\.ecr\.aws/docker/library/redis:[^ ]+#$target/library/redis@${REDIS_IMAGE#*@}#" \
+  "$tools/argocd-core-install.yaml" >"$tree/bootstrap/argocd.yaml"
+if grep -E '^\s+image: ' "$tree/bootstrap/argocd.yaml" | grep -v "$target/"; then
+  echo "argocd manifest uses an image outside the bundle"; exit 1
+fi
+
+# The repository as it stands now, without moving HEAD. Only what git would track goes in, and the
+# guard scans it first, because the VM has no denylist.
+repo="$(git -C "$here" rev-parse --show-toplevel)"
+index="$tmp/index"
+cp "$(git -C "$repo" rev-parse --path-format=absolute --git-path index)" "$index"
+GIT_INDEX_FILE="$index" git -C "$repo" add -A
+(cd "$repo" && GIT_INDEX_FILE="$index" scripts/guard.sh staged)
+tree_id="$(GIT_INDEX_FILE="$index" git -C "$repo" write-tree)"
+commit="$(git -C "$repo" commit-tree "$tree_id" -p HEAD -m "State of the working tree at bundle build")"
+git -C "$repo" update-ref refs/heads/lab-bundle "$commit"
+git -C "$repo" bundle create --quiet "$tree/bootstrap/lab.bundle" lab-bundle
+git -C "$repo" update-ref -d refs/heads/lab-bundle
+
 key="$(sed 's/^/            /' "$keys/cosign.pub")"
 python3 -I - "$tree/bootstrap/signed-images.yaml" "$key" <<'PY'
 import sys

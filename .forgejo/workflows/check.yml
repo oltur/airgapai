@@ -1,0 +1,11 @@
+# Runs the guard on every push. Without a local denylist, only the gitleaks part runs.
+on: [push]
+jobs:
+  check:
+    runs-on: self-hosted
+    steps:
+      - run: |
+          git clone "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" repo
+          cd repo
+          git checkout "$GITHUB_SHA"
+          DENYLIST_OPTIONAL=1 make check

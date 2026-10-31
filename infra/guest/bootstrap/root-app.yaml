@@ -1,0 +1,36 @@
+# The core install has no API server, which is what would create this project. Applications can
+# take their manifests only from the one repository inside the air gap.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: argocd
+spec:
+  sourceRepos:
+    - http://forgejo.forgejo.svc:3000/airgapai/lab.git
+  destinations:
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+# App of apps: every application is a file under deploy/apps in the repository.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: http://forgejo.forgejo.svc:3000/airgapai/lab.git
+    targetRevision: main
+    path: deploy/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

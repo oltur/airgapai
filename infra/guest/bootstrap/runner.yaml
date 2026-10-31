@@ -1,0 +1,80 @@
+# Runs CI jobs inside its own container. The label's host scheme means no nested containers.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runner-config
+  namespace: forgejo
+data:
+  config.yaml: |
+    runner:
+      file: /registration/.runner
+      capacity: 1
+      labels: ["self-hosted:host"]
+    cache:
+      enabled: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner
+  namespace: forgejo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: runner
+  template:
+    metadata:
+      labels:
+        app: runner
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # The runner writes its own registration file, from the secret registered with Forgejo.
+      initContainers:
+        - name: register
+          image: __RUNNER_IMAGE__
+          command: [sh, -c]
+          args:
+            - exec /bin/forgejo-runner create-runner-file --instance http://forgejo.forgejo.svc:3000 --name lab-runner --secret "$RUNNER_SECRET"
+          env:
+            - name: RUNNER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: runner-registration
+                  key: secret
+          workingDir: /registration
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: registration, mountPath: /registration}
+      containers:
+        - name: runner
+          image: __RUNNER_IMAGE__
+          args: [/bin/forgejo-runner, daemon, --config, /config/config.yaml]
+          env:
+            - {name: HOME, value: /work}
+          workingDir: /work
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: registration, mountPath: /registration}
+            - {name: work, mountPath: /work}
+      volumes:
+        - name: config
+          configMap:
+            name: runner-config
+        - name: registration
+          emptyDir: {}
+        - name: work
+          emptyDir: {}

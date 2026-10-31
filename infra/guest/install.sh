@@ -29,6 +29,10 @@ cp -r registry /var/lib/airgapai/registry
 chown -R 65534:65534 /var/lib/airgapai/registry
 chmod -R u+rwX /var/lib/airgapai/registry
 chcon -R -t container_file_t /var/lib/airgapai/registry
+# Forgejo's volume, created empty. It runs as uid 1000.
+mkdir -p /var/lib/airgapai/forgejo/data /var/lib/airgapai/forgejo/config
+chown -R 1000:1000 /var/lib/airgapai/forgejo
+chcon -R -t container_file_t /var/lib/airgapai/forgejo
 cp manifests/*.yaml /var/lib/rancher/rke2/server/manifests/
 restorecon -R /usr/local/bin /usr/local/lib/systemd /var/lib/rancher /etc/rancher 2>/dev/null || true
 

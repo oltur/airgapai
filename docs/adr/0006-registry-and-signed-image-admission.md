@@ -40,7 +40,8 @@ Testing forced four of these choices:
 - **Pushing into Zot inside the VM:** needs a job, credentials and a write path that the read-only
   design avoids.
 - **NodePort for containerd:** opens a port on the node, where the service route needs none.
-- **Docker manifest compatibility in Zot:** only the test probe needed it, so the probe is built as OCI.
+- **Converting Docker-format images to OCI:** would change their digests and break the pins. Zot's
+  Docker compatibility is on, because Argo CD's image needs it ([ADR 0007](0007-git-ci-and-argo-inside-the-air-gap.md)).
 - **Cosign's newer signature format:** not tried. Signing with no transparency log needs a separate
   signing config in that format, and the older format worked with Kyverno.
 

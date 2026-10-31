@@ -35,3 +35,37 @@ print(json.dumps({
 }))
 PY
 rm -f /tmp/kyverno-webhook.json
+
+# Git, then CI, then Argo CD. Nothing here is exempt: every image below must pass the policy above.
+# The repository travels as a ConfigMap: copying it through kubectl exec -i truncated it one time in three.
+"${kubectl[@]}" create namespace forgejo --dry-run=client -o yaml | "${kubectl[@]}" apply -f -
+"${kubectl[@]}" -n forgejo create configmap lab-bundle --from-file=lab.bundle="$bootstrap/lab.bundle" >/dev/null
+"${kubectl[@]}" apply -f "$bootstrap/forgejo.yaml"
+"${kubectl[@]}" -n forgejo rollout status deployment/forgejo --timeout=300s
+# No -i, as vm-up feeds its remaining commands on stdin.
+forgejo=("${kubectl[@]}" -n forgejo exec deployment/forgejo --)
+
+password="$(openssl rand -hex 24)"
+"${forgejo[@]}" forgejo admin user create --admin --username airgapai --password "$password" \
+  --email admin@airgapai.local --must-change-password=false >/dev/null
+token="$("${forgejo[@]}" forgejo admin user generate-access-token --username airgapai --token-name bootstrap \
+  --scopes all --raw)"
+"${kubectl[@]}" -n forgejo create secret generic forgejo-admin \
+  --from-literal=password="$password" --from-literal=token="$token" >/dev/null
+"${forgejo[@]}" curl -fsS -o /dev/null -X POST -H "Authorization: token $token" -H 'Content-Type: application/json' \
+  -d '{"name":"lab","default_branch":"main"}' http://localhost:3000/api/v1/user/repos
+"${forgejo[@]}" sh -c "cd /tmp && git init -q --bare lab.git && cd lab.git && git fetch -q /bundle/lab.bundle lab-bundle:main \
+  && git push -q http://airgapai:$token@localhost:3000/airgapai/lab.git main; rc=\$?; rm -rf /tmp/lab.git; exit \$rc"
+
+secret="$(openssl rand -hex 20)"
+"${forgejo[@]}" forgejo forgejo-cli actions register --name lab-runner --secret "$secret" >/dev/null
+"${kubectl[@]}" -n forgejo create secret generic runner-registration --from-literal=secret="$secret" >/dev/null
+"${kubectl[@]}" apply -f "$bootstrap/runner.yaml"
+"${kubectl[@]}" -n forgejo rollout status deployment/runner --timeout=180s
+
+"${kubectl[@]}" create namespace argocd --dry-run=client -o yaml | "${kubectl[@]}" apply -f -
+"${kubectl[@]}" -n argocd apply --server-side --force-conflicts -f "$bootstrap/argocd.yaml" >/dev/null
+for workload in deployment/argocd-repo-server deployment/argocd-redis statefulset/argocd-application-controller; do
+  "${kubectl[@]}" -n argocd rollout status "$workload" --timeout=300s
+done
+"${kubectl[@]}" apply -f "$bootstrap/root-app.yaml"

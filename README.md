@@ -19,8 +19,9 @@ guard is done, and a [default-deny spike](docs/adr/0003-default-deny-with-calico
 on a throwaway VM with internet access. RKE2 now
 [installs from an offline bundle](docs/adr/0004-offline-install-and-black-hole-route.md) on an
 isolated network, with [baseline hardening](docs/adr/0005-baseline-hardening.md) and a
-[read-only registry with signed-image admission](docs/adr/0006-registry-and-signed-image-admission.md),
-but no formal egress test yet. No model, retrieval or gateway code exists so far.
+[read-only registry with signed-image admission](docs/adr/0006-registry-and-signed-image-admission.md)
+and [Git, CI and Argo CD inside the air gap](docs/adr/0007-git-ci-and-argo-inside-the-air-gap.md),
+but no formal egress test or one-command rebuild yet. No model, retrieval or gateway code exists so far.
 
 | Phase | What it should demonstrate |
 |---|---|
@@ -61,6 +62,7 @@ make vm-ssh   # log in as alma, who has passwordless sudo
 make vm-down  # remove the VM and anything changed inside it
 make test-hardening  # test Pod Security, default deny and DNS on the VM, with controls
 make test-signed-images  # test signed-image admission and the read-only registry, with controls
+make test-gitops  # test that Git drives the cluster and CI catches a secret, with controls
 ```
 
 The VM is at `10.77.0.10` and can be reached only from the host. Its SSH key is

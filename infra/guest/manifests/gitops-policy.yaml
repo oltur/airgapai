@@ -1,0 +1,71 @@
+# What Git, CI and Argo CD need through the default deny, and nothing more.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: forgejo-reachable
+spec:
+  selector: app == "forgejo"
+  namespaceSelector: kubernetes.io/metadata.name == "forgejo"
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "argocd"
+      destination:
+        ports: [3000]
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "forgejo"
+        selector: app == "runner"
+      destination:
+        ports: [3000]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: runner-to-forgejo
+spec:
+  selector: app == "runner"
+  namespaceSelector: kubernetes.io/metadata.name == "forgejo"
+  types:
+    - Egress
+  egress:
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "forgejo"
+        selector: app == "forgejo"
+        ports: [3000]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: argocd-reachable
+spec:
+  namespaceSelector: kubernetes.io/metadata.name == "argocd"
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "argocd"
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "argocd"
+    # The API server, after kube-proxy has translated the service address
+    - action: Allow
+      protocol: TCP
+      destination:
+        nets: [10.77.0.10/32]
+        ports: [6443]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "forgejo"
+        selector: app == "forgejo"
+        ports: [3000]

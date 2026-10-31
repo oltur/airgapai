@@ -1,0 +1,13 @@
+# The first application. Later phases add their workloads here.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workloads
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deployed-from-git
+  namespace: workloads
+data:
+  revision: initial

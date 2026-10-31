@@ -1,0 +1,110 @@
+# Git and CI inside the air gap. A local volume rather than hostPath, so this namespace stays under
+# the restricted Pod Security level. No SSH, sign-up, or outbound features.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgejo
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: forgejo-data
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local
+  local:
+    path: /var/lib/airgapai/forgejo
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [airgapai]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-data
+  namespace: forgejo
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local
+  volumeName: forgejo-data
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgejo
+  namespace: forgejo
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: forgejo
+  template:
+    metadata:
+      labels:
+        app: forgejo
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: forgejo
+          image: __FORGEJO_IMAGE__
+          env:
+            - {name: FORGEJO__security__INSTALL_LOCK, value: "true"}
+            - {name: FORGEJO__database__DB_TYPE, value: sqlite3}
+            - {name: FORGEJO__server__ROOT_URL, value: "http://forgejo.forgejo.svc:3000/"}
+            - {name: FORGEJO__server__DISABLE_SSH, value: "true"}
+            - {name: FORGEJO__server__OFFLINE_MODE, value: "true"}
+            - {name: FORGEJO__service__DISABLE_REGISTRATION, value: "true"}
+            - {name: FORGEJO__actions__ENABLED, value: "true"}
+            - {name: FORGEJO__cron__update_checker__ENABLED, value: "false"}
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: 3000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/gitea, subPath: data}
+            - {name: data, mountPath: /etc/gitea, subPath: config}
+            - {name: lab-bundle, mountPath: /bundle}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: forgejo-data
+        # The repository, for the first push at bootstrap.
+        - name: lab-bundle
+          configMap:
+            name: lab-bundle
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgejo
+  namespace: forgejo
+spec:
+  selector:
+    app: forgejo
+  ports:
+    - port: 3000
+      targetPort: 3000

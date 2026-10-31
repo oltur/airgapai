@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images
+.PHONY: help setup check test-secrets hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -41,3 +41,6 @@ test-hardening: ## Test Pod Security, default deny and DNS on the VM, with contr
 
 test-signed-images: ## Test signed-image admission and the read-only registry, with controls
 	@infra/vm-ssh.sh sudo bash -s <test/signed-images.sh
+
+test-gitops: ## Test that Git drives the cluster and CI catches a secret, with controls
+	@infra/vm-ssh.sh sudo bash -s <test/gitops.sh
