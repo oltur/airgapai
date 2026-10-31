@@ -5,6 +5,7 @@ Does nothing when no session logs exist, as on a clean clone or in CI.
 To start a phase, set its start time in PHASES.
 """
 import json
+import re
 import subprocess
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -34,7 +35,7 @@ def parse(stamp):
 
 
 def session_events():
-    logs = Path.home() / ".claude/projects" / str(ROOT).replace("/", "-")
+    logs = Path.home() / ".claude/projects" / re.sub(r"[^A-Za-z0-9]", "-", str(ROOT))
     for log in logs.rglob("*.jsonl") if logs.is_dir() else ():
         with log.open(errors="replace") as lines:
             for line in lines:
