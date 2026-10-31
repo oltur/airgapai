@@ -1,0 +1,54 @@
+# What the registry and the verifier need through the default deny, and nothing more.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: registry-reachable
+spec:
+  selector: app == "zot"
+  namespaceSelector: kubernetes.io/metadata.name == "zot"
+  types:
+    - Ingress
+  ingress:
+    # containerd, on the node
+    - action: Allow
+      protocol: TCP
+      source:
+        nets: [10.77.0.10/32]
+      destination:
+        ports: [5000]
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "kyverno"
+      destination:
+        ports: [5000]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: verifier-reachable
+spec:
+  namespaceSelector: kubernetes.io/metadata.name == "kyverno"
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    # The API server calling the webhook, from the node
+    - action: Allow
+      protocol: TCP
+      source:
+        nets: [10.77.0.10/32]
+      destination:
+        ports: [9443]
+  egress:
+    # The API server, after kube-proxy has translated the service address
+    - action: Allow
+      protocol: TCP
+      destination:
+        nets: [10.77.0.10/32]
+        ports: [6443]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "zot"
+        ports: [5000]

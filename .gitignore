@@ -17,3 +17,4 @@ CLAUDE.md
 *.key
 *.pem
 kubeconfig*
+.claude/settings.local.json

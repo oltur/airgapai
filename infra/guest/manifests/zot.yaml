@@ -1,0 +1,89 @@
+# The registry the cluster pulls from. Read-only: its content comes from the bundle, and there is
+# no push path. It needs hostPath for that content, which is why zot is exempt from Pod Security.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zot
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zot-config
+  namespace: zot
+data:
+  config.json: |
+    {
+      "distSpecVersion": "1.1.1",
+      "storage": {"rootDirectory": "/var/lib/registry", "gc": false, "dedupe": false},
+      "http": {
+        "address": "0.0.0.0",
+        "port": "5000",
+        "accessControl": {"repositories": {"**": {"anonymousPolicy": ["read"]}}}
+      },
+      "log": {"level": "info"}
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zot
+  namespace: zot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zot
+  template:
+    metadata:
+      labels:
+        app: zot
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: zot
+          image: airgapai.local/zot:bundle
+          imagePullPolicy: Never
+          args: [serve, /etc/zot/config.json]
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/zot
+            - name: registry
+              mountPath: /var/lib/registry
+      volumes:
+        - name: config
+          configMap:
+            name: zot-config
+        - name: registry
+          hostPath:
+            path: /var/lib/airgapai/registry
+            type: Directory
+---
+# A fixed address, because containerd on the node needs it before cluster DNS is any use to it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: zot
+  namespace: zot
+spec:
+  clusterIP: 10.43.0.50
+  selector:
+    app: zot
+  ports:
+    - port: 5000
+      targetPort: 5000

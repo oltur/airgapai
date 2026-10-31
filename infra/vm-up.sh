@@ -15,6 +15,14 @@ if virsh dominfo "$VM_NAME" >/dev/null 2>&1; then
   exit 1
 fi
 
+# This host also runs other workloads. A VM started with too little room to spare once ran it out of
+# memory, and the kernel killed the desktop session and a loaded model.
+available_mib="$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)"
+if (( available_mib < VM_MEMORY_MIB + HOST_MARGIN_MIB )); then
+  echo "only $available_mib MiB available, need $((VM_MEMORY_MIB + HOST_MARGIN_MIB)) MiB. Is a large model loaded?"
+  exit 1
+fi
+
 sudo install -D -m 644 "$here/firewall.nft" /etc/airgapai/firewall.nft
 sudo install -m 644 "$here/airgapai-firewall.service" /etc/systemd/system/airgapai-firewall.service
 sudo systemctl daemon-reload
@@ -106,7 +114,11 @@ done
 for _ in $(seq 60); do
   pending="$(/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get jobs -A --no-headers 2>/dev/null | awk '$3 != "Complete"' | wc -l)"
   jobs="$(/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get jobs -A --no-headers 2>/dev/null | wc -l)"
-  [[ $jobs -gt 0 && $pending == 0 ]] && { echo "all $jobs install jobs complete"; exit 0; }
+  if [[ $jobs -gt 0 && $pending == 0 ]]; then
+    echo "all $jobs install jobs complete"
+    bash /mnt/bundle/bootstrap/bootstrap.sh
+    exit 0
+  fi
   sleep 5
 done
 echo "install jobs did not complete"

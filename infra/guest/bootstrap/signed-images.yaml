@@ -1,0 +1,54 @@
+# Every container image in a pod must carry a signature from the bundle's key. Images outside the
+# registry fail the same check. Exempt: kube-system and its peers run RKE2's own images, zot cannot
+# depend on itself, and kyverno cannot verify itself.
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: require-signed-images
+spec:
+  failurePolicy: Fail
+  validationActions: [Deny]
+  webhookConfiguration:
+    timeoutSeconds: 15
+  evaluation:
+    background:
+      enabled: false
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, zot, kyverno]
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        # Ephemeral containers arrive through their own subresource, which pods alone does not cover.
+        resources: [pods, pods/ephemeralcontainers]
+  # Must match everything. Both required and the images map below see only matched images, so a
+  # narrower match admits whatever it leaves out, which a test showed. The cost is that Kyverno tries
+  # to fetch an outside image before refusing it; ADR 0006 records that.
+  matchImageReferences:
+    - expression: "true"
+  # Digests only. Rewriting tags depends on a mutating webhook that returns after this one does, which
+  # made the same pod's outcome depend on timing after a Kyverno restart.
+  validationConfigurations:
+    mutateDigest: false
+    verifyDigest: true
+    required: true
+  credentials:
+    allowInsecureRegistry: true
+  attestors:
+    - name: bundle
+      cosign:
+        key:
+          data: |
+            __PUBLIC_KEY__
+        ctlog:
+          insecureIgnoreTlog: true
+          insecureIgnoreSCT: true
+  # images has one entry per container kind: containers, initContainers and ephemeralContainers.
+  validations:
+    - expression: >-
+        images.all(kind, images[kind].all(image, verifyImageSignatures(image, [attestors.bundle]) > 0))
+      message: image has no valid signature from the bundle key

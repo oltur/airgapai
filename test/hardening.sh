@@ -5,7 +5,10 @@ set -uo pipefail
 
 export KUBECONFIG=/etc/rancher/rke2/rke2.yaml PATH=/var/lib/rancher/rke2/bin:$PATH
 policy=/var/lib/rancher/rke2/server/manifests/default-deny.yaml
-image=airgapai.local/probe:v1
+# Digests only, as the signed-image policy requires.
+digest="$(curl -sI -H 'Accept: application/vnd.oci.image.manifest.v1+json' http://10.43.0.50:5000/v2/probe/manifests/v1 | awk 'tolower($1) == "docker-content-digest:" {print $2}' | tr -d '\r')"
+[[ $digest == sha256:* ]] || { echo "FAIL could not read the probe digest"; exit 1; }
+image="10.43.0.50:5000/probe@$digest"
 node_ip=10.77.0.10
 host_ip=10.77.0.1
 api_ip="$(kubectl get svc kubernetes -o jsonpath='{.spec.clusterIP}')"
@@ -32,7 +35,6 @@ spec:
   containers:
     - name: probe
       image: $image
-      imagePullPolicy: Never
       args: [$(printf '"%s",' "$@")]
       securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
 EOF

@@ -1,0 +1,6 @@
+# containerd's only registry. Integrity comes from digests and signatures, not this transport,
+# which stays inside the node. Plain HTTP is recorded as a limit in ADR 0006.
+mirrors:
+  "10.43.0.50:5000":
+    endpoint:
+      - "http://10.43.0.50:5000"
