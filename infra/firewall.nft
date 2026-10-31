@@ -1,0 +1,16 @@
+# Replies to connections the host opened are allowed; the VM cannot start any towards the host,
+# and nothing is forwarded through it. Runs early, so a drop here is final.
+table inet airgapai
+delete table inet airgapai
+table inet airgapai {
+  chain input {
+    type filter hook input priority -10; policy accept;
+    iifname "virbr-airgap" ct state established,related accept
+    iifname "virbr-airgap" drop
+  }
+  chain forward {
+    type filter hook forward priority -10; policy accept;
+    iifname "virbr-airgap" drop
+    oifname "virbr-airgap" drop
+  }
+}

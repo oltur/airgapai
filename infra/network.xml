@@ -1,0 +1,7 @@
+<!-- No <forward> element: libvirt gives this bridge no route out. DNS off, and no DHCP. -->
+<network>
+  <name>airgapai</name>
+  <bridge name='virbr-airgap'/>
+  <dns enable='no'/>
+  <ip address='10.77.0.1' prefix='24'/>
+</network>

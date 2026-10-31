@@ -16,8 +16,10 @@ private, non-commercial project, written independently from public specification
 
 Phase 1 of 4: the air gap, in progress. **The claim above is not proven yet.** The repository
 guard is done, and a [default-deny spike](docs/adr/0003-default-deny-with-calico-gnp.md) has passed
-on a throwaway VM with internet access. No air-gapped build, model, retrieval or gateway code
-exists so far.
+on a throwaway VM with internet access. RKE2 now
+[installs from an offline bundle](docs/adr/0004-offline-install-and-black-hole-route.md) on an
+isolated network, without hardening and without the formal egress test. No model, retrieval or
+gateway code exists so far.
 
 | Phase | What it should demonstrate |
 |---|---|
@@ -48,6 +50,23 @@ make check         # scan the full history
 ```
 
 For CI on a clean clone, `DENYLIST_OPTIONAL=1` runs the gitleaks part alone.
+
+## Using the VM
+
+```sh
+make bundle   # build the offline bundle, on the online host
+make vm-up    # create the isolated network and VM, and install RKE2 from the bundle
+make vm-ssh   # log in as alma, who has passwordless sudo
+make vm-down  # remove the VM and anything changed inside it
+```
+
+The VM is at `10.77.0.10` and can be reached only from the host. Its SSH key is
+`/mnt/data/airgapai/vm/id_ed25519`, regenerated on each `make vm-up`. The VM has no internet or
+DNS, so `dnf install` and image pulls do not work there. Inside it, use `kubectl` like this:
+
+```sh
+sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -A
+```
 
 ## Documentation
 

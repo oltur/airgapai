@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets hours
+.PHONY: help setup check test-secrets hours bundle vm-up vm-ssh vm-down
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -23,3 +23,15 @@ test-secrets: ## Prove the guard blocks fake secrets in a temporary repo
 
 hours: ## Regenerate docs/hours.md from session and commit activity
 	@scripts/hours.py
+
+bundle: ## Build the offline bundle on the online host
+	@infra/build-bundle.sh
+
+vm-up: ## Create the isolated network and VM, and install RKE2 from the bundle
+	@infra/vm-up.sh
+
+vm-ssh: ## Open a shell on the VM
+	@infra/vm-ssh.sh
+
+vm-down: ## Remove the VM
+	@infra/vm-down.sh
