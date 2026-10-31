@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+root="$(git rev-parse --show-toplevel)"
+# Only this repo has the script; the guard tests run these hooks in a temporary repo.
+if [[ -x $root/scripts/hours.py ]]; then
+  "$root/scripts/hours.py" && git -C "$root" add docs/hours.md ||
+    echo "pre-commit: could not update docs/hours.md" >&2
+fi
+exec "$(dirname "$(readlink -f "$0")")/../scripts/guard.sh" staged
