@@ -62,10 +62,11 @@ make vm-down  # remove the VM and anything changed inside it
 
 The VM is at `10.77.0.10` and can be reached only from the host. Its SSH key is
 `/mnt/data/airgapai/vm/id_ed25519`, regenerated on each `make vm-up`. The VM has no internet or
-DNS, so `dnf install` and image pulls do not work there. Inside it, use `kubectl` like this:
+DNS, so `dnf install` and image pulls do not work there. Inside it, `kubectl` and the shorter `k`
+are set up as aliases:
 
 ```sh
-sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -A
+k get pods -A
 ```
 
 ## Documentation

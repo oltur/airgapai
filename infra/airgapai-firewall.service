@@ -1,0 +1,16 @@
+# Loads the host firewall before libvirt can start the isolated network.
+# Stopping this unit leaves the rules in place.
+[Unit]
+Description=Host firewall for the airgapai network
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target libvirtd.service virtnetworkd.service virtqemud.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/airgapai/firewall.nft
+
+[Install]
+WantedBy=multi-user.target

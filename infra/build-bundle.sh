@@ -14,6 +14,7 @@ iso="$DATA_DIR/bundle.iso"
 
 sudo mkdir -p "$DATA_DIR"
 sudo chown "$(id -un)" "$DATA_DIR"
+source "$here/lock.sh"
 mkdir -p "$dl"
 sudo rm -rf "$work" "$tree"
 mkdir -p "$work" "$tree/rpms"
@@ -56,7 +57,7 @@ for _ in $(seq 60); do
   sleep 5
 done
 [[ -n $ip ]] || { echo "builder got no address"; exit 1; }
-opts=(-i "$work/id_ed25519" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
+opts=(-i "$work/id_ed25519" -o IdentitiesOnly=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 for _ in $(seq 60); do ssh "${opts[@]}" "alma@$ip" true 2>/dev/null && break; sleep 5; done
 
 ssh "${opts[@]}" "alma@$ip" sudo bash -s <<'EOF'

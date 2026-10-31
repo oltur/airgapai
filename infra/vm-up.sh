@@ -4,12 +4,22 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 source "$here/versions.env"
+source "$here/lock.sh"
 export LIBVIRT_DEFAULT_URI=qemu:///system
 vm="$DATA_DIR/vm"
 iso="$DATA_DIR/bundle.iso"
 [[ -f $iso ]] || { echo "no bundle, run make bundle"; exit 1; }
+# The next steps delete the VM's disk, so stop here while it can still be kept.
+if virsh dominfo "$VM_NAME" >/dev/null 2>&1; then
+  echo "VM $VM_NAME already exists. Start it with virsh start, or run make vm-down first."
+  exit 1
+fi
 
-sudo nft -f "$here/firewall.nft"
+sudo install -D -m 644 "$here/firewall.nft" /etc/airgapai/firewall.nft
+sudo install -m 644 "$here/airgapai-firewall.service" /etc/systemd/system/airgapai-firewall.service
+sudo systemctl daemon-reload
+sudo systemctl enable airgapai-firewall.service
+sudo systemctl restart airgapai-firewall.service
 if ! virsh net-info airgapai >/dev/null 2>&1; then
   virsh net-define "$here/network.xml" >/dev/null
   virsh net-autostart airgapai >/dev/null
@@ -29,6 +39,10 @@ users:
     ssh_authorized_keys:
       - $(cat id_ed25519.pub)
 write_files:
+  - path: /etc/profile.d/kubectl.sh
+    content: |
+      alias kubectl='sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml'
+      alias k=kubectl
   - path: /etc/systemd/system/blackhole-default.service
     content: |
       [Unit]
@@ -69,7 +83,8 @@ virt-install --name "$VM_NAME" --memory "$VM_MEMORY_MIB" --vcpus "$VM_VCPUS" --o
   --network network=airgapai,model=virtio,mac=52:54:00:77:00:10 \
   --serial "file,path=$vm/console.log" --graphics none --noautoconsole >/dev/null
 
-opts=(-i "$vm/id_ed25519" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
+# Keepalives make a dead VM fail this script instead of hanging it.
+opts=(-i "$vm/id_ed25519" -o IdentitiesOnly=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 for _ in $(seq 60); do ssh "${opts[@]}" "alma@$VM_IP" true 2>/dev/null && break; sleep 5; done
 ssh "${opts[@]}" "alma@$VM_IP" sudo bash -s -- "$VM_IP" <<'EOF'
 set -euo pipefail

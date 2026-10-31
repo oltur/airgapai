@@ -26,6 +26,9 @@ show.
 
 Flannel's interface is set to `eth0`, as it cannot find one from the default route.
 
+- **Host firewall at boot:** a systemd unit loads a root-owned copy of the rules before libvirt
+  starts. libvirt autostarts the network at boot, so rules loaded only by `make vm-up` left it
+  without the firewall after a host restart, which a power failure showed.
 - **Readiness:** `make vm-up` requires the node to be Ready and every install job to complete. Node
   Ready alone was reported while pod networking was broken.
 
@@ -62,6 +65,8 @@ What this does not prove:
   bundle matches itself.
 - **Not hardened yet.** CIS profile, Pod Security and the default-deny policy are not applied in this
   build. CoreDNS still has `forward`.
+- **Firewall at boot is not yet tested by a host reboot.** The unit's order and enablement were
+  checked, and reloading it restores the block, but the host has not been rebooted with it installed.
 - **`10.43.0.0/16` is open to the wire.** An untranslated service IP goes out on `eth0` and depends on
   the host firewall to stop it.
 
