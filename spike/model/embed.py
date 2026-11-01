@@ -14,9 +14,10 @@ import statistics
 import time
 import urllib.request
 
-from measure import BIN, ROOT, THREADS, URL, available_mib, capped_server, memory_figures
+from measure import BIN, THREADS, URL, available_mib, capped_server, find_gguf, memory_figures
 
 LICENCE = "Apache-2.0"
+CAP_MIB = 1000
 CONTEXT = 2048
 RUNS = 3
 CHUNKS_PER_RUN = 20
@@ -35,7 +36,7 @@ CHUNK = " ".join([RELATED, UNRELATED] * 6)
 
 
 def embed(text):
-    body = json.dumps({"input": text, "model": "embedding"}).encode()
+    body = json.dumps({"input": text, "model": "embedding", "cache_prompt": False}).encode()
     request = urllib.request.Request(
         f"{URL}/v1/embeddings", body, {"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=300) as response:
@@ -67,10 +68,10 @@ def main():
     parser.add_argument("--out", type=pathlib.Path, help="directory for the result JSON")
     args = parser.parse_args()
 
-    gguf = next((ROOT / args.name).glob("*.gguf"))
+    gguf = find_gguf(args.name)
     before = available_mib()
     with capped_server(gguf, "-c", str(CONTEXT), "-b", str(CONTEXT), "-ub", str(CONTEXT),
-                       "--embedding", "--pooling", "mean") as (server, load_s):
+                       "--embedding", "--pooling", "mean", cap_mib=CAP_MIB) as (server, load_s):
         query, _ = embed(f"search_query: {QUERY}")
         related, _ = embed(f"search_document: {RELATED}")
         unrelated, _ = embed(f"search_document: {UNRELATED}")
@@ -78,7 +79,7 @@ def main():
                   for _ in range(RUNS)]
         queries = [timed_run([f"search_query: {i} {QUERY}" for i in range(QUERIES_PER_RUN)])
                    for _ in range(RUNS)]
-        latencies = [ms * 1000 for run in queries for ms in run[3]]
+        latencies = [seconds * 1000 for run in queries for seconds in run[3]]
         result = {
             "measured": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
             "llama_cpp": BIN.name,

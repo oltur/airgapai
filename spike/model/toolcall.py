@@ -13,7 +13,7 @@ import time
 import urllib.error
 import urllib.request
 
-from measure import BIN, CONTEXT, ROOT, THREADS, URL, capped_server
+from measure import BIN, CHAT_MODELS, CONTEXT, THREADS, URL, capped_server, find_gguf
 
 MAX_TOKENS = 300
 SYSTEM = (
@@ -166,11 +166,11 @@ def judge(choice, tool, priority, must_contain, only_forbid_ticket):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("name", help="directory under the spike root, such as granite")
+    parser.add_argument("name", choices=CHAT_MODELS, help="directory under the spike root")
     parser.add_argument("--out", type=pathlib.Path, help="directory for the result JSON")
     args = parser.parse_args()
 
-    gguf = next((ROOT / args.name).glob("*.gguf"))
+    gguf = find_gguf(args.name)
     results = []
     with capped_server(gguf, "-c", str(CONTEXT), "--jinja"):
         for name, messages, tool, priority, must_contain, only_forbid in CASES:
@@ -179,7 +179,8 @@ def main():
                 choice = chat(messages)
                 problems = judge(choice, tool, priority, must_contain, only_forbid)
                 reply = choice["message"]
-            except (urllib.error.URLError, TimeoutError, KeyError, ValueError) as error:
+            except (urllib.error.URLError, ConnectionError, TimeoutError, KeyError,
+                    ValueError) as error:
                 problems, reply = [f"request failed: {error}"], None
             results.append({
                 "case": name,
