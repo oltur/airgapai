@@ -15,3 +15,6 @@ CLAUDE.md
 *.pem
 kubeconfig*
 .claude/settings.local.json
+
+# Python bytecode
+__pycache__/
