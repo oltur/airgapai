@@ -4,6 +4,10 @@
 # none, so its hash records the file as first downloaded on 2026-11-01.
 set -euo pipefail
 
+command -v go >/dev/null || { echo "Go is required, see test/egress/go.mod" >&2; exit 1; }
+# shellcheck source=../infra/versions.env
+source "$(dirname "$0")/../infra/versions.env"
+
 bin="$HOME/.local/bin"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -18,7 +22,7 @@ install_tool() {
   tar xzf "$archive" -C "$bin" --strip-components="$(tr -cd / <<<"$member" | wc -c)" "$member"
 }
 
-install_tool https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+install_tool "https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
   551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb gitleaks
 install_tool https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.gz \
   b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6 shellcheck-v0.11.0/shellcheck

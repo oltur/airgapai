@@ -39,6 +39,10 @@ expressions.
   afterwards, and only if they are run.
 - This guard does not prove a repository is free of secrets. It catches known patterns and listed
   terms only.
+- **Gitleaks misses some random secrets.** Its generic rule skips a value containing a listed common
+  word. On 2026-11-01 it missed 57 of 5000 random 32-character values in `api_key = "..."` lines,
+  using gitleaks 8.30.1 and its default rules. `make test-secrets` therefore screens its generic
+  fake value first: it proves the guard blocks what gitleaks detects, not gitleaks' recall.
 - A value in the denylist is not removed from anywhere by being listed. Leaked credentials still
   need rotating.
 

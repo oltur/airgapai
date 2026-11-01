@@ -5,6 +5,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 6 * * 1" # Weekly, so a new advisory shows up without waiting for a change.
 permissions:
   contents: read
 jobs:

@@ -25,10 +25,14 @@ tools: ## Install the pinned guard and lint tools into ~/.local/bin
 	@scripts/install-tools.sh
 
 lint: ## Run ShellCheck, Ruff, go vet and govulncheck
-	@shellcheck -x -P SCRIPTDIR -S warning $$(git ls-files '*.sh') .githooks/pre-commit .githooks/pre-push
+	@for tool in shellcheck ruff go govulncheck; do \
+		command -v $$tool >/dev/null || { echo "$$tool not found, see make tools"; exit 1; }; \
+	done
+	@shellcheck -x -P SCRIPTDIR -S warning $$(git ls-files '*.sh' '.githooks/*')
 	@ruff check --quiet .
-	@for module in test/egress test/probe; do \
-		go -C $$module vet ./... && (cd $$module && govulncheck ./...) || exit 1; \
+	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
+		go -C $$module vet ./... || exit 1; \
+		(cd $$module && govulncheck ./...) || exit 1; # Its -C flag would scan the wrong toolchain. \
 	done
 	@echo "lint clean"
 
