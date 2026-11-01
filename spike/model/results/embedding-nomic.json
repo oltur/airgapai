@@ -1,0 +1,25 @@
+{
+  "measured": "2026-11-01T14:26:09+01:00",
+  "llama_cpp": "llama-b12032",
+  "model": "nomic-embed-text-v1.5.Q8_0.gguf",
+  "threads": 4,
+  "dimensions": 768,
+  "load_s": 0.2,
+  "process_peak_rss_mib": 196,
+  "tokens_per_chunk": 397,
+  "chunks_per_s": [
+    2.17,
+    2.38,
+    1.97
+  ],
+  "chunks_per_s_median": 2.17,
+  "chunk_tokens_per_s": [
+    861.2,
+    945.9,
+    781.8
+  ],
+  "tokens_per_query": 21,
+  "query_ms_median": 29.8,
+  "cosine_related": 0.639,
+  "cosine_unrelated": 0.433
+}
