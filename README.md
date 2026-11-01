@@ -59,6 +59,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0006](docs/adr/0006-registry-and-signed-image-admission.md) | Read-only registry and signed-image admission |
 | [0007](docs/adr/0007-git-ci-and-argo-inside-the-air-gap.md) | Git, CI and Argo CD inside the air gap |
 | [0008](docs/adr/0008-egress-test-and-layer-matrix.md) | Egress test and layer matrix, with measurements |
+| [0009](docs/adr/0009-pull-request-checks-outside-the-air-gap.md) | Pull request checks outside the air gap |
 
 ## Requirements
 
@@ -73,18 +74,20 @@ test briefly adds a dummy interface and firewall rules, then removes them. Read 
 
 ## Running the checks
 
-You need Git, Make, and [gitleaks](https://github.com/gitleaks/gitleaks) 8.30.1 in
-`~/.local/bin`. The guard also needs a local, gitignored `.denylist` with one extended regular
-expression per line.
+You need Git, Make and Go. The guard also needs a local, gitignored `.denylist` with one extended
+regular expression per line.
 
 ```sh
 make help          # list the targets
+make tools         # install pinned gitleaks, ShellCheck, Ruff and govulncheck in ~/.local/bin
 make setup         # check the tools and enable the git hooks
 make test-secrets  # prove the guard in a temporary repo, using generated fake values
 make check         # scan the full history
+make lint          # run ShellCheck, Ruff, go vet and govulncheck
 ```
 
-For CI on a clean clone, `DENYLIST_OPTIONAL=1` runs the gitleaks part alone.
+For CI on a clean clone, `DENYLIST_OPTIONAL=1` runs the gitleaks part alone. Pull requests run these
+checks on GitHub. See [ADR 0009](docs/adr/0009-pull-request-checks-outside-the-air-gap.md).
 
 ## Using the VM
 

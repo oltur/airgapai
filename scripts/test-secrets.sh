@@ -11,7 +11,30 @@ output="$tmp/output"
 random() { LC_ALL=C tr -dc "$1" </dev/urandom | head -c "$2" || true; }
 fake_key="AKIA$(random 'A-Z2-7' 16)"
 fake_term="denied$(random 'a-z' 12)"
-fake_secret="$(random 'a-zA-Z0-9' 32)"
+
+# Gitleaks skips some random values, so a value is screened first. Otherwise this test would fail
+# about once in 90 runs. It proves the guard blocks what gitleaks detects, not gitleaks' recall.
+detectable_secret() {
+  local probe="$tmp/probe" candidate code
+  mkdir -p "$probe"
+  for _ in {1..20}; do
+    candidate="$(random 'a-zA-Z0-9' 32)"
+    printf 'api_key = "%s"\n' "$candidate" >"$probe/conf.txt"
+    code=0
+    gitleaks dir "$probe" --no-banner --log-level error --redact >/dev/null 2>&1 || code=$?
+    # 1 means a leak was found. Any other failure, such as a missing gitleaks, is not a detection.
+    if [[ $code == 1 ]]; then
+      printf '%s' "$candidate"
+      return
+    elif [[ $code != 0 ]]; then
+      echo "FAIL setup: gitleaks exited with $code" >&2
+      exit 1
+    fi
+  done
+  echo "FAIL setup: gitleaks detected no generated value" >&2
+  exit 1
+}
+fake_secret="$(detectable_secret)"
 
 repo="$tmp/repo"
 git init -q "$repo"

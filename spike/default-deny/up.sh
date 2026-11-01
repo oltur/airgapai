@@ -3,7 +3,6 @@
 # Not the air-gapped build: this VM has internet access, so the test can show a pod reaching it.
 set -euo pipefail
 
-here="$(cd "$(dirname "$0")" && pwd)"
 export LIBVIRT_DEFAULT_URI=qemu:///system
 name=airgapai-spike
 dir=/mnt/data/airgapai/spike
