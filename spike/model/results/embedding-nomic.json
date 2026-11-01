@@ -1,0 +1,33 @@
+{
+  "measured": "2026-11-01T16:13:11+01:00",
+  "llama_cpp": "llama-b12032",
+  "model": "nomic-embed-text-v1.5.Q8_0.gguf",
+  "licence": "Apache-2.0",
+  "threads": 4,
+  "context": 2048,
+  "host_available_before_mib": 11457,
+  "dimensions": 768,
+  "load_s": 0.1,
+  "cap_mib": 1000,
+  "cgroup_peak_mib": 44,
+  "process_peak_rss_mib": 196,
+  "cgroup_oom_kills": 0,
+  "tokens_per_chunk": 397,
+  "chunks_per_s": [
+    2.59,
+    2.43,
+    2.36
+  ],
+  "chunks_per_s_median": 2.43,
+  "chunk_tokens_per_s": [
+    1026.6,
+    965.2,
+    938.1
+  ],
+  "tokens_per_query": 21,
+  "queries_measured": 60,
+  "query_ms_median": 24.0,
+  "query_ms_slowest": 51.2,
+  "cosine_related": 0.639,
+  "cosine_unrelated": 0.433
+}

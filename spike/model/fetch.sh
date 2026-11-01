@@ -10,6 +10,7 @@ root="${SPIKE_DIR:-/mnt/data/airgapai/spike}"
 llama_url=https://github.com/ggml-org/llama.cpp/releases/download/b12032/llama-b12032-bin-ubuntu-x64.tar.gz
 llama_sha=9f10432ca3f66ef003a7a540aaffb9da0acadaefd05404521b9ab7a2436af304
 
+# llama.cpp is MIT, and each model below is Apache-2.0, per its Hugging Face record.
 # name repository revision file sha256 (from the Hugging Face LFS record)
 models=(
   "granite ibm-granite/granite-4.1-3b-GGUF ab4701481089b58a082ef63cc1cee738887293ff granite-4.1-3b-Q4_K_M.gguf 662b0626cd58f443baea23559b469df6576a81d349649c59413b36a9fb32eb29"
