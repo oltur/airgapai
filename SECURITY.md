@@ -1,7 +1,7 @@
 # Security
 
 This is a personal reference project running in a single-node lab with a simulated air gap. It is
-not a product, has no releases and is not supported for any other use. Read
+not a product, has no releases and comes with no support. Read
 [What is and is not proven](README.md#what-is-and-is-not-proven) and the limits in each
 [architecture decision record](docs/adr/) before relying on anything here.
 
@@ -12,4 +12,5 @@ Report a vulnerability, or a secret found in this repository, through
 rather than a public issue. There is one maintainer, working on this part-time, and no promised
 response time.
 
-Issues that break a claim in the README are especially useful, such as an egress path the tests miss.
+Reports that break a claim in the README are especially useful, such as an egress path the tests
+miss. Please send those privately too.

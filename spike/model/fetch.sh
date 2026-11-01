@@ -3,6 +3,7 @@
 # Each input gets its own directory. Nothing here is executed or loaded.
 set -euo pipefail
 
+# Not .../spike, which spike/default-deny/down.sh deletes.
 root="${SPIKE_DIR:-/mnt/data/airgapai/model-spike}"
 
 # Published by the llama.cpp release, which has no checksum file. This hash records the file as
@@ -34,6 +35,8 @@ fetch() {
 }
 
 fetch "$llama_url" "$root/llama.cpp/${llama_url##*/}" "$llama_sha"
+mkdir -p "$root/llama.cpp/bin"
+tar xzf "$root/llama.cpp/${llama_url##*/}" -C "$root/llama.cpp/bin"
 for entry in "${models[@]}"; do
   read -r name repo revision file sha <<<"$entry"
   fetch "https://huggingface.co/$repo/resolve/$revision/$file" "$root/$name/$file" "$sha"
