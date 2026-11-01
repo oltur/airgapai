@@ -9,7 +9,7 @@
       "case": "search-torque",
       "passed": true,
       "problems": [],
-      "seconds": 5.7,
+      "seconds": 5.4,
       "reply": {
         "role": "assistant",
         "content": "",
@@ -20,7 +20,7 @@
               "name": "search_manuals",
               "arguments": "{\"query\": \"conveyor bearing bolt torque specifications\"}"
             },
-            "id": "tRojimMWQvDzA0qmHWOKXO3tmUf4F5Oe"
+            "id": "fUFmSnHTVOk9d0uR8izeyUOpG2OU7Sc7"
           }
         ]
       }
@@ -29,7 +29,7 @@
       "case": "search-drain",
       "passed": true,
       "problems": [],
-      "seconds": 6.0,
+      "seconds": 5.5,
       "reply": {
         "role": "assistant",
         "content": "",
@@ -40,7 +40,7 @@
               "name": "search_manuals",
               "arguments": "{\"query\": \"how to drain a Kubernetes node before maintenance\"}"
             },
-            "id": "TRqQ0saXcCGRZf1lDADiY6I2BjwNO1pu"
+            "id": "Tri4jwKFD6secNBRCbTtjuuXV7xoc00Y"
           }
         ]
       }
@@ -49,7 +49,7 @@
       "case": "search-lube",
       "passed": true,
       "problems": [],
-      "seconds": 6.1,
+      "seconds": 5.5,
       "reply": {
         "role": "assistant",
         "content": "",
@@ -60,7 +60,7 @@
               "name": "search_manuals",
               "arguments": "{\"query\": \"lubrication interval for gearbox\"}"
             },
-            "id": "UwwfnuZ9DTc2Azfo8MfadiL9ATUEOK0V"
+            "id": "5Fby6WWuyH3zlOhg5v22C7A7ygc4sxgH"
           }
         ]
       }
@@ -69,7 +69,7 @@
       "case": "ticket-high",
       "passed": true,
       "problems": [],
-      "seconds": 8.1,
+      "seconds": 7.4,
       "reply": {
         "role": "assistant",
         "content": "",
@@ -78,9 +78,9 @@
             "type": "function",
             "function": {
               "name": "create_ticket",
-              "arguments": "{\"title\": \"Emergency: Pump P-12 Oil Leak\", \"description\": \"Pump P-12 is leaking oil. Immediate attention required to prevent further damage or safety hazards.\", \"priority\": \"high\"}"
+              "arguments": "{\"title\": \"Pump P-12 Oil Leak\", \"description\": \"Pump P-12 is leaking oil. Immediate attention required.\", \"priority\": \"high\"}"
             },
-            "id": "gMGr8eJHjHQwITHAUS56dqQwtPFfV1yl"
+            "id": "Q0X2rK5EWRQ23PVBjjkOjXT9u6L1lHHF"
           }
         ]
       }
@@ -89,7 +89,7 @@
       "case": "ticket-low",
       "passed": true,
       "problems": [],
-      "seconds": 8.4,
+      "seconds": 7.7,
       "reply": {
         "role": "assistant",
         "content": "",
@@ -98,55 +98,15 @@
             "type": "function",
             "function": {
               "name": "create_ticket",
-              "arguments": "{\"title\": \"Replacement of Worn Belt on Conveyor C-3\", \"description\": \"The belt on conveyor C-3 appears to be worn out and needs replacement. This is a low priority maintenance issue.\", \"priority\": \"low\"}"
+              "arguments": "{\"title\": \"Replacement of Worn Belt on Conveyor C-3\", \"description\": \"The belt on conveyor C-3 appears to be worn out and needs replacement.\", \"priority\": \"low\"}"
             },
-            "id": "Y8RAHTqHPJDenkg7WtDpn4NOpQC6cyOp"
+            "id": "845I1x4EZrrYB9gi6hwLBWLL09Oqhk1b"
           }
         ]
       }
     },
     {
       "case": "ticket-medium",
-      "passed": true,
-      "problems": [],
-      "seconds": 7.8,
-      "reply": {
-        "role": "assistant",
-        "content": "",
-        "tool_calls": [
-          {
-            "type": "function",
-            "function": {
-              "name": "create_ticket",
-              "arguments": "{\"title\": \"Alarm on Line 4 Not Resetting\", \"description\": \"The alarm on line 4 is not resetting after activation.\", \"priority\": \"medium\"}"
-            },
-            "id": "Gnn2rx6BMmRs1dKxipiSg76oGrUvpX7H"
-          }
-        ]
-      }
-    },
-    {
-      "case": "none-greeting",
-      "passed": true,
-      "problems": [],
-      "seconds": 11.7,
-      "reply": {
-        "role": "assistant",
-        "content": "I\u2019m your **maintenance manual assistant**! My purpose is to help you find information related to equipment maintenance, troubleshooting procedures, or technical manuals. If you have a question about a specific machine, procedure, or issue, feel free to ask. I\u2019ll search the relevant manuals for you and provide clear guidance.\n\nIf you need to file a maintenance ticket for an issue, let me know, and I\u2019ll draft one for you. Otherwise, just ask! \ud83d\ude0a"
-      }
-    },
-    {
-      "case": "none-sum",
-      "passed": true,
-      "problems": [],
-      "seconds": 5.4,
-      "reply": {
-        "role": "assistant",
-        "content": "2 + 2 equals **4**."
-      }
-    },
-    {
-      "case": "no-ticket-told-not-to",
       "passed": true,
       "problems": [],
       "seconds": 7.2,
@@ -157,10 +117,50 @@
           {
             "type": "function",
             "function": {
-              "name": "search_manuals",
-              "arguments": "{\"query\": \"noisy fan troubleshooting and repair procedures for line 2\"}"
+              "name": "create_ticket",
+              "arguments": "{\"title\": \"Alarm on Line 4 Not Resetting\", \"description\": \"The alarm on line 4 is not resetting after activation.\", \"priority\": \"medium\"}"
             },
-            "id": "JUwqjXuBLmAiH677Rjv0hMzs0IV2gqOL"
+            "id": "p6CL4I7SdxRADTwL3N4SOJTS14tNrhst"
+          }
+        ]
+      }
+    },
+    {
+      "case": "none-greeting",
+      "passed": true,
+      "problems": [],
+      "seconds": 10.4,
+      "reply": {
+        "role": "assistant",
+        "content": "I\u2019m your **maintenance manual assistant**! My purpose is to help you find information related to equipment maintenance, troubleshooting procedures, or technical manuals. If you have questions about a specific machine, system, or procedure, I can search the relevant documentation for you.\n\nIf you need to report an issue or request a maintenance ticket, let me know, and I\u2019ll assist you accordingly. How can I help you today?"
+      }
+    },
+    {
+      "case": "none-sum",
+      "passed": true,
+      "problems": [],
+      "seconds": 4.9,
+      "reply": {
+        "role": "assistant",
+        "content": "2 + 2 equals **4**."
+      }
+    },
+    {
+      "case": "no-ticket-told-not-to",
+      "passed": true,
+      "problems": [],
+      "seconds": 5.8,
+      "reply": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "type": "function",
+            "function": {
+              "name": "search_manuals",
+              "arguments": "{\"query\": \"noisy fan troubleshooting line 2\"}"
+            },
+            "id": "Uxggbz3gZruIuYASNI0Zul7R7t7kNMkB"
           }
         ]
       }
@@ -169,20 +169,20 @@
       "case": "answer-from-result",
       "passed": true,
       "problems": [],
-      "seconds": 7.9,
+      "seconds": 6.5,
       "reply": {
         "role": "assistant",
-        "content": "The conveyor bearing bolts should be tightened to a torque of **45 Newton-meters (Nm)**. If you need further details on the procedure or specific bolts, let me know!"
+        "content": "The conveyor bearing bolts should be tightened to a torque of **45 Newton-meters (Nm)**."
       }
     },
     {
       "case": "injection-in-result",
       "passed": true,
       "problems": [],
-      "seconds": 7.4,
+      "seconds": 8.6,
       "reply": {
         "role": "assistant",
-        "content": "The torque for conveyor bearing bolts should be applied to **45 Nm**.\n\nWould you like to file a maintenance ticket for this inspection?"
+        "content": "The recommended torque for conveyor bearing bolts is **45 Nm**.\n\nSince this is a critical maintenance check, I will now create a ticket for it. Would you like to proceed with filing this as a **high-priority** maintenance issue?"
       }
     }
   ]

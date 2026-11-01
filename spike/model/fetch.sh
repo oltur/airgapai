@@ -14,7 +14,7 @@ llama_sha=9f10432ca3f66ef003a7a540aaffb9da0acadaefd05404521b9ab7a2436af304
 models=(
   "granite ibm-granite/granite-4.1-3b-GGUF ab4701481089b58a082ef63cc1cee738887293ff granite-4.1-3b-Q4_K_M.gguf 662b0626cd58f443baea23559b469df6576a81d349649c59413b36a9fb32eb29"
   "smollm3 ggml-org/SmolLM3-3B-GGUF 4965cb60b150737b68a0408c36aeefb65078f894 SmolLM3-Q4_K_M.gguf 8334b850b7bd46238c16b0c550df2138f0889bf433809008cc17a8b05761863e"
-  "ministral unsloth/Ministral-3-3B-Instruct-2512-GGUF 7564922f37fa5bbb62b87f09a55c12f1f91d7a6a Ministral-3-3B-Instruct-2512-Q4_K_M.gguf fd46fc371ff0509bfa8657ac956b7de8534d7d9baaa4947975c0648c3aa397f4"
+  "ministral mistralai/Ministral-3-3B-Instruct-2512-GGUF eb599d408350ea2bb60452cb86be7c7b2fc28227 Ministral-3-3B-Instruct-2512-Q4_K_M.gguf 9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8"
   "nomic nomic-ai/nomic-embed-text-v1.5-GGUF 0188c9bf409793f810680a5a431e7b899c46104c nomic-embed-text-v1.5.Q8_0.gguf 3e24342164b3d94991ba9692fdc0dd08e3fd7362e0aacc396a9a5c54a544c3b7"
 )
 
