@@ -5,6 +5,7 @@ The server runs in a systemd scope with a memory cap and no swap, bound to local
 4 threads to match the VM's 4 vCPUs. This is a host measurement, not one from inside the VM.
 """
 import argparse
+import datetime
 import json
 import pathlib
 import statistics
@@ -111,6 +112,8 @@ def main():
         timings = [generate() for _ in range(RUNS)]
         group = cgroup_dir(server.pid)
         result = {
+            "measured": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+            "llama_cpp": BIN.name,
             "model": gguf.name,
             "threads": THREADS,
             "context": CONTEXT,

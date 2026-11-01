@@ -1,0 +1,29 @@
+{
+  "measured": "2026-11-01T13:42:27+01:00",
+  "llama_cpp": "llama-b12032",
+  "model": "granite-4.1-3b-Q4_K_M.gguf",
+  "threads": 4,
+  "context": 4096,
+  "cap_mib": 5000,
+  "host_available_before_mib": 11645,
+  "load_s": 1.6,
+  "cgroup_peak_mib": 2017,
+  "process_peak_rss_mib": 3831,
+  "cgroup_oom_kills": 0,
+  "generate_tokens_per_s": [
+    16.4,
+    16.6,
+    16.7
+  ],
+  "generate_median": 16.6,
+  "prompt_tokens_per_s": [
+    50.6,
+    48.9,
+    45.5
+  ],
+  "tokens_predicted": [
+    128,
+    128,
+    128
+  ]
+}

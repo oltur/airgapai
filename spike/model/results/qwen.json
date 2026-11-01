@@ -1,0 +1,29 @@
+{
+  "measured": "2026-11-01T13:43:47+01:00",
+  "llama_cpp": "llama-b12032",
+  "model": "Qwen3.5-4B-Q4_K_M.gguf",
+  "threads": 4,
+  "context": 4096,
+  "cap_mib": 5000,
+  "host_available_before_mib": 11462,
+  "load_s": 3.0,
+  "cgroup_peak_mib": 4372,
+  "process_peak_rss_mib": 4371,
+  "cgroup_oom_kills": 0,
+  "generate_tokens_per_s": [
+    12.2,
+    12.1,
+    11.4
+  ],
+  "generate_median": 12.1,
+  "prompt_tokens_per_s": [
+    32.8,
+    32.2,
+    31.0
+  ],
+  "tokens_predicted": [
+    128,
+    128,
+    128
+  ]
+}

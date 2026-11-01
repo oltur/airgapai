@@ -1,0 +1,29 @@
+{
+  "measured": "2026-11-01T13:44:50+01:00",
+  "llama_cpp": "llama-b12032",
+  "model": "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
+  "threads": 4,
+  "context": 4096,
+  "cap_mib": 5000,
+  "host_available_before_mib": 11740,
+  "load_s": 2.6,
+  "cgroup_peak_mib": 4030,
+  "process_peak_rss_mib": 4008,
+  "cgroup_oom_kills": 0,
+  "generate_tokens_per_s": [
+    14.6,
+    14.8,
+    14.1
+  ],
+  "generate_median": 14.6,
+  "prompt_tokens_per_s": [
+    54.2,
+    54.6,
+    53.3
+  ],
+  "tokens_predicted": [
+    128,
+    128,
+    128
+  ]
+}
