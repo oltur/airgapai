@@ -9,14 +9,11 @@ arguments may reflect the server as well as the model. Nothing here executes a t
 import argparse
 import json
 import pathlib
-import subprocess
-import threading
 import time
 import urllib.error
 import urllib.request
 
-from measure import (BIN, CAP_MIB, CONTEXT, HOST_MARGIN_MIB, PORT, ROOT, THREADS, URL,
-                     available_mib, wait_healthy, watchdog)
+from measure import BIN, CONTEXT, ROOT, THREADS, URL, capped_server
 
 MAX_TOKENS = 300
 SYSTEM = (
@@ -174,22 +171,8 @@ def main():
     args = parser.parse_args()
 
     gguf = next((ROOT / args.name).glob("*.gguf"))
-    if available_mib() < CAP_MIB + HOST_MARGIN_MIB:
-        raise SystemExit("not enough memory available")
-
-    server = subprocess.Popen(
-        ["systemd-run", "--user", "--scope", "--quiet",
-         "-p", f"MemoryMax={CAP_MIB}M", "-p", "MemorySwapMax=0",
-         "env", f"LD_LIBRARY_PATH={BIN}", str(BIN / "llama-server"),
-         "-m", str(gguf), "--host", "127.0.0.1", "--port", str(PORT),
-         "-t", str(THREADS), "-c", str(CONTEXT), "--parallel", "1", "--jinja"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd="/")
-
-    stop, tripped = threading.Event(), threading.Event()
-    threading.Thread(target=watchdog, args=(server, stop, tripped), daemon=True).start()
     results = []
-    try:
-        wait_healthy(server)
+    with capped_server(gguf, "-c", str(CONTEXT), "--jinja"):
         for name, messages, tool, priority, must_contain, only_forbid in CASES:
             start = time.monotonic()
             try:
@@ -206,15 +189,6 @@ def main():
                 "reply": reply,
             })
             print(f"{args.name} {name}: {'pass' if not problems else problems}", flush=True)
-    finally:
-        stop.set()
-        server.terminate()
-        try:
-            server.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            server.kill()
-        if tripped.is_set():
-            print("stopped: the host fell below its memory margin")
 
     passed = sum(r["passed"] for r in results)
     print(f"{args.name}: {passed}/{len(CASES)}", flush=True)

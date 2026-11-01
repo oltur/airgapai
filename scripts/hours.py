@@ -15,7 +15,7 @@ IDLE_GAP = timedelta(minutes=15)
 PHASES = [  # name, budget in hours, start
     ("0: repo basics", 5, "2026-10-31T09:13:00+01:00"),
     ("1: the air gap", 60, "2026-10-31T09:41:27+01:00"),
-    ("2: light retrieval", 30, None),
+    ("2: light retrieval", 30, "2026-11-01T13:20:00+01:00"),
     ("3: agent gateway", 55, None),
     ("4: evals and write-up", 30, None),
 ]

@@ -11,14 +11,12 @@ import json
 import math
 import pathlib
 import statistics
-import subprocess
-import threading
 import time
 import urllib.request
 
-from measure import (BIN, CAP_MIB, HOST_MARGIN_MIB, PORT, ROOT, THREADS, URL, available_mib,
-                     vm_hwm_mib, wait_healthy, watchdog)
+from measure import BIN, ROOT, THREADS, URL, available_mib, capped_server, memory_figures
 
+LICENCE = "Apache-2.0"
 CONTEXT = 2048
 RUNS = 3
 CHUNKS_PER_RUN = 20
@@ -51,36 +49,28 @@ def cosine(a, b):
 
 
 def timed_run(texts):
-    """Embed the texts one at a time. Return items per second and tokens per second."""
-    start = time.monotonic()
-    tokens = sum(embed(text)[1] for text in texts)
-    elapsed = time.monotonic() - start
-    return len(texts) / elapsed, tokens / elapsed, tokens // len(texts)
+    """Embed the texts one at a time. Return items/s, tokens/s, tokens per item and each latency."""
+    latencies = []
+    tokens = 0
+    for text in texts:
+        start = time.monotonic()
+        tokens += embed(text)[1]
+        latencies.append(time.monotonic() - start)
+    elapsed = sum(latencies)
+    return len(texts) / elapsed, tokens / elapsed, tokens // len(texts), latencies
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("name", help="directory under the spike root, such as nomic")
+    # Only Nomic: the task prefixes and mean pooling below would misrepresent another model.
+    parser.add_argument("name", choices=["nomic"], help="directory under the spike root")
     parser.add_argument("--out", type=pathlib.Path, help="directory for the result JSON")
     args = parser.parse_args()
 
     gguf = next((ROOT / args.name).glob("*.gguf"))
-    if available_mib() < CAP_MIB + HOST_MARGIN_MIB:
-        raise SystemExit("not enough memory available")
-
-    server = subprocess.Popen(
-        ["systemd-run", "--user", "--scope", "--quiet",
-         "-p", f"MemoryMax={CAP_MIB}M", "-p", "MemorySwapMax=0",
-         "env", f"LD_LIBRARY_PATH={BIN}", str(BIN / "llama-server"),
-         "-m", str(gguf), "--host", "127.0.0.1", "--port", str(PORT),
-         "-t", str(THREADS), "-c", str(CONTEXT), "-b", str(CONTEXT), "-ub", str(CONTEXT),
-         "--parallel", "1", "--embedding", "--pooling", "mean"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd="/")
-
-    stop, tripped = threading.Event(), threading.Event()
-    threading.Thread(target=watchdog, args=(server, stop, tripped), daemon=True).start()
-    try:
-        load_s = wait_healthy(server)
+    before = available_mib()
+    with capped_server(gguf, "-c", str(CONTEXT), "-b", str(CONTEXT), "-ub", str(CONTEXT),
+                       "--embedding", "--pooling", "mean") as (server, load_s):
         query, _ = embed(f"search_query: {QUERY}")
         related, _ = embed(f"search_document: {RELATED}")
         unrelated, _ = embed(f"search_document: {UNRELATED}")
@@ -88,32 +78,29 @@ def main():
                   for _ in range(RUNS)]
         queries = [timed_run([f"search_query: {i} {QUERY}" for i in range(QUERIES_PER_RUN)])
                    for _ in range(RUNS)]
+        latencies = [ms * 1000 for run in queries for ms in run[3]]
         result = {
             "measured": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
             "llama_cpp": BIN.name,
             "model": gguf.name,
+            "licence": LICENCE,
             "threads": THREADS,
+            "context": CONTEXT,
+            "host_available_before_mib": before,
             "dimensions": len(query),
             "load_s": round(load_s, 1),
-            "process_peak_rss_mib": vm_hwm_mib(server.pid),
+            **memory_figures(server.pid),
             "tokens_per_chunk": chunks[0][2],
             "chunks_per_s": [round(c[0], 2) for c in chunks],
             "chunks_per_s_median": round(statistics.median(c[0] for c in chunks), 2),
             "chunk_tokens_per_s": [round(c[1], 1) for c in chunks],
             "tokens_per_query": queries[0][2],
-            "query_ms_median": round(1000 / statistics.median(q[0] for q in queries), 1),
+            "queries_measured": len(latencies),
+            "query_ms_median": round(statistics.median(latencies), 1),
+            "query_ms_slowest": round(max(latencies), 1),
             "cosine_related": round(cosine(query, related), 3),
             "cosine_unrelated": round(cosine(query, unrelated), 3),
         }
-    finally:
-        stop.set()
-        server.terminate()
-        try:
-            server.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            server.kill()
-        if tripped.is_set():
-            print("stopped: the host fell below its memory margin")
 
     print(json.dumps(result, indent=2))
     if result["cosine_related"] <= result["cosine_unrelated"]:
