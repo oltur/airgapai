@@ -88,7 +88,8 @@ def main():
     rows = [HEADER, "| Phase | Budget (h) | Active (h) |", "|---|---|---|"]
     for index, (name, budget, start) in enumerate(PHASES):
         actual = hours(by_phase[index]) if start else ""
-        over = " **budget reached: stop and choose**" if by_phase[index] >= timedelta(hours=budget) else ""
+        reached = by_phase[index] >= timedelta(hours=budget)
+        over = " **budget reached: stop and choose**" if reached else ""
         rows.append(f"| {name} | {budget} | {actual}{over} |")
     rows += ["", "## By day", "", "| Date | Phase | Active (h) |", "|---|---|---|"]
     for (day, phase), delta in sorted(by_day.items()):

@@ -1,0 +1,29 @@
+# Runs on GitHub, outside the air gap, and is separate from the Forgejo job inside it. It needs no
+# cluster, so it does not test the air gap: make rebuild does that, on the lab host.
+name: PR checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # The secret scan reads the full history.
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: test/egress/go.mod
+          cache: false
+      - run: scripts/install-tools.sh
+      - name: Secret scan, without the local denylist
+        run: DENYLIST_OPTIONAL=1 make check
+      - name: Guard tests
+        run: make test-secrets
+      - name: Lint
+        run: make lint
