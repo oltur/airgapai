@@ -3,7 +3,7 @@
 # Each input gets its own directory. Nothing here is executed or loaded.
 set -euo pipefail
 
-root="${SPIKE_DIR:-/mnt/data/airgapai/spike}"
+root="${SPIKE_DIR:-/mnt/data/airgapai/model-spike}"
 
 # Published by the llama.cpp release, which has no checksum file. This hash records the file as
 # first downloaded on 2026-11-01. Its attestation was not verified.

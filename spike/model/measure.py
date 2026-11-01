@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 
-ROOT = pathlib.Path("/mnt/data/airgapai/spike")
+ROOT = pathlib.Path("/mnt/data/airgapai/model-spike")
 BIN = ROOT / "llama.cpp/bin/llama-b12032"
 PORT = 18080
 URL = f"http://127.0.0.1:{PORT}"
