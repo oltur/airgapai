@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs on the VM as root. Tests Pod Security, default deny and DNS, with controls. Manual step until
-# the Go egress test replaces it.
+# Runs on the VM as root. Tests Pod Security, default deny and DNS, with controls. The layers below
+# the cluster are tested by test/egress.
 set -uo pipefail
 
 export KUBECONFIG=/etc/rancher/rke2/rke2.yaml PATH=/var/lib/rancher/rke2/bin:$PATH

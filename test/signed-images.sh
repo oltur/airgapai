@@ -43,7 +43,7 @@ spec:
 ${init}  containers:
     - name: probe
       image: $2
-      args: [sleep]
+      args: [serve, ":8080"]
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:
@@ -85,7 +85,8 @@ result "unsigned image in exempt namespace" admitted "$(admission unsigned "$uns
 # The signed image really pulls from Zot and runs.
 pod signed-run "$signed" "$ns" >"$last_output"
 "${kubectl[@]}" -n "$ns" wait --for=condition=Ready pod/signed-run --timeout=120s >/dev/null 2>&1
-result "signed image runs" Running "$("${kubectl[@]}" -n "$ns" get pod signed-run -o jsonpath='{.status.phase}')"
+# Ready and not just Running: a crash-looping pod still reports the Running phase.
+result "signed image runs" true "$("${kubectl[@]}" -n "$ns" get pod signed-run -o jsonpath='{.status.containerStatuses[0].ready}')"
 
 # Ephemeral containers reach a running pod through a subresource of their own.
 ephemeral() { # name image

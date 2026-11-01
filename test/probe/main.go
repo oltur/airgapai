@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -49,6 +50,31 @@ func lookup(name string) string {
 	return "resolved"
 }
 
+// dnsQuery asks one server directly, without the pod's resolver. Any reply counts as answered.
+func dnsQuery(server, name string) string {
+	conn, err := net.DialTimeout("udp", server, timeout)
+	if err != nil {
+		return classify(err)
+	}
+	defer conn.Close()
+	msg := []byte{0x13, 0x37, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0}
+	for _, label := range strings.Split(strings.TrimSuffix(name, "."), ".") {
+		msg = append(msg, byte(len(label)))
+		msg = append(msg, label...)
+	}
+	msg = append(msg, 0, 0, 1, 0, 1)
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return "error"
+	}
+	if _, err := conn.Write(msg); err != nil {
+		return classify(err)
+	}
+	if _, err := conn.Read(make([]byte, 512)); err != nil {
+		return classify(err)
+	}
+	return "answered"
+}
+
 func serve(addr string) error {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -64,8 +90,12 @@ func serve(addr string) error {
 }
 
 func main() {
+	if len(os.Args) == 4 && os.Args[1] == "dns" {
+		fmt.Println(dnsQuery(os.Args[2], os.Args[3]))
+		return
+	}
 	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "usage: probe connect host:port | lookup name | serve :port")
+		fmt.Fprintln(os.Stderr, "usage: probe connect host:port | lookup name | dns server:port name | serve :port")
 		os.Exit(2)
 	}
 	switch os.Args[1] {

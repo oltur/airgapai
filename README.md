@@ -14,14 +14,15 @@ private, non-commercial project, written independently from public specification
 
 ## Status
 
-Phase 1 of 4: the air gap, in progress. **The claim above is not proven yet.** The repository
+Phase 1 of 4: the air gap, tests passing, write-up pending. **The claim above is not proven yet:** only its air-gap part has tests. The repository
 guard is done, and a [default-deny spike](docs/adr/0003-default-deny-with-calico-gnp.md) has passed
 on a throwaway VM with internet access. RKE2 now
 [installs from an offline bundle](docs/adr/0004-offline-install-and-black-hole-route.md) on an
 isolated network, with [baseline hardening](docs/adr/0005-baseline-hardening.md) and a
 [read-only registry with signed-image admission](docs/adr/0006-registry-and-signed-image-admission.md)
-and [Git, CI and Argo CD inside the air gap](docs/adr/0007-git-ci-and-argo-inside-the-air-gap.md),
-but no formal egress test or one-command rebuild yet. No model, retrieval or gateway code exists so far.
+and [Git, CI and Argo CD inside the air gap](docs/adr/0007-git-ci-and-argo-inside-the-air-gap.md).
+`make rebuild` recreates it all and runs the [egress test and layer matrix](docs/adr/0008-egress-test-and-layer-matrix.md).
+No model, retrieval or gateway code exists so far.
 
 | Phase | What it should demonstrate |
 |---|---|
@@ -37,6 +38,7 @@ but no formal egress test or one-command rebuild yet. No model, retrieval or gat
 |---|---|---|
 | The commit guard blocks a generated fake secret or denylisted term, and lets a clean file through | `make test-secrets` | That every secret is caught. Gitleaks works from known patterns, and the denylist holds only terms listed in advance |
 | No commit on any ref contains a detected secret or a denylisted term | `make check` | The same limit. Without a local `.denylist` this check refuses to run |
+| In a single-node lab, pods reach a canary outside the cluster only with both the network policy and the VM path removed | `make test-egress`, part of `make rebuild` | That no other path exists. The canary is on the host, public targets have no open-path control, and only TCP and DNS were tested. See [ADR 0008](docs/adr/0008-egress-test-and-layer-matrix.md) |
 
 ## Running the checks
 
