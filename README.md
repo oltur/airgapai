@@ -60,6 +60,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0007](docs/adr/0007-git-ci-and-argo-inside-the-air-gap.md) | Git, CI and Argo CD inside the air gap |
 | [0008](docs/adr/0008-egress-test-and-layer-matrix.md) | Egress test and layer matrix, with measurements |
 | [0009](docs/adr/0009-pull-request-checks-outside-the-air-gap.md) | Pull request checks outside the air gap |
+| [0010](docs/adr/0010-answer-and-embedding-models.md) | Answer and embedding models, with host measurements |
 
 ## Requirements
 
