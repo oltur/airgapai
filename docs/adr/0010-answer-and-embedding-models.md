@@ -24,20 +24,23 @@ VM's sizing and not a result for the deployed stack.
 - **Proposed VM limit: 10240 MiB, up from 8192 MiB.** `infra/versions.env` does not change here. The
   packaging step measures the model server in the VM, and that measurement decides the limit.
 
-Ministral was the only candidate to pass all 11 tool cases, including not obeying an instruction
-planted in a tool result. It costs some speed and memory compared with the two smaller models, and
-tool behaviour matters more here because the gateway is the centre of the project.
+Ministral was the only candidate to pass all 11 tool cases, and the only one tested that did not call
+`create_ticket` when a tool result told it to. That pass is narrow: see the limits below. Generation is
+slower than the two smaller models and its memory use is higher, but its prompt speed beats Granite's,
+and tool behaviour matters more here because the gateway is the centre of the project.
 
 ## Alternatives
 
-- **Granite 4.1 3B:** slightly faster, but it obeyed the planted instruction and called
-  `create_ticket`. The gateway must contain that regardless, but there was no reason to start with
-  the model that failed this case.
+- **Granite 4.1 3B:** faster at generating (16.6 against 15.2 tokens/s) but slower at reading a prompt
+  (48.9 against 56.4 tokens/s), which matters for retrieval prompts. It called `create_ticket` as the
+  planted instruction told it to. The gateway must contain that regardless, but there was no reason to
+  start with the model that failed this case.
 - **SmolLM3 3B:** the fastest and smallest, but it never called a tool, passing only the 5 cases that
   need no call. This may be a chat template or server setting rather than the model. It was not
   investigated, because another candidate passed.
-- **Qwen3.5 4B:** the slowest and largest of the four, so it was dropped before the tool screen. Its
-  memory and speed results stay in the repository as a record.
+- **Qwen3.5 4B:** Apache-2.0, per its Hugging Face record. It had the lowest generation and prompt
+  speeds and the highest memory of the four, and it was not taken forward to the tool screen. Its results
+  stay in the repository as a record.
 - **A third-party conversion of Ministral:** measured first, then replaced with Mistral's own file, so
   the source of the weights is one step shorter.
 
@@ -46,13 +49,17 @@ tool behaviour matters more here because the gateway is the centre of the projec
 - **Speed:** at about 15 tokens/s, a 200-token answer takes about 13 s of generation by arithmetic, on
   top of prompt processing at about 56 tokens/s. A 2000-token prompt adds about 36 s by arithmetic.
   Retrieved context will need to stay small, and streaming will matter.
-- **Memory:** the two models' peak process memory adds up to 4204 MiB. The VM guest had about 4.6 GiB
-  available under its current limit, before PostgreSQL, the retrieval service or the gateway. That
-  would leave too little room, which is why the limit needs to rise.
-- **The proposed limit is arithmetic, not a measurement.** With Docker limited to 7 GiB, the host had
-  about 6.7 GiB available with the 8 GiB VM running. Moving 2 GiB to the VM should leave about 4.7 GiB
-  on the host and allow about 6.6 GiB in the guest. `make vm-up` requires the VM limit plus a 3072 MiB
-  margin to be available, which puts the ceiling at roughly 11.7 GiB.
+- **Memory:** the two models' peak process memory adds up to 4204 MiB, and the running guest had 4618 MiB
+  available with no model, PostgreSQL, retrieval service or gateway. That is an upper-end comparison:
+  about half of Ministral's RSS looks like file-backed pages (cgroup peak 1981 MiB), which the kernel can
+  reclaim and available memory already counts, at a cost in speed if they are read back. The real need is
+  not known, and the guest has no swap, so the limit is expected to rise.
+- **The proposed limit is arithmetic, not a measurement.** 10240 MiB is 2048 MiB more for the guest. With
+  the VM running, the host had 9330 MiB available while the VM's process held 6590 MiB resident and
+  1307 MiB in swap. If stopping it frees the resident part (swap is not RAM), about 15920 MiB would be available, by
+  arithmetic, and `make vm-up` needs 13312 MiB for this limit. Host availability moves: the spike's runs recorded
+  11383 to 11947 MiB the day before, with the VM's state not recorded, and that would be too little if the
+  VM was stopped. `make vm-up` checks this and refuses rather than overcommit.
 - **Changing the limit needs a VM rebuild,** which reruns every Phase 1 test.
 
 ### What this does not prove
@@ -63,20 +70,28 @@ tool behaviour matters more here because the gateway is the centre of the projec
 - **The tool screen is one run per case at temperature 0,** on cases written for this choice. It helps
   choose a model and is not an eval. Thinking was off, and llama-server may constrain arguments with a
   grammar, so valid arguments may reflect the server as well as the model.
-- **One resisted injection does not show the model resists injection.** The gateway must hold against
-  a fully compromised model, and Phase 3 tests that.
+- **Ministral's injection pass is narrow.** The check only looks for a `create_ticket` call and the text
+  `45`. The reply gave the answer, then said it would create a ticket and asked whether to file it as
+  high priority, so the planted text may have influenced it. It asked rather than acted, but the screen
+  cannot tell. The gateway must hold against a fully compromised model, and Phase 3 tests that.
 - **Speed prompts were short and output was 128 tokens.** Long prompts and sustained load were not
-  measured. The 4 threads may land on different core types, because the CPU has hybrid cores.
-- **Load times were measured with the file probably already in the page cache,** so a cold start may
-  take longer.
+  measured. The 4 threads may land on different core types, because the CPU has hybrid cores. The speed
+  and memory runs omitted `--jinja`, which the tool runs used and the gateway will need.
+- **Load times are not comparable between chat models.** Granite's and Ministral's cgroup peaks (2017 and
+  1981 MiB, against RSS of 3831 and 4008 MiB) suggest their files were already cached. SmolLM3's and
+  Qwen's peaks about equal their RSS, which suggests theirs were read fresh, so their longer load times
+  may be mostly a cache effect. A cold start of Ministral was not measured.
 - **The memory caps limit less than they imply.** The cgroup peak leaves out file pages already cached,
-  which is why it reads 1981 MiB where the process's peak RSS reads 4008 MiB. RSS is used here, and
-  the cap should not be read as proof the model fits in that amount on a cold cache.
+  so the cap should not be read as proof that a model fits in that amount on a cold cache. RSS is used
+  here for that reason.
 - **The embedding check is a sanity check, not retrieval quality.** One query scored higher against one
   related passage than one unrelated passage. Recall is measured later against the real corpus.
 - **Provenance is limited.** Each model hash comes from the Hugging Face record, which is not a
   signature from the publisher. The llama.cpp hash records the file as first downloaded, because the
   release has no checksum file, and its attestation was not verified.
+- **The saved chat and tool results predate later script changes:** a shared server helper, the data
+  directory and finer polling of load time (0.2 s then, 0.05 s now). The chat results were not rerun
+  with the current scripts, so their load times are coarser than the code suggests.
 - **Licences were read from each Hugging Face record,** which is not legal advice.
 
 ## Measurements
@@ -92,7 +107,9 @@ the median of 3 runs.
 | SmolLM3 3B | 3503 MiB | 2.0 s | 17.8 tokens/s | 59.7 tokens/s | 5 of 11 |
 | Qwen3.5 4B | 4371 MiB | 3.0 s | 12.1 tokens/s | 32.2 tokens/s | not run |
 
-These runs used a context of 4096 tokens and a cap of 5000 MiB, with no out-of-memory kills.
+These runs used a context of 4096 tokens and a cap of 5000 MiB, with no out-of-memory kills. Compare load
+times only with the limit above in mind. All 11 tool cases took 74.9 s on Ministral and 98.4 s on Granite,
+one run each.
 
 `nomic-embed-text-v1.5` Q8_0, same host and threads, context of 2048 tokens, cap of 1000 MiB:
 
@@ -105,5 +122,15 @@ These runs used a context of 4096 tokens and a cap of 5000 MiB, with no out-of-m
 | Query of 21 tokens | 24.0 ms median of 60, slowest 51.2 ms |
 | Cosine, query to related and unrelated passage | 0.639 and 0.433 |
 
-To reproduce: `spike/model/fetch.sh`, then `measure.py`, `toolcall.py` and `embed.py` in the same
-directory. The script no longer fetches Qwen, so that row cannot be reproduced from it.
+Memory for sizing, measured on 2026-11-02 with the VM running at its 8192 MiB limit, Docker limited to
+7 GiB, and no model loaded:
+
+| Measure | Result |
+|---|---|
+| Host available | 9330 MiB |
+| VM process resident and in swap | 6590 MiB and 1307 MiB |
+| Guest available | 4618 MiB, with no swap |
+
+To reproduce: run `spike/model/fetch.sh`, then `measure.py NAME --out DIR`, `toolcall.py NAME --out DIR`
+and `embed.py nomic --out DIR`. Without `--out`, nothing is saved. The script no longer fetches Qwen, so
+that row cannot be reproduced from it, and see the limit above on script changes.
