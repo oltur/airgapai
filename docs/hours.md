@@ -9,11 +9,13 @@ those tools, and it counts time when Claude was working unattended.
 |---|---|---|
 | 0: repo basics | 5 | 0.5 |
 | 1: the air gap | 60 | 7.4 |
-| 2: light retrieval | 30 | 1.7 |
+| 2: light retrieval | 30 | 2.2 |
 | 3: agent gateway | 55 |  |
 | 4: evals and write-up | 30 |  |
 
 ## By day
+
+Each figure is rounded on its own, so days may not add up to the phase total. Days that round to 0.0 are left out.
 
 | Date | Phase | Active (h) |
 |---|---|---|
@@ -21,4 +23,4 @@ those tools, and it counts time when Claude was working unattended.
 | 2026-10-31 | 1 | 5.4 |
 | 2026-11-01 | 1 | 2.0 |
 | 2026-11-01 | 2 | 1.5 |
-| 2026-11-02 | 2 | 0.2 |
+| 2026-11-02 | 2 | 0.6 |
