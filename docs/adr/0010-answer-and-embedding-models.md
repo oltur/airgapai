@@ -1,7 +1,8 @@
 # 0010: Answer and embedding models
 
-**Status:** accepted for the models; the VM memory limit is proposed until measured in the VM
-**Date:** 2026-11-02
+**Status:** accepted for the models; the VM memory limit is applied but provisional until a model is measured
+in the VM
+**Date:** 2026-11-02, limit applied 2026-11-04
 
 ## Context
 
@@ -21,8 +22,9 @@ VM's sizing and not a result for the deployed stack.
   `0188c9b`). Apache-2.0, per its Hugging Face record.
 - **Server: llama.cpp `b12032`** (MIT), behind its OpenAI-compatible API. Revisions and SHA-256 hashes
   are pinned in `spike/model/fetch.sh`.
-- **Proposed VM limit: 10240 MiB, up from 8192 MiB.** `infra/versions.env` does not change here. The
-  packaging step measures the model server in the VM, and that measurement decides the limit.
+- **VM limit: 10240 MiB, up from 8192 MiB,** set in `infra/versions.env` once Phase 1 passed at it. It is
+  provisional: the packaging step measures the model server in the VM, and that measurement decides
+  whether it stays.
 
 Ministral was the only candidate to pass all 11 tool cases, and the only one tested that did not call
 `create_ticket` when a tool result told it to. That pass is narrow: see the limits below. Generation is
@@ -54,14 +56,19 @@ and tool behaviour matters more here because the gateway is the centre of the pr
   about half of Ministral's RSS looks like file-backed pages (cgroup peak 1981 MiB), which the kernel can
   reclaim and available memory already counts, at a cost in speed if they are read back. The real need is
   not known, and the guest has no swap, so the limit is expected to rise.
-- **The proposed limit is arithmetic, not a measurement.** 10240 MiB is 2048 MiB more for the guest. With
+- **The limit was chosen by arithmetic, before any measurement at it.** 10240 MiB is 2048 MiB more for the guest. With
   the VM running, the host had 9330 MiB available while the VM's process held 6590 MiB resident and
   1307 MiB in swap. If stopping it frees the resident part (swap is not RAM), about 15920 MiB would be available, by
   arithmetic, and `make vm-up` needs 13312 MiB for this limit. Host availability moves: the spike's runs recorded
   11383 to 11947 MiB the day before, with the VM's state not recorded, and that would be too little if the
-  VM was stopped. `make vm-up` checks this and refuses rather than overcommit.
+  VM was stopped. `make vm-up` checks this and refuses rather than overcommit. It passed the check on
+  2026-11-02; see Measurements.
+- **The start check cannot see later pressure.** `make vm-up` checks available memory only at start. The
+  VM then grows to nearly its full limit, and the host's other workloads can be pushed into swap without
+  any warning. After the rebuild, 5144 MiB of host swap was in use, and whether that slowed anything was
+  not measured.
 - **Changing the limit needs a VM rebuild,** which reruns every Phase 1 test. That has passed at 10240 MiB;
-  see Measurements. The limit stays proposed until a model is measured in the VM.
+  see Measurements. The limit stays provisional until a model is measured in the VM.
 
 ### What this does not prove
 
@@ -132,8 +139,8 @@ Memory for sizing, measured on 2026-11-02 with the VM running at its 8192 MiB li
 | VM process resident and in swap | 6590 MiB and 1307 MiB |
 | Guest available | 4618 MiB, with no swap |
 
-One `make rebuild` on 2026-11-02 at the proposed 10240 MiB limit, with downloads cached, read straight
-after its tests. It shows Phase 1 still passes at this limit, using the pinned Go toolchain. No model was
+One `make rebuild` on 2026-11-02 at the 10240 MiB limit, with downloads cached and Docker limited to
+7 GiB as before, read straight after its tests. It shows Phase 1 still passes at this limit, using the pinned Go toolchain. No model was
 loaded, so it does not settle the limit:
 
 | Measure | Result |

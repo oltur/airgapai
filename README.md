@@ -68,7 +68,7 @@ A Linux host with KVM and libvirt, `virt-install`, `qemu-img`, `xorriso`, `nft`,
 passwordless `sudo`. The scripts keep their data in `/mnt/data/airgapai`, set in
 [`infra/versions.env`](infra/versions.env), and the first bundle build downloads its pinned inputs.
 The VM is limited to 10 GiB and 4 vCPUs, and `make vm-up` refuses to start without 3 GiB to spare.
-Measurements are in ADR 0008.
+Phase 1 measurements at 8 GiB are in ADR 0008, and the rebuild at 10 GiB is in ADR 0010.
 
 The scripts change the host: they install a firewall service and a libvirt network, and the egress
 test briefly adds a dummy interface and firewall rules, then removes them. Read them first.

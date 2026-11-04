@@ -15,6 +15,8 @@ those tools, and it counts time when Claude was working unattended.
 
 ## By day
 
+Each figure is rounded on its own, so days may not add up to the phase total. Days that round to 0.0 are left out.
+
 | Date | Phase | Active (h) |
 |---|---|---|
 | 2026-10-31 | 0 | 0.5 |
@@ -22,4 +24,3 @@ those tools, and it counts time when Claude was working unattended.
 | 2026-11-01 | 1 | 2.0 |
 | 2026-11-01 | 2 | 1.5 |
 | 2026-11-02 | 2 | 0.6 |
-| 2026-11-04 | 2 | 0.0 |

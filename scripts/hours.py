@@ -91,9 +91,12 @@ def main():
         reached = by_phase[index] >= timedelta(hours=budget)
         over = " **budget reached: stop and choose**" if reached else ""
         rows.append(f"| {name} | {budget} | {actual}{over} |")
-    rows += ["", "## By day", "", "| Date | Phase | Active (h) |", "|---|---|---|"]
+    note = ("Each figure is rounded on its own, so days may not add up to the phase total. "
+            "Days that round to 0.0 are left out.")
+    rows += ["", "## By day", "", note, "", "| Date | Phase | Active (h) |", "|---|---|---|"]
     for (day, phase), delta in sorted(by_day.items()):
-        rows.append(f"| {day} | {phase} | {hours(delta)} |")
+        if hours(delta) != "0.0":
+            rows.append(f"| {day} | {phase} | {hours(delta)} |")
     (ROOT / "docs/hours.md").write_text("\n".join(rows) + "\n")
 
 
