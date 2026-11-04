@@ -60,7 +60,8 @@ and tool behaviour matters more here because the gateway is the centre of the pr
   arithmetic, and `make vm-up` needs 13312 MiB for this limit. Host availability moves: the spike's runs recorded
   11383 to 11947 MiB the day before, with the VM's state not recorded, and that would be too little if the
   VM was stopped. `make vm-up` checks this and refuses rather than overcommit.
-- **Changing the limit needs a VM rebuild,** which reruns every Phase 1 test.
+- **Changing the limit needs a VM rebuild,** which reruns every Phase 1 test. That has passed at 10240 MiB;
+  see Measurements. The limit stays proposed until a model is measured in the VM.
 
 ### What this does not prove
 
@@ -130,6 +131,22 @@ Memory for sizing, measured on 2026-11-02 with the VM running at its 8192 MiB li
 | Host available | 9330 MiB |
 | VM process resident and in swap | 6590 MiB and 1307 MiB |
 | Guest available | 4618 MiB, with no swap |
+
+One `make rebuild` on 2026-11-02 at the proposed 10240 MiB limit, with downloads cached, read straight
+after its tests. It shows Phase 1 still passes at this limit, using the pinned Go toolchain. No model was
+loaded, so it does not settle the limit:
+
+| Measure | Result |
+|---|---|
+| Destroy, bundle and VM up | 236 s |
+| All four test suites | 540 s, all passed |
+| Guest available | 6609 MiB, with no swap |
+| Guest memory in use, excluding cache | 3331 MiB |
+| VM process resident and in swap | 10147 MiB and 54 MiB |
+| Host available | 8408 MiB, with 5144 MiB of host swap in use |
+
+The VM's process held nearly its whole limit, mostly as guest page cache, so the host should be sized for
+the full limit and not for what the guest is using.
 
 To reproduce: run `spike/model/fetch.sh`, then `measure.py NAME --out DIR`, `toolcall.py NAME --out DIR`
 and `embed.py nomic --out DIR`. Without `--out`, nothing is saved. The script no longer fetches Qwen, so

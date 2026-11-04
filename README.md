@@ -67,7 +67,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 A Linux host with KVM and libvirt, `virt-install`, `qemu-img`, `xorriso`, `nft`, Go, Git, Make and
 passwordless `sudo`. The scripts keep their data in `/mnt/data/airgapai`, set in
 [`infra/versions.env`](infra/versions.env), and the first bundle build downloads its pinned inputs.
-The VM is limited to 8 GiB and 4 vCPUs, and `make vm-up` refuses to start without 3 GiB to spare.
+The VM is limited to 10 GiB and 4 vCPUs, and `make vm-up` refuses to start without 3 GiB to spare.
 Measurements are in ADR 0008.
 
 The scripts change the host: they install a firewall service and a libvirt network, and the egress
