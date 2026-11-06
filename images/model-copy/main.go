@@ -23,13 +23,20 @@ func copyFile(src, dst string) (int64, error) {
 		return 0, err
 	}
 	part := dst + ".part"
-	out, err := os.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o444)
+	// A copy killed part-way leaves its file behind, and the volume outlives the container.
+	if err := os.Remove(part); err != nil && !os.IsNotExist(err) {
+		return 0, err
+	}
+	out, err := os.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return 0, err
 	}
 	n, err := io.Copy(out, in)
 	if err == nil {
 		err = out.Sync()
+	}
+	if err == nil {
+		err = out.Chmod(0o444)
 	}
 	if closeErr := out.Close(); err == nil {
 		err = closeErr

@@ -13,8 +13,11 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 mkdir "$tmp/copy" "$tmp/model"
-(cd "$here/../images/model-copy" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false \
-  -ldflags='-s -w' -o "$tmp/copy/model-copy" .)
+# The toolchain named in go.mod, exactly: a newer local Go would build different bytes.
+src="$here/../images/model-copy"
+toolchain="$(awk '$1 == "toolchain" {print $2}' "$src/go.mod")"
+(cd "$src" && GOTOOLCHAIN="$toolchain" CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+  -buildvcs=false -ldflags='-s -w' -o "$tmp/copy/model-copy" .)
 ln "$model" "$tmp/model/model.gguf" 2>/dev/null || cp "$model" "$tmp/model/model.gguf"
 # Modes are set in the archive, so a hard-linked source keeps its own. No directory entries are needed.
 layer() { # directory file mode
@@ -22,6 +25,7 @@ layer() { # directory file mode
 }
 layer copy model-copy 0555
 layer model model.gguf 0444
-"$crane" append --oci-empty-base -f "$tmp/copy.tar" -f "$tmp/model.tar" -t "$ref" >/dev/null 2>&1
-"$crane" mutate --set-platform linux/amd64 --entrypoint /model-copy,/model.gguf --user 65534 -t "$ref" "$ref" >/dev/null 2>&1
+quiet() { "$@" >"$tmp/crane.log" 2>&1 || { cat "$tmp/crane.log" >&2; echo "failed: $*" >&2; exit 1; }; }
+quiet "$crane" append --oci-empty-base -f "$tmp/copy.tar" -f "$tmp/model.tar" -t "$ref"
+quiet "$crane" mutate --set-platform linux/amd64 --entrypoint /model-copy,/model.gguf --user 65534 -t "$ref" "$ref"
 "$crane" digest "$ref"

@@ -17,9 +17,11 @@ Argo CD. Two constraints shaped the choice of how:
 ## Decision
 
 - **Each model is an image holding one GGUF file and `model-copy`,** a small static Go program, on an
-  empty base. Owners, modes and times are fixed, so the digest depends only on the inputs: two builds
-  of the same file gave the same digest. `infra/versions.env` pins each digest, and the bundle build
-  fails if a build does not produce it or if `deploy/inference` names a different one.
+  empty base. Owners, modes and times are fixed, and the copier is built with the exact Go toolchain its
+  `go.mod` names, so the digest depends only on those inputs: two builds of the same file gave the same
+  digest. `infra/versions.env` pins each digest, and the bundle build
+  fails if a build does not produce it, or if the images `deploy/inference` names are not exactly the
+  pinned ones.
 - **An init container runs the model image and copies the file into an `emptyDir`,** which the server
   reads. The policy checks the init container's image like any other.
 - **The server is the official llama.cpp image, build `b12030`, pinned by its amd64 digest** and
@@ -50,7 +52,7 @@ Argo CD. Two constraints shaped the choice of how:
   and its pages count against the pod's memory.
 - **A model or copier change means a new digest** in `infra/versions.env` and in `deploy/inference`. The
   bundle build names the mismatch.
-- **The bundle grows to 3.8 GB.**
+- **The bundle grows:** `du` reported 3.8 GB for the ISO.
 - **The two models slow each other badly when they run at once:** generation dropped from 14.4 to
   8.2 tokens/s and embedding from 1.92 to 0.63 chunks per second. Both use 4 threads on 4 vCPUs. Ingestion
   and answering should not overlap, or the thread counts need to change, which would need measuring.
@@ -92,6 +94,8 @@ The embedding sanity check gave the same cosines as on the host: 0.639 for the r
 0.433 for the unrelated one. The server reported build `b12030-a91eab67d`.
 
 With both models loaded, the guest had 4359 MiB available. The VM's process held 10285 MiB resident and
-26 MiB in swap, and the host had 10672 MiB available, with no memory pressure recorded.
+26 MiB in swap, and the host had 10672 MiB available. The script did not record memory pressure then.
+Read by hand just after the run, `/proc/pressure/memory` showed 0.00 for 10, 60 and 300 seconds. The
+script now records it.
 
 The rebuild that deployed them passed every Phase 1 test: built in 256 s and tested in 534 s.

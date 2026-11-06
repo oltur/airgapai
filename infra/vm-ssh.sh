@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Opens a shell on the VM, or runs the given command there. The key and host key change on each
-# make vm-up, so the host key is not recorded.
+# make vm-up, so the host key is not recorded. Leading -tt and -L PORT:HOST:PORT go to ssh itself.
 set -euo pipefail
 
 source "$(cd "$(dirname "$0")" && pwd)/versions.env"
+extra=()
+while [[ ${1:-} == -tt || ${1:-} == -L ]]; do
+  if [[ $1 == -L ]]; then extra+=(-L "$2"); shift 2; else extra+=(-tt); shift; fi
+done
 exec ssh -i "$DATA_DIR/vm/id_ed25519" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
-  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "alma@$VM_IP" "$@"
+  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${extra[@]}" "alma@$VM_IP" "$@"

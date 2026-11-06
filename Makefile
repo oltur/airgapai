@@ -24,7 +24,7 @@ test-secrets: ## Prove the guard blocks fake secrets in a temporary repo
 tools: ## Install the pinned guard and lint tools into ~/.local/bin
 	@scripts/install-tools.sh
 
-lint: ## Run ShellCheck, Ruff, go vet and govulncheck
+lint: ## Run ShellCheck, Ruff, go vet, go test and govulncheck
 	@for tool in shellcheck ruff go govulncheck; do \
 		command -v $$tool >/dev/null || { echo "$$tool not found, see make tools"; exit 1; }; \
 	done
@@ -32,6 +32,7 @@ lint: ## Run ShellCheck, Ruff, go vet and govulncheck
 	@ruff check --quiet .
 	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
 		go -C $$module vet ./... || exit 1; \
+		go -C $$module test -count=1 ./... >/dev/null || exit 1; \
 		(cd $$module && govulncheck ./...) || exit 1; # Its -C flag would scan the wrong toolchain. \
 	done
 	@echo "lint clean"

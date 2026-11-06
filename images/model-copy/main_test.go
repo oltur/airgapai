@@ -28,6 +28,26 @@ func TestCopyFile(t *testing.T) {
 	}
 }
 
+func TestCopyFileReplacesLeftoverPart(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "model.gguf")
+	if err := os.WriteFile(src, []byte("model"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "out.gguf")
+	// What a copy killed part-way leaves behind, read-only as the finished file is.
+	if err := os.WriteFile(dst+".part", []byte("half"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := copyFile(src, dst); err != nil {
+		t.Fatalf("copyFile after a leftover part: %v", err)
+	}
+	info, err := os.Stat(dst)
+	if err != nil || info.Mode().Perm() != 0o444 {
+		t.Fatalf("finished file: %v, %v", info, err)
+	}
+}
+
 func TestCopyFileMissingSource(t *testing.T) {
 	dir := t.TempDir()
 	dst := filepath.Join(dir, "model.gguf")

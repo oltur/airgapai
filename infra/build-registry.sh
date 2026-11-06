@@ -90,11 +90,12 @@ model_image() { # name url sha256 pinned-digest
 }
 model_image ministral "$MINISTRAL_GGUF_URL" "$MINISTRAL_GGUF_SHA256" "$MINISTRAL_IMAGE_DIGEST"
 model_image nomic "$NOMIC_GGUF_URL" "$NOMIC_GGUF_SHA256" "$NOMIC_IMAGE_DIGEST"
-# Argo CD deploys these from Git, so the manifests must name the same digests.
-for pinned in "$target/models/ministral@$MINISTRAL_IMAGE_DIGEST" "$target/models/nomic@$NOMIC_IMAGE_DIGEST" \
-  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}"; do
-  grep -rqF "$pinned" "$here/../deploy/inference" || { echo "deploy/inference does not use $pinned"; exit 1; }
-done
+# Argo CD deploys these from Git, so the manifests must name exactly the pinned digests: no other
+# image, and none of these missing.
+pinned="$(printf '%s\n' "$target/models/ministral@$MINISTRAL_IMAGE_DIGEST" "$target/models/nomic@$NOMIC_IMAGE_DIGEST" \
+  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}" | sort -u)"
+named="$(grep -rhE '^\s+image:' "$here/../deploy/inference" | awk '{print $2}' | tr -d '"' | sort -u)"
+[[ $named == "$pinned" ]] || { echo "deploy/inference names other images than versions.env pins:"; diff <(echo "$pinned") <(echo "$named"); exit 1; }
 
 # The CI image is built here, so its digest changes with each build, as apk resolves packages then.
 cp "$HOME/.local/bin/gitleaks" "$tmp/gitleaks"

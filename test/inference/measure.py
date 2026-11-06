@@ -30,17 +30,14 @@ import toolcall  # noqa: E402
 CHAT_PORT, EMBED_PORT = 18181, 18182
 KUBECTL = ("sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
            " -n inference")
-ENV = dict(line.split("=", 1) for line in (ROOT / "infra/versions.env").read_text().splitlines()
-           if "=" in line and not line.startswith("#"))
-SSH = ["ssh", "-i", f"{ENV['DATA_DIR']}/vm/id_ed25519", "-o", "IdentitiesOnly=yes",
-       "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-       "-o", "LogLevel=ERROR"]
-HOST = f"alma@{ENV['VM_IP']}"
+VM_SSH = str(ROOT / "infra/vm-ssh.sh")
+VERSIONS = (ROOT / "infra/versions.env").read_text().splitlines()
+VM_NAME = next(line.split("=", 1)[1] for line in VERSIONS if line.startswith("VM_NAME="))
 APPS = ["chat", "embed"]
 
 
 def vm(command):
-    return subprocess.run(SSH + [HOST, command], capture_output=True, text=True, check=True).stdout
+    return subprocess.run([VM_SSH, command], capture_output=True, text=True, check=True).stdout
 
 
 def pod(app):
@@ -82,8 +79,8 @@ def tunnel():
     forwards = " & ".join(f"{KUBECTL} port-forward svc/{app} {port}:8080 >/dev/null"
                           for app, port in zip(APPS, (CHAT_PORT, EMBED_PORT), strict=True))
     process = subprocess.Popen(
-        SSH + ["-tt", "-L", f"{CHAT_PORT}:127.0.0.1:{CHAT_PORT}",
-               "-L", f"{EMBED_PORT}:127.0.0.1:{EMBED_PORT}", HOST, f"{forwards} & wait"],
+        [VM_SSH, "-tt", "-L", f"{CHAT_PORT}:127.0.0.1:{CHAT_PORT}",
+         "-L", f"{EMBED_PORT}:127.0.0.1:{EMBED_PORT}", f"{forwards} & wait"],
         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(60):
         try:
@@ -108,12 +105,31 @@ def memory(app):
             "cgroup_oom_kills": int(dict(zip(cgroup[1::2], cgroup[2::2], strict=True))["oom_kill"])}
 
 
+def vm_process():
+    """The VM's QEMU process: the one whose -name argument is exactly this guest."""
+    for path in pathlib.Path("/proc").glob("[0-9]*"):
+        try:
+            args = (path / "cmdline").read_bytes().split(b"\0")
+            if any(a.split(b",")[0] == f"guest={VM_NAME}".encode() for a in args):
+                lines = (path / "status").read_text().splitlines()
+                return dict(line.split(":", 1) for line in lines)
+        except OSError:  # The process ended during the scan.
+            continue
+    raise SystemExit(f"no QEMU process for {VM_NAME}")
+
+
+def pressure():
+    """Host memory pressure: the share of time some task stalled on memory, over 60 and 300 s."""
+    some = (pathlib.Path("/proc/pressure/memory").read_text().splitlines()[0]).split()[1:]
+    return {key: float(value) for key, value in (field.split("=") for field in some)
+            if key in ("avg60", "avg300")}
+
+
 def host_memory():
-    qemu = next(p for p in pathlib.Path("/proc").glob("[0-9]*")
-                if f"guest={ENV['VM_NAME']}".encode() in (p / "cmdline").read_bytes())
-    status = dict(line.split(":", 1) for line in (qemu / "status").read_text().splitlines())
+    status = vm_process()
     guest = vm("free -m").split("\n")[1].split()
     return {"host_available_mib": measure.available_mib(),
+            "host_memory_pressure_some_pct": pressure(),
             "vm_resident_mib": int(status["VmRSS"].split()[0]) // 1024,
             "vm_swap_mib": int(status["VmSwap"].split()[0]) // 1024,
             "guest_available_mib": int(guest[6])}
@@ -154,11 +170,19 @@ def main():
 
         # Both at once: one generation while the embedder works through chunks.
         together = {}
-        worker = threading.Thread(target=lambda: together.update(chunks=embed.timed_run(
-            chunk_texts(embed.CHUNKS_PER_RUN, offset=1000))))
+
+        def embed_meanwhile():
+            try:
+                together["chunks"] = embed.timed_run(chunk_texts(embed.CHUNKS_PER_RUN, offset=1000))
+            except Exception as error:  # noqa: BLE001  Raised again below, in the main thread.
+                together["error"] = error
+
+        worker = threading.Thread(target=embed_meanwhile)
         worker.start()
         together["generate"] = measure.generate()
         worker.join()
+        if "error" in together:
+            raise together["error"]
 
         result = {
             "measured": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),

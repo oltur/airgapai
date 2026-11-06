@@ -1,6 +1,7 @@
 # 0010: Answer and embedding models
 
-**Status:** accepted. The VM memory limit was confirmed by the measurement in ADR 0011
+**Status:** accepted. The VM memory limit was kept on the measurement in ADR 0011, which ran without
+PostgreSQL, the retrieval service or the gateway
 **Date:** 2026-11-02, limit applied 2026-11-04
 
 ## Context
@@ -22,7 +23,8 @@ VM's sizing and not a result for the deployed stack.
 - **Server: llama.cpp `b12032`** (MIT), behind its OpenAI-compatible API. Revisions and SHA-256 hashes
   are pinned in `spike/model/fetch.sh`.
 - **VM limit: 10240 MiB, up from 8192 MiB,** set in `infra/versions.env` once Phase 1 passed at it. It is
-  confirmed by measuring both models in the VM, recorded in ADR 0011.
+  kept after measuring both models in the VM, recorded in ADR 0011. That measurement ran without
+  PostgreSQL, the retrieval service or the gateway.
 
 Ministral was the only candidate to pass all 11 tool cases, and the only one tested that did not call
 `create_ticket` when a tool result told it to. That pass is narrow: see the limits below. Generation is
