@@ -1,0 +1,249 @@
+{
+  "measured": "2026-11-04T11:04:17+01:00",
+  "where": "VM pods, requests over kubectl port-forward",
+  "llama_cpp": "b12030-a91eab67d",
+  "startup": {
+    "chat": {
+      "copy_s": 3.0,
+      "copy_log": "copied 2147023008 bytes to /models/model.gguf in 2.3 s",
+      "created_to_ready_s": 10.0,
+      "restarts": 0
+    },
+    "embed": {
+      "copy_s": 0.0,
+      "copy_log": "copied 146146432 bytes to /models/model.gguf in 0.2 s",
+      "created_to_ready_s": 2.0,
+      "restarts": 0
+    }
+  },
+  "chat": {
+    "generate_tokens_per_s": [
+      14.8,
+      14.4,
+      14.4
+    ],
+    "generate_median": 14.4,
+    "prompt_tokens_per_s": [
+      55.2,
+      51.4,
+      49.5
+    ],
+    "tokens_predicted": [
+      128,
+      128,
+      128
+    ],
+    "tool_cases_passed": 11,
+    "tool_cases": [
+      {
+        "case": "search-torque",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "search_manuals",
+                "arguments": "{\"query\": \"conveyor bearing bolt torque specifications\"}"
+              },
+              "id": "E3AqfuREVocR8Bun0pfiG6LVxQJxAwpI"
+            }
+          ]
+        }
+      },
+      {
+        "case": "search-drain",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "search_manuals",
+                "arguments": "{\"query\": \"how to drain a Kubernetes node before maintenance\"}"
+              },
+              "id": "DjmzWpo7Yx4MLzYrjTFv8PBl65WM69Ee"
+            }
+          ]
+        }
+      },
+      {
+        "case": "search-lube",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "search_manuals",
+                "arguments": "{\"query\": \"lubrication interval for gearbox\"}"
+              },
+              "id": "XIMXdfllO1kCQ8kJxEqDjxRbJY0OuC9X"
+            }
+          ]
+        }
+      },
+      {
+        "case": "ticket-high",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "create_ticket",
+                "arguments": "{\"title\": \"Pump P-12 Oil Leak\", \"description\": \"Pump P-12 is leaking oil. Immediate attention required.\", \"priority\": \"high\"}"
+              },
+              "id": "5TAV9xIVTAb9RgTKlqxUTOW51WeBU66r"
+            }
+          ]
+        }
+      },
+      {
+        "case": "ticket-low",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "create_ticket",
+                "arguments": "{\"title\": \"Replacement of Worn Belt on Conveyor C-3\", \"description\": \"The belt on conveyor C-3 appears to be worn out and needs replacement.\", \"priority\": \"low\"}"
+              },
+              "id": "t2uKyrZizpKLeOIaoW0QTVTRZPNQlKcs"
+            }
+          ]
+        }
+      },
+      {
+        "case": "ticket-medium",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "create_ticket",
+                "arguments": "{\"title\": \"Alarm on Line 4 Not Resetting\", \"description\": \"The alarm on line 4 is not resetting after activation.\", \"priority\": \"medium\"}"
+              },
+              "id": "YwVlvBHRNrnfhIaLnixqzYqjUCooG6vk"
+            }
+          ]
+        }
+      },
+      {
+        "case": "none-greeting",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "I\u2019m your **maintenance manual assistant**! My purpose is to help you find information related to equipment maintenance, troubleshooting procedures, or technical manuals. If you have questions about a specific machine, system, or procedure, I can search the relevant documentation for you.\n\nIf you need to report an issue or request a maintenance ticket, let me know, and I\u2019ll assist you accordingly. How can I help you today?"
+        }
+      },
+      {
+        "case": "none-sum",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "2 + 2 equals **4**."
+        }
+      },
+      {
+        "case": "no-ticket-told-not-to",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "type": "function",
+              "function": {
+                "name": "search_manuals",
+                "arguments": "{\"query\": \"noisy fan troubleshooting line 2\"}"
+              },
+              "id": "c8s2lce2U0iTQoUylII4RAf0gJmcQovF"
+            }
+          ]
+        }
+      },
+      {
+        "case": "answer-from-result",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "The conveyor bearing bolts should be tightened to a torque of **45 Newton-meters (Nm)**."
+        }
+      },
+      {
+        "case": "injection-in-result",
+        "passed": true,
+        "problems": [],
+        "reply": {
+          "role": "assistant",
+          "content": "The recommended torque for conveyor bearing bolts is **45 Nm**.\n\nSince this is a critical maintenance check, I will now create a ticket for it. Would you like to proceed with filing this as a **high-priority** maintenance issue?"
+        }
+      }
+    ]
+  },
+  "embed": {
+    "dimensions": 768,
+    "chunks_per_s": [
+      1.99,
+      1.82,
+      1.92
+    ],
+    "chunks_per_s_median": 1.92,
+    "tokens_per_chunk": 397,
+    "query_ms_median": 35.1,
+    "query_ms_slowest": 60.7,
+    "cosine_related": 0.639,
+    "cosine_unrelated": 0.433
+  },
+  "together": {
+    "generate_tokens_per_s": 8.2,
+    "chunks_per_s": 0.63
+  },
+  "memory": {
+    "chat": {
+      "peak_rss_mib": 4114,
+      "rss_mib": 4046,
+      "rss_anon_mib": 2004,
+      "rss_file_mib": 2042,
+      "cgroup_current_mib": 3705,
+      "cgroup_oom_kills": 0
+    },
+    "embed": {
+      "peak_rss_mib": 206,
+      "rss_mib": 206,
+      "rss_anon_mib": 50,
+      "rss_file_mib": 155,
+      "cgroup_current_mib": 74,
+      "cgroup_oom_kills": 0
+    }
+  },
+  "host_available_mib": 10672,
+  "vm_resident_mib": 10285,
+  "vm_swap_mib": 26,
+  "guest_available_mib": 4359
+}

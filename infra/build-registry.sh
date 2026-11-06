@@ -72,6 +72,29 @@ copy_signed() { # source repo; copies one platform's image by digest and signs i
 copy_signed "$FORGEJO_IMAGE" forgejo/forgejo
 copy_signed "$ARGOCD_IMAGE" argoproj/argocd
 copy_signed "$REDIS_IMAGE" library/redis
+copy_signed "$LLAMA_SERVER_IMAGE" ggml-org/llama.cpp
+
+# Model images are built here from pinned files, and each must come out at the digest Git names.
+models="$DATA_DIR/downloads/models"
+mkdir -p "$models"
+model_image() { # name url sha256 pinned-digest
+  local file="$models/${2##*/}" digest
+  if ! { [[ -f $file ]] && echo "$3  $file" | sha256sum -c --quiet - 2>/dev/null; }; then
+    curl -fsSL --retry 3 -o "$file.part" "$2"
+    echo "$3  $file.part" | sha256sum -c --quiet - || { rm -f "$file.part"; echo "hash mismatch: $2"; exit 1; }
+    mv "$file.part" "$file"
+  fi
+  digest="$("$here/build-model-image.sh" "$crane" "$file" "$local_reg/models/$1:bundle")"
+  [[ $digest == "$4" ]] || { echo "models/$1 built as $digest, but versions.env pins $4"; exit 1; }
+  sign "models/$1" "$digest" "$keys/cosign.key"
+}
+model_image ministral "$MINISTRAL_GGUF_URL" "$MINISTRAL_GGUF_SHA256" "$MINISTRAL_IMAGE_DIGEST"
+model_image nomic "$NOMIC_GGUF_URL" "$NOMIC_GGUF_SHA256" "$NOMIC_IMAGE_DIGEST"
+# Argo CD deploys these from Git, so the manifests must name the same digests.
+for pinned in "$target/models/ministral@$MINISTRAL_IMAGE_DIGEST" "$target/models/nomic@$NOMIC_IMAGE_DIGEST" \
+  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}"; do
+  grep -rqF "$pinned" "$here/../deploy/inference" || { echo "deploy/inference does not use $pinned"; exit 1; }
+done
 
 # The CI image is built here, so its digest changes with each build, as apk resolves packages then.
 cp "$HOME/.local/bin/gitleaks" "$tmp/gitleaks"

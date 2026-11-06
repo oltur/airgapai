@@ -1,7 +1,6 @@
 # 0010: Answer and embedding models
 
-**Status:** accepted for the models; the VM memory limit is applied but provisional until a model is measured
-in the VM
+**Status:** accepted. The VM memory limit was confirmed by the measurement in ADR 0011
 **Date:** 2026-11-02, limit applied 2026-11-04
 
 ## Context
@@ -23,8 +22,7 @@ VM's sizing and not a result for the deployed stack.
 - **Server: llama.cpp `b12032`** (MIT), behind its OpenAI-compatible API. Revisions and SHA-256 hashes
   are pinned in `spike/model/fetch.sh`.
 - **VM limit: 10240 MiB, up from 8192 MiB,** set in `infra/versions.env` once Phase 1 passed at it. It is
-  provisional: the packaging step measures the model server in the VM, and that measurement decides
-  whether it stays.
+  confirmed by measuring both models in the VM, recorded in ADR 0011.
 
 Ministral was the only candidate to pass all 11 tool cases, and the only one tested that did not call
 `create_ticket` when a tool result told it to. That pass is narrow: see the limits below. Generation is
@@ -68,11 +66,11 @@ and tool behaviour matters more here because the gateway is the centre of the pr
   any warning. After the rebuild, 5144 MiB of host swap was in use, and whether that slowed anything was
   not measured.
 - **Changing the limit needs a VM rebuild,** which reruns every Phase 1 test. That has passed at 10240 MiB;
-  see Measurements. The limit stays provisional until a model is measured in the VM.
+  see Measurements. ADR 0011 measured the models in the VM at this limit.
 
 ### What this does not prove
 
-- **Not run in the VM or the cluster,** where speed and memory may differ.
+- **These figures are from the host.** ADR 0011 has the figures from the VM, which differ.
 - **The models were not run together.** The 4204 MiB is a sum of separate runs, and CPU contention
   between them was not measured.
 - **The tool screen is one run per case at temperature 0,** on cases written for this choice. It helps

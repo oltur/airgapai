@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress rebuild
+.PHONY: help setup check test-secrets tools lint hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress measure-inference rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -62,6 +62,9 @@ test-gitops: ## Test that Git drives the cluster and CI catches a secret, with c
 
 test-egress: ## Test every egress path and the layer matrix from outside the cluster, with controls
 	@go -C test/egress run . -root "$(CURDIR)"
+
+measure-inference: ## Restart the model pods in the VM and measure start-up, memory, speed and tool calls
+	@test/inference/measure.py --out test/inference/results
 
 rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	@start=$$(date +%s); \
