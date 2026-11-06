@@ -1,0 +1,224 @@
+# The answer and embedding models, each served by llama.cpp behind its OpenAI-compatible API.
+# Settings match the host measurements in ADR 0010, including one request at a time. Nothing can
+# reach these yet: the default deny applies, and the retrieval service gets its own allow rule when it
+# exists.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inference
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat
+  namespace: inference
+spec:
+  replicas: 1
+  # One copy at a time: two would need twice the memory during a rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: chat
+  template:
+    metadata:
+      labels:
+        app: chat
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # The model image holds only the file and the program that copies it.
+        - name: copy-model
+          image: 10.43.0.50:5000/models/ministral@sha256:843fe173a9254ebbb60638a22ec427f4f0ff13fab45e9147e049535676d5cd74
+          args: [/models/model.gguf]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: server
+          image: 10.43.0.50:5000/ggml-org/llama.cpp@sha256:3944f77ce0553ebd2d5466871fa73d1de998b981be5442424e18157013fe62fd
+          args:
+            - "-m"
+            - "/models/model.gguf"
+            - "-c"
+            - "4096"
+            - "-t"
+            - "4"
+            - "--parallel"
+            - "1"
+            - "--jinja"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 5000Mi
+            limits:
+              memory: 5000Mi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          emptyDir:
+            sizeLimit: 3Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat
+  namespace: inference
+spec:
+  selector:
+    app: chat
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embed
+  namespace: inference
+spec:
+  replicas: 1
+  # One copy at a time: two would need twice the memory during a rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: embed
+  template:
+    metadata:
+      labels:
+        app: embed
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # The model image holds only the file and the program that copies it.
+        - name: copy-model
+          image: 10.43.0.50:5000/models/nomic@sha256:4dbbc4d28f1291a9c477118a1ca38ca269b524e33536350392f34cd7aa611c94
+          args: [/models/model.gguf]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: server
+          image: 10.43.0.50:5000/ggml-org/llama.cpp@sha256:3944f77ce0553ebd2d5466871fa73d1de998b981be5442424e18157013fe62fd
+          args:
+            - "-m"
+            - "/models/model.gguf"
+            - "-c"
+            - "2048"
+            - "-b"
+            - "2048"
+            - "-ub"
+            - "2048"
+            - "-t"
+            - "4"
+            - "--parallel"
+            - "1"
+            - "--embedding"
+            - "--pooling"
+            - "mean"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1000Mi
+            limits:
+              memory: 1000Mi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          emptyDir:
+            sizeLimit: 3Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embed
+  namespace: inference
+spec:
+  selector:
+    app: embed
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

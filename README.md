@@ -15,7 +15,8 @@ private, non-commercial project, written independently from public specification
 ## Status
 
 Phase 1 of 4, the air gap, is complete. **The claim above is not proven yet:** only its air-gap part
-has tests, and no model, retrieval or gateway code exists so far. The write-up is
+has tests. The models are packaged and served in the cluster, but no retrieval or gateway code exists
+so far. The write-up is
 [A blocked connection proves nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
 
 | Phase | What it should demonstrate |
@@ -61,6 +62,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0008](docs/adr/0008-egress-test-and-layer-matrix.md) | Egress test and layer matrix, with measurements |
 | [0009](docs/adr/0009-pull-request-checks-outside-the-air-gap.md) | Pull request checks outside the air gap |
 | [0010](docs/adr/0010-answer-and-embedding-models.md) | Answer and embedding models, with host measurements |
+| [0011](docs/adr/0011-model-images-and-serving.md) | Model images and serving in the cluster, with VM measurements |
 
 ## Requirements
 

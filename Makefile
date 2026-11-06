@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress rebuild
+.PHONY: help setup check test-secrets tools lint hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress measure-inference rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -24,7 +24,7 @@ test-secrets: ## Prove the guard blocks fake secrets in a temporary repo
 tools: ## Install the pinned guard and lint tools into ~/.local/bin
 	@scripts/install-tools.sh
 
-lint: ## Run ShellCheck, Ruff, go vet and govulncheck
+lint: ## Run ShellCheck, Ruff, go vet, go test and govulncheck
 	@for tool in shellcheck ruff go govulncheck; do \
 		command -v $$tool >/dev/null || { echo "$$tool not found, see make tools"; exit 1; }; \
 	done
@@ -32,6 +32,7 @@ lint: ## Run ShellCheck, Ruff, go vet and govulncheck
 	@ruff check --quiet .
 	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
 		go -C $$module vet ./... || exit 1; \
+		go -C $$module test -count=1 ./... >/dev/null || exit 1; \
 		(cd $$module && govulncheck ./...) || exit 1; # Its -C flag would scan the wrong toolchain. \
 	done
 	@echo "lint clean"
@@ -62,6 +63,9 @@ test-gitops: ## Test that Git drives the cluster and CI catches a secret, with c
 
 test-egress: ## Test every egress path and the layer matrix from outside the cluster, with controls
 	@go -C test/egress run . -root "$(CURDIR)"
+
+measure-inference: ## Restart the model pods in the VM and measure start-up, memory, speed and tool calls
+	@test/inference/measure.py --out test/inference/results
 
 rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	@start=$$(date +%s); \
