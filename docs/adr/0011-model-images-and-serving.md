@@ -48,14 +48,17 @@ Argo CD. Two constraints shaped the choice of how:
 
 ## Consequences
 
-- **Each pod start copies its model.** It took 2.3 s for the 2 GB file. The copy uses as much disk again,
+- **Each pod start copies its model.** It took 2.3 and 2.4 s for the 2 GB file. The copy uses as much disk again,
   and its pages count against the pod's memory.
 - **A model or copier change means a new digest** in `infra/versions.env` and in `deploy/inference`. The
   bundle build names the mismatch.
 - **The bundle grows:** `du` reported 3.8 GB for the ISO.
-- **The two models slow each other badly when they run at once:** generation dropped from 14.4 to
-  8.2 tokens/s and embedding from 1.92 to 0.63 chunks per second. Both use 4 threads on 4 vCPUs. Ingestion
-  and answering should not overlap, or the thread counts need to change, which would need measuring.
+- **The two models slow each other badly when they run at once.** Across two runs, generation fell
+  from 14.4 and 14.9 to 8.2 and 11.0 tokens/s, and embedding from 1.92 and 2.26 to 0.63 and 0.76 chunks
+  per second. Both use 4 threads on 4 vCPUs. Ingestion and answering should not overlap, or the thread
+  counts need to change, which would need measuring.
+- **Speed varies between runs by more than the gap to the host.** Embedding speed differed by 18%
+  between the two runs, so a single run cannot show a small change.
 
 ### What this does not prove
 
@@ -64,7 +67,7 @@ Argo CD. Two constraints shaped the choice of how:
   tests in ADR 0006, which use a probe image.
 - **The measurements use kubectl port-forward,** which does not pass through the network policy. They
   show nothing about who can reach the servers.
-- **One measurement run.** Start-up times come from Kubernetes timestamps, which have a resolution of
+- **Two measurement runs, each after a fresh rebuild,** with different copier digests in between. Start-up times come from Kubernetes timestamps, which have a resolution of
   one second, and the images and some file pages were probably already cached in the guest.
 - **The tool screen passing in the VM repeats a narrow screen,** with the limits in ADR 0010. Ministral
   gave the same reply to the planted instruction as on the host.
@@ -72,30 +75,36 @@ Argo CD. Two constraints shaped the choice of how:
 
 ## Measurements
 
-Measured on 2026-11-04 on the NUC, in a VM limited to 10240 MiB and 4 vCPUs, with Docker limited to
-7 GiB. `make measure-inference` restarted both pods, then measured. Results are in
-[`test/inference/results/`](../../test/inference/results/).
+Measured on the NUC, in a VM limited to 10240 MiB and 4 vCPUs, with Docker limited to 7 GiB. Each run
+followed a `make rebuild`, and `make measure-inference` restarted both pods, then measured. Run 1 was on
+2026-11-04, and run 2 on 2026-11-07, after the review fixes changed the copier and so both model digests.
+[`test/inference/results/`](../../test/inference/results/) holds run 2; run 1 is in that file's Git
+history. Each cell gives run 1, then run 2.
 
 | Measure | Chat: Ministral 3 3B | Embeddings: Nomic | Host, ADR 0010 |
 |---|---|---|---|
-| Model copy | 2.3 s for 2048 MiB | 0.2 s for 139 MiB | |
-| Pod created to ready | 10 s | 2 s | load 1.6 s and 0.1 s |
-| Peak process RSS | 4114 MiB | 206 MiB | 4008 and 196 MiB |
-| Of which file-backed, at the end | 2042 MiB | 155 MiB | |
-| Generate, median of 3 | 14.4 tokens/s | | 15.2 tokens/s |
-| Prompt, median of 3 | 51.4 tokens/s | | 56.4 tokens/s |
-| Chunks of 397 tokens, median of 3 runs | | 1.92 per second | 2.43 per second |
-| Query of 21 tokens, median of 60 | | 35.1 ms, slowest 60.7 ms | 24.0 ms |
-| Both at once | 8.2 tokens/s | 0.63 chunks per second | not measured |
-| Tool cases passed | 11 of 11 | | 11 of 11 |
-| Out-of-memory kills | 0 | 0 | 0 |
+| Model copy | 2.3 and 2.4 s for 2048 MiB | 0.2 and 0.2 s for 139 MiB | |
+| Pod created to ready | 10 and 10 s | 2 and 3 s | load 1.6 s and 0.1 s |
+| Peak process RSS | 4114 and 4112 MiB | 206 and 206 MiB | 4008 and 196 MiB |
+| Of which file-backed, at the end | 2042 and 2041 MiB | 155 and 155 MiB | |
+| Generate, median of 3 | 14.4 and 14.9 tokens/s | | 15.2 tokens/s |
+| Prompt, median of 3 | 51.4 and 55.4 tokens/s | | 56.4 tokens/s |
+| Chunks of 397 tokens, median of 3 runs | | 1.92 and 2.26 per second | 2.43 per second |
+| Query of 21 tokens, median of 60 | | 35.1 and 25.2 ms | 24.0 ms |
+| Slowest query of 60 | | 60.7 and 38.7 ms | 51.2 ms |
+| Both at once | 8.2 and 11.0 tokens/s | 0.63 and 0.76 chunks per second | not measured |
+| Tool cases passed | 11 and 11 of 11 | | 11 of 11 |
+| Out-of-memory kills | 0 and 0 | 0 and 0 | 0 |
 
-The embedding sanity check gave the same cosines as on the host: 0.639 for the related passage and
+In both runs the embedding sanity check gave the same cosines as on the host: 0.639 for the related passage and
 0.433 for the unrelated one. The server reported build `b12030-a91eab67d`.
 
-With both models loaded, the guest had 4359 MiB available. The VM's process held 10285 MiB resident and
-26 MiB in swap, and the host had 10672 MiB available. The script did not record memory pressure then.
-Read by hand just after the run, `/proc/pressure/memory` showed 0.00 for 10, 60 and 300 seconds. The
-script now records it.
+| Memory with both models loaded | Run 1 | Run 2 |
+|---|---|---|
+| Guest available | 4359 MiB | 4233 MiB |
+| VM process resident and in swap | 10285 and 26 MiB | 10198 and 36 MiB |
+| Host available | 10672 MiB | 11651 MiB |
+| Host memory pressure, 60 and 300 s averages | 0.00, read by hand after the run | 0.00, recorded |
 
-The rebuild that deployed them passed every Phase 1 test: built in 256 s and tested in 534 s.
+Ministral gave the same reply to the planted instruction in both runs. Both rebuilds passed every
+Phase 1 test: built in 256 and 253 s, and tested in 534 and 544 s.
