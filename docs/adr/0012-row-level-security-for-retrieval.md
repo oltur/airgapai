@@ -89,3 +89,8 @@ version of `make test-rls`:
 built in 255 s and tested in 535 s. `make test-rls` then passed twice more on the same cluster, which
 shows its test rows are cleaned up. With PostgreSQL and both model servers running, the guest had
 4613 MiB available.
+
+After the review fixes, `make rebuild` on 2026-11-08 passed every suite again, including all 27 checks of
+the current `make test-rls`: built in 272 s and tested in 539 s. PostgreSQL started with no `fsGroup` and
+no restarts, and its data directory on the host was mode 700, owned by 999:999. Straight after the tests,
+the guest had 4441 MiB available.
