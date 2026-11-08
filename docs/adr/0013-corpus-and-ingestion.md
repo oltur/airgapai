@@ -34,14 +34,14 @@ so the corpus size sets how long every rebuild takes.
   2048-token window. Code blocks are not cut unless they are longer than that.
 - **Idempotent by content hash.** A chunk is keyed by source, path and position. A chunk whose text and
   label are unchanged is not embedded or written. A changed label alone is updated without a new
-  embedding. Rows for chunks or files that no longer exist are deleted. Each file is written in its own
+  embedding, and a chunk whose text moved to another position in the same page keeps its embedding. Rows for chunks or files that no longer exist are deleted. Each file is written in its own
   transaction, and an advisory lock stops two runs from interleaving.
 - **Nomic's document prefix,** `search_document: `, is added before embedding. Queries must use
   `search_query: `.
 - **A Job from Git,** replaced by Argo CD when its file changes, because a Job's pod template cannot be
   edited in place.
-- **Network: the Job reaches PostgreSQL on 5432 and the embedding server on 8080, and nothing else
-  reaches either.** The rules are Calico policies in `infra/guest/manifests`, beside the other allow
+- **Network: the Job may reach PostgreSQL on 5432 and the embedding server on 8080, and no other pod
+  is allowed to reach either.** The rules are Calico policies in `infra/guest/manifests`, beside the other allow
   rules, and select pods by the label `app=ingest`.
 - **Plain TCP to PostgreSQL,** with a SCRAM password. The server has no certificate yet.
 
@@ -72,6 +72,8 @@ so the corpus size sets how long every rebuild takes.
   writer. The labels are only as right as the Job.
 - **Ingestion and answering compete for the CPU,** as ADR 0011 measured. The Job runs once after each
   rebuild and again only when Git changes it.
+- **Only named HTML tags are removed,** so placeholders such as `<namespace>` stay in the text. A tag
+  that is not on the list stays too.
 - **Shortcodes are cleaned by rules written for these 42 files.** Another directory may use shortcodes
   the rules do not know. Those are removed, but their text is lost, and `make test-ingest` checks only
   that no shortcode markup is left.
@@ -83,6 +85,9 @@ so the corpus size sets how long every rebuild takes.
 - **That the chunks are good for retrieval.** Recall is measured with the retrieval service.
 - **That the label rule fits the content.** The rule labels a directory, not what a page says.
 - **That only the Job uses its network paths.** See the label above.
+- **That the rules allow nothing else.** The test probes the chat model, Forgejo and the registry from
+  the Job's label, and both allowed targets from another label in the same namespace. Other targets,
+  and pods in other namespaces, were not probed; the default deny from ADR 0003 and its tests cover them.
 - **That the source is authentic beyond the hashes.** The hashes pin the files as first fetched from
   GitHub, which is not a signature from the Kubernetes project.
 - **Licence advice.** The licence was read from the repository's record, which is not legal advice.
@@ -95,17 +100,18 @@ image and schema, and the Nomic model under llama.cpp `b12032` with the cluster'
 | Run | Result |
 |---|---|
 | Dry run over the corpus | 42 files: 23 public with 314 chunks, 19 restricted with 193 chunks. Largest chunk 1533 characters, including its title |
-| First run, empty table | 507 inserted in 119.6 s |
+| First run, empty table | 507 inserted in 118.2 s |
 | Second run | 507 unchanged, nothing written, 0.1 s |
 | Every label removed, then restored | 193 relabelled each time, no new embeddings, 0.2 s |
 | One file removed and one shortened | 13 deleted and 1 updated; restoring the corpus inserted the 13 again |
+| A long paragraph added at the top of one page | 41 chunks moved: 40 kept their embeddings and 1 was embedded, 0.4 s |
 
-The first run used an earlier version of the chunker, which left shortcodes that span lines. A scan of
-every chunk found them, and the fixed chunker gives the same 507 chunks with none left. Its first run
-was not timed on the host.
+The first, second and last rows are from the version in this ADR. The label and removal rows are from
+an earlier version, which matched embeddings by position only and stripped placeholders such as
+`<namespace>`. It gave the same chunk counts and the same first and second runs.
 
-In the VM, on 2026-11-08, `make rebuild` passed every suite, including every check of `make test-ingest`:
-built in 251 s and tested in 690 s, against 539 s for the rebuild before ingestion existed. The Job from
+In the VM, on 2026-11-08, with the earlier version, `make rebuild` passed every suite, including
+every check of `make test-ingest`: built in 251 s and tested in 690 s, against 539 s for the rebuild before ingestion existed. The Job from
 Git inserted 507 chunks, 314 public and 193 restricted. Argo CD's recreated Job wrote nothing, and the rows,
 ids and embeddings hashed the same before and after. The Job was not replaced in the minute after. The
 first run's own duration was not recorded, because the test dropped it from its output; the test now

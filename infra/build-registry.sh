@@ -80,11 +80,7 @@ models="$DATA_DIR/downloads/models"
 mkdir -p "$models"
 model_image() { # name url sha256 pinned-digest
   local file="$models/${2##*/}" digest
-  if ! { [[ -f $file ]] && echo "$3  $file" | sha256sum -c --quiet - 2>/dev/null; }; then
-    curl -fsSL --retry 3 -o "$file.part" "$2"
-    echo "$3  $file.part" | sha256sum -c --quiet - || { rm -f "$file.part"; echo "hash mismatch: $2"; exit 1; }
-    mv "$file.part" "$file"
-  fi
+  "$here/fetch-verified.sh" "$2" "$file" "$3"
   digest="$("$here/build-model-image.sh" "$crane" "$file" "$local_reg/models/$1:bundle")"
   [[ $digest == "$4" ]] || { echo "models/$1 built as $digest, but versions.env pins $4"; exit 1; }
   sign "models/$1" "$digest" "$keys/cosign.key"

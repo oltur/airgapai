@@ -66,16 +66,22 @@ second="$(job_summary)"
 echo "info second run: $second"
 second="${second% seconds=*}"
 result "Argo CD recreated the Job and it wrote nothing" \
-  "files=$(field "$first" files) chunks=$chunks inserted=0 updated=0 relabelled=0 unchanged=$chunks deleted=0" "$second"
+  "files=$(field "$first" files) chunks=$chunks inserted=0 updated=0 relabelled=0 unchanged=$chunks deleted=0 reused=0" "$second"
 result "rows, ids and embeddings unchanged" "$before" \
   "$(sql INGEST_PASSWORD ingest "SELECT max(id), md5(string_agg(path || chunk_index || content_sha256 || classification || embedding::text, ',' ORDER BY id)) FROM rag.chunks")"
-# Argo CD replaces the Job only when Git changes it, not on every sync.
+# Argo CD replaces the Job only when Git changes it. Its sync starts when the live Job differs from Git,
+# so after a fresh comparison the application must be in sync and the Job the same one.
 uid="$("${k[@]}" get job ingest -o jsonpath='{.metadata.uid}')"
+reconciled() { kubectl -n argocd get application retrieval -o jsonpath='{.status.reconciledAt}'; }
+was="$(reconciled)"
+sleep 1  # reconciledAt has a resolution of one second
 kubectl -n argocd annotate application retrieval argocd.argoproj.io/refresh=hard --overwrite >/dev/null
-sleep 60
-result "the Job is not replaced while Git is unchanged" "$uid" "$("${k[@]}" get job ingest -o jsonpath='{.metadata.uid}')"
-result "retrieval application in sync" Synced/Healthy \
+for _ in $(seq 60); do [[ $(reconciled) != "$was" ]] && break; sleep 2; done
+result "Argo CD compared the application again" changed "$([[ $(reconciled) != "$was" ]] && echo changed || echo "unchanged: $was")"
+result "retrieval application in sync after the comparison" Synced/Healthy \
   "$(kubectl -n argocd get application retrieval -o jsonpath='{.status.sync.status}/{.status.health.status}')"
+sleep 30  # time for a sync to have started, had one been needed
+result "the Job is not replaced while Git is unchanged" "$uid" "$("${k[@]}" get job ingest -o jsonpath='{.metadata.uid}')"
 
 echo "== Labels and roles"
 by_label="SELECT coalesce(sum((classification = 'public')::int), 0) || '/' || coalesce(sum((classification = 'restricted')::int), 0) FROM rag.chunks WHERE source = 'kubernetes-docs'"

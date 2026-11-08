@@ -49,7 +49,7 @@ type chunk struct {
 	content, hash  string
 }
 
-type stats struct{ files, chunks, inserted, updated, relabelled, unchanged, deleted int }
+type stats struct{ files, chunks, inserted, updated, relabelled, unchanged, deleted, reused int }
 
 func main() {
 	var cfg config
@@ -79,8 +79,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "ingest:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("files=%d chunks=%d inserted=%d updated=%d relabelled=%d unchanged=%d deleted=%d seconds=%.1f\n",
-		s.files, s.chunks, s.inserted, s.updated, s.relabelled, s.unchanged, s.deleted, time.Since(start).Seconds())
+	fmt.Printf("files=%d chunks=%d inserted=%d updated=%d relabelled=%d unchanged=%d deleted=%d reused=%d seconds=%.1f\n",
+		s.files, s.chunks, s.inserted, s.updated, s.relabelled, s.unchanged, s.deleted, s.reused, time.Since(start).Seconds())
 }
 
 // classify applies the synthetic label rule: a path under a restricted prefix is restricted.
@@ -212,22 +212,27 @@ func run(ctx context.Context, cfg config) (stats, error) {
 // are embedded.
 func syncPage(ctx context.Context, conn *pgx.Conn, e *embedder, source, path string, chunks []chunk, s *stats) error {
 	existing := map[int][2]string{}
-	rows, err := conn.Query(ctx, "SELECT chunk_index, content_sha256, classification FROM rag.chunks WHERE source = $1 AND path = $2", source, path)
+	// Embeddings by text, so a chunk that only moved within the page keeps its vector.
+	known := map[string]string{}
+	rows, err := conn.Query(ctx, "SELECT chunk_index, content_sha256, classification, embedding::text FROM rag.chunks WHERE source = $1 AND path = $2", source, path)
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var i int
-		var hash, label string
-		if err := rows.Scan(&i, &hash, &label); err != nil {
+		var hash, label, vector string
+		if err := rows.Scan(&i, &hash, &label, &vector); err != nil {
 			return err
 		}
 		existing[i] = [2]string{hash, label}
+		known[hash] = vector
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	// Changed text needs a new embedding. A changed label alone does not.
+	// Changed text needs an embedding, unless the same text is already in the page. A changed label
+	// alone does not.
 	var changed, relabelled []chunk
 	for _, c := range chunks {
 		old, ok := existing[c.index]
@@ -240,17 +245,29 @@ func syncPage(ctx context.Context, conn *pgx.Conn, e *embedder, source, path str
 			changed = append(changed, c)
 		}
 	}
-	vectors := make([][]float32, 0, len(changed))
-	for i := 0; i < len(changed); i += batchSize {
+	vectors := make([]string, len(changed))
+	var missing []int
+	for i, c := range changed {
+		if v, ok := known[c.hash]; ok {
+			vectors[i] = v
+			s.reused++
+		} else {
+			missing = append(missing, i)
+		}
+	}
+	for i := 0; i < len(missing); i += batchSize {
+		batch := missing[i:min(i+batchSize, len(missing))]
 		texts := []string{}
-		for _, c := range changed[i:min(i+batchSize, len(changed))] {
-			texts = append(texts, documentPrefix+c.content)
+		for _, j := range batch {
+			texts = append(texts, documentPrefix+changed[j].content)
 		}
 		v, err := e.embed(ctx, texts)
 		if err != nil {
 			return err
 		}
-		vectors = append(vectors, v...)
+		for k, j := range batch {
+			vectors[j] = vectorText(v[k])
+		}
 	}
 
 	tx, err := conn.Begin(ctx)
@@ -263,7 +280,7 @@ func syncPage(ctx context.Context, conn *pgx.Conn, e *embedder, source, path str
 			VALUES ($1, $2, $3, $4, $5, $6, $7::vector)
 			ON CONFLICT (source, path, chunk_index) DO UPDATE SET classification = EXCLUDED.classification,
 			  content = EXCLUDED.content, content_sha256 = EXCLUDED.content_sha256, embedding = EXCLUDED.embedding`,
-			source, path, c.index, c.classification, c.content, c.hash, vectorText(vectors[i])); err != nil {
+			source, path, c.index, c.classification, c.content, c.hash, vectors[i]); err != nil {
 			return err
 		}
 		if _, ok := existing[c.index]; ok {

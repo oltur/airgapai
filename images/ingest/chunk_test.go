@@ -41,7 +41,7 @@ func TestChunksCleansMarkup(t *testing.T) {
 		t.Fatalf("got %d chunks, want 1: %q", len(got), got)
 	}
 	c := got[0]
-	for _, want := range []string{"Pod Security Standards\n\n", "The Pod rules. See the API.\nStored in etcd and kube apiserver.", "Note: \nA note.",
+	for _, want := range []string{"Pod Security Standards\n\n", "The Pod rules. See the API.\nStored in etcd and kube-apiserver.", "Note: \nA note.",
 		"## What's next", "Example file: pods/simple-pod.yaml", "```yaml\nkind: Pod\n\nmetadata: {name: x}\n```"} {
 		if !strings.Contains(c, want) {
 			t.Errorf("chunk lacks %q:\n%s", want, c)
@@ -72,6 +72,35 @@ func TestChunksRespectSizeAndAreStable(t *testing.T) {
 		body := strings.TrimPrefix(c, "Long\n\n")
 		if n := utf8.RuneCountInString(body); n > maxChars {
 			t.Errorf("chunk %d has %d characters", i, n)
+		}
+	}
+}
+
+func TestPlaceholdersStay(t *testing.T) {
+	got := Chunks("Run `kubectl logs <pod-name> -n <namespace>` in a <strong>shell</strong>.<br/>\n")
+	if len(got) != 1 || got[0] != "Run `kubectl logs <pod-name> -n <namespace>` in a shell." {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestHeadingStaysWithItsSection(t *testing.T) {
+	text := strings.Repeat("a", 300) + "\n\n## Limits\n\n" + strings.Repeat("b", 1300) + "\n"
+	got := Chunks(text)
+	if len(got) != 2 || !strings.HasPrefix(got[1], "## Limits\n\nbbb") || strings.Contains(got[0], "Limits") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestFrontMatterEdges(t *testing.T) {
+	for in, want := range map[string]string{
+		"---\n---\nBody.\n":             "Body.",
+		"---\ntitle: T\n---":            "",
+		"---\ntitle: T\n---\nBody.":     "T\n\nBody.",
+		"No front matter.\n---\nAfter.": "No front matter.\n---\nAfter.",
+	} {
+		got := strings.Join(Chunks(in), "|")
+		if got != want {
+			t.Errorf("%q: got %q, want %q", in, got, want)
 		}
 	}
 }

@@ -23,7 +23,8 @@ toolchain="$(awk '$1 == "toolchain" {print $2}' "$src/go.mod")"
 
 commit="$(awk '$1 == "commit" {print $2}' "$lock")"
 grep -E '^[0-9a-f]{64}  ' "$lock" | while read -r sha path; do
-  echo "$sha  $corpus/$path" | sha256sum -c --quiet - || { echo "corpus file differs from the lock: $path"; exit 1; }
+  # Messages go to stderr: this loop's output is the file list.
+  echo "$sha  $corpus/$path" | sha256sum -c --quiet - 2>/dev/null || { echo "corpus file differs from the lock: $path" >&2; exit 1; }
   mkdir -p "$(dirname "$tmp/data/corpus/$path")"
   cp "$corpus/$path" "$tmp/data/corpus/$path"
   echo "corpus/$path"
