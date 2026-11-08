@@ -73,6 +73,7 @@ copy_signed "$FORGEJO_IMAGE" forgejo/forgejo
 copy_signed "$ARGOCD_IMAGE" argoproj/argocd
 copy_signed "$REDIS_IMAGE" library/redis
 copy_signed "$LLAMA_SERVER_IMAGE" ggml-org/llama.cpp
+copy_signed "$PGVECTOR_IMAGE" pgvector/pgvector
 
 # Model images are built here from pinned files, and each must come out at the digest Git names.
 models="$DATA_DIR/downloads/models"
@@ -93,9 +94,9 @@ model_image nomic "$NOMIC_GGUF_URL" "$NOMIC_GGUF_SHA256" "$NOMIC_IMAGE_DIGEST"
 # Argo CD deploys these from Git, so the manifests must name exactly the pinned digests: no other
 # image, and none of these missing.
 pinned="$(printf '%s\n' "$target/models/ministral@$MINISTRAL_IMAGE_DIGEST" "$target/models/nomic@$NOMIC_IMAGE_DIGEST" \
-  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}" | sort -u)"
-named="$(grep -rhE '^\s+image:' "$here/../deploy/inference" | awk '{print $2}' | tr -d '"' | sort -u)"
-[[ $named == "$pinned" ]] || { echo "deploy/inference names other images than versions.env pins:"; diff <(echo "$pinned") <(echo "$named"); exit 1; }
+  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}" "$target/pgvector/pgvector@${PGVECTOR_IMAGE#*@}" | sort -u)"
+named="$(grep -rhE '^\s+image:' "$here/../deploy" | awk '{print $2}' | tr -d '"' | sort -u)"
+[[ $named == "$pinned" ]] || { echo "deploy/ names other images than versions.env pins:"; diff <(echo "$pinned") <(echo "$named"); exit 1; }
 
 # The CI image is built here, so its digest changes with each build, as apk resolves packages then.
 cp "$HOME/.local/bin/gitleaks" "$tmp/gitleaks"

@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress measure-inference rebuild
+.PHONY: help setup check test-secrets tools lint hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls measure-inference rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -61,6 +61,9 @@ test-signed-images: ## Test signed-image admission and the read-only registry, w
 test-gitops: ## Test that Git drives the cluster and CI catches a secret, with controls
 	@infra/vm-ssh.sh sudo bash -s <test/gitops.sh
 
+test-rls: ## Test row-level security on the chunks table, with controls
+	@infra/vm-ssh.sh sudo bash -s <test/rls.sh
+
 test-egress: ## Test every egress path and the layer matrix from outside the cluster, with controls
 	@go -C test/egress run . -root "$(CURDIR)"
 
@@ -76,5 +79,6 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	$(MAKE) --no-print-directory test-hardening && \
 	$(MAKE) --no-print-directory test-signed-images && \
 	$(MAKE) --no-print-directory test-gitops && \
+	$(MAKE) --no-print-directory test-rls && \
 	$(MAKE) --no-print-directory test-egress && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"
