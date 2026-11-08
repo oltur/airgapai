@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Runs inside the VM as root. Tests that row-level security decides which chunks each reader role sees,
 # that an unset role sees nothing, and that the retrieval login cannot widen its own access, with
-# controls. Test rows are labelled source = 'rls-test' and removed at the end.
+# controls. Test rows are labelled source = 'rls-test' and removed on exit. They are public to readers
+# while the test runs, and the controls lock the table briefly, so run it before readers arrive, as
+# make rebuild does.
 set -uo pipefail
 
 kubectl=(/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml -n retrieval)
@@ -20,15 +22,19 @@ sql() {
     PGPASSWORD="$(printenv "$variable")" exec psql -h 127.0.0.1 -U "$user" -d rag -AtXq -v ON_ERROR_STOP=1 "$@" 2>&1
   ' sh "$@" 2>/dev/null | tr '\n' ' ' | sed 's/ $//'  # psql's own errors are in its output already
 }
-denied() { # output: says only whether the server refused
+# A failed login is not a refusal of the action, so it does not count here.
+denied() { # output: says only whether the server refused the statement
   case "$1" in
-    *"permission denied"*|*"must be owner"*|*"password authentication failed"*) echo denied ;;
+    *"password authentication failed"*) echo "login failed: $1" ;;
+    *"permission denied"*|*"must be owner"*) echo denied ;;
     *) echo "allowed: $1" ;;
   esac
 }
+login_refused() { case "$1" in *"password authentication failed"*) echo refused ;; *) echo "accepted: $1" ;; esac; }
 
 "${kubectl[@]}" rollout status deployment/postgres --timeout=300s >/dev/null || { echo "FAIL PostgreSQL is not running"; exit 1; }
 for _ in $(seq 30); do [[ $(sql POSTGRES_PASSWORD postgres "SELECT 1") == 1 ]] && break; sleep 2; done
+[[ $(sql POSTGRES_PASSWORD postgres "SELECT 1") == 1 ]] || { echo "FAIL PostgreSQL does not accept logins"; exit 1; }
 
 echo "== Set-up"
 result "pgvector version" 0.8.7 "$(sql POSTGRES_PASSWORD postgres "SELECT extversion FROM pg_extension WHERE extname = 'vector'")"
@@ -39,9 +45,11 @@ result "retrieval login: superuser, bypass, inherit" "f|f|f" \
 result "table owner is not a login" "airgapai_owner|f" \
   "$(sql POSTGRES_PASSWORD postgres "SELECT r.rolname, r.rolcanlogin FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner WHERE c.oid = 'rag.chunks'::regclass")"
 result "right password accepted (control)" retrieval "$(sql RETRIEVAL_PASSWORD retrieval "SELECT current_user")"
-result "wrong password refused" denied "$(denied "$(sql INGEST_PASSWORD retrieval "SELECT current_user")")"
+result "wrong password refused" refused "$(login_refused "$(sql INGEST_PASSWORD retrieval "SELECT current_user")")"
 
 echo "== Rows"
+cleanup() { sql INGEST_PASSWORD ingest "DELETE FROM rag.chunks WHERE source = 'rls-test'" >/dev/null; }
+trap cleanup EXIT
 vector="array_fill(0.1::real, ARRAY[768])::vector"
 result "test rows written" "" "$(sql INGEST_PASSWORD ingest "DELETE FROM rag.chunks WHERE source = 'rls-test'" \
   "INSERT INTO rag.chunks (source, path, chunk_index, classification, content, content_sha256, embedding) VALUES
@@ -63,6 +71,10 @@ result "technician asking for the restricted row by name" 0 \
   "$(as_role technician "SELECT count(*) FROM rag.chunks WHERE source = 'rls-test' AND path = 'b.md'")"
 result "role ends with its transaction" 0 \
   "$(sql RETRIEVAL_PASSWORD retrieval "BEGIN; SET LOCAL ROLE engineer; COMMIT" "$count")"
+# A limit, not a guarantee: the database cannot make the switch per transaction. A plain SET ROLE
+# lasts for the session, so the retrieval service must use SET LOCAL. Its own tests check that.
+result "session-level SET ROLE persists (the limit)" 2 \
+  "$(sql RETRIEVAL_PASSWORD retrieval "SET ROLE engineer" "$count")"
 result "SET LOCAL outside a transaction has no effect" 0 \
   "$(sql RETRIEVAL_PASSWORD retrieval "SET LOCAL ROLE engineer" "$count" | sed 's/^WARNING: .* //')"
 result "iterative index scans can be turned on" relaxed_order \
@@ -83,7 +95,7 @@ result "owner, not forced (control)" 2 \
 result "still forced after the control" t \
   "$(sql POSTGRES_PASSWORD postgres "SELECT relforcerowsecurity FROM pg_class WHERE oid = 'rag.chunks'::regclass")"
 
-sql INGEST_PASSWORD ingest "DELETE FROM rag.chunks WHERE source = 'rls-test'" >/dev/null
+cleanup
 result "test rows removed" 0 "$(sql INGEST_PASSWORD ingest "$count")"
 
 if (( failed )); then echo "row-level security checks failed"; exit 1; fi

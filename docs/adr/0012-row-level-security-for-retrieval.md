@@ -26,7 +26,8 @@ secret; the labels exist to test the mechanism.
     them, so it can switch to one, but gets none of their rows without switching. With no policy of its
     own, it sees nothing.
 - **Readers switch with `SET LOCAL ROLE`,** which ends with the transaction. `technician` sees `public`
-  rows, and `engineer` sees both.
+  rows, and `engineer` sees both. The database cannot require `LOCAL`: the same grant allows a plain
+  `SET ROLE`, which lasts for the session. The test shows that it does.
 - **Passwords on every connection.** The image's default trusts loopback connections, which a check
   showed let a wrong password in. The database is initialised with SCRAM for local and host
   connections instead.
@@ -50,6 +51,9 @@ secret; the labels exist to test the mechanism.
 
 ## Consequences
 
+- **The retrieval service must switch with `SET LOCAL` only.** A plain `SET ROLE` on a reused connection
+  would carry one request's role into the next, including into a request with no role. The service's
+  tests must check this, and the gateway's threat model must list it.
 - **The mechanism trusts the retrieval service to pick the role.** The login can switch to either
   reader role. Mapping an authenticated user to a role is the retrieval service's job, and later the
   gateway's, and this ADR does not test that.
@@ -57,7 +61,10 @@ secret; the labels exist to test the mechanism.
   so the query sees nothing. That is the safe way to fail.
 - **A schema change on an existing volume needs a migration,** because the init script runs only on
   an empty volume. A rebuild starts empty.
-- **`make test-rls` is part of `make rebuild`.**
+- **`make test-rls` is part of `make rebuild`,** and runs before any reader. Its test rows are public
+  while it runs, and two controls lock the table briefly, so it should not run against live traffic.
+- **The Secret is kept if it exists,** because the database learns its passwords once, when its volume
+  is empty. A rebuild starts with neither.
 
 ### What this does not prove
 
@@ -72,11 +79,13 @@ secret; the labels exist to test the mechanism.
 ## Measurements
 
 `test/rls.sh` was run on 2026-11-07 against a local container started from the same image, schema and
-settings as the manifest, with `kubectl exec` replaced by `docker exec`. All 26 checks passed. That
+settings as the manifest, with `kubectl exec` replaced by `docker exec`. All 26 checks of that version
+passed. That
 run found two bugs before the cluster saw them: revoking access to the `public` schema hid pgvector's
 type from the logins, and loopback connections were trusted.
 
-In the VM, on 2026-11-08, `make rebuild` passed every suite, including all 26 checks of `make test-rls`:
+In the VM, on 2026-11-08, `make rebuild` passed every suite, including all 26 checks of the first
+version of `make test-rls`:
 built in 255 s and tested in 535 s. `make test-rls` then passed twice more on the same cluster, which
 shows its test rows are cleaned up. With PostgreSQL and both model servers running, the guest had
 4613 MiB available.

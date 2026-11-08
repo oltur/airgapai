@@ -79,8 +79,8 @@ data:
       UNIQUE (source, path, chunk_index)
     );
     CREATE INDEX chunks_embedding ON rag.chunks USING hnsw (embedding vector_cosine_ops);
+    -- Moves the index and the sequence with it.
     ALTER TABLE rag.chunks OWNER TO airgapai_owner;
-    ALTER INDEX rag.chunks_embedding OWNER TO airgapai_owner;
     ALTER TABLE rag.chunks ENABLE ROW LEVEL SECURITY;
     ALTER TABLE rag.chunks FORCE ROW LEVEL SECURITY;
 
@@ -121,8 +121,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 999
         runAsGroup: 999
-        fsGroup: 999
-        fsGroupChangePolicy: OnRootMismatch
+        # No fsGroup: install.sh creates the volume owned by 999 with mode 700, and fsGroup would widen it.
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -173,6 +172,10 @@ spec:
               mountPath: /var/run/postgresql
             - name: tmp
               mountPath: /tmp
+            # PostgreSQL's dynamic shared memory, used by parallel index builds and queries. The
+            # runtime's default is 64 MB.
+            - name: shm
+              mountPath: /dev/shm
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -186,6 +189,10 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
 ---
 apiVersion: v1
 kind: Service
