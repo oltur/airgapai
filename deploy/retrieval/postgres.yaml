@@ -1,0 +1,201 @@
+# PostgreSQL with pgvector, holding the chunks the retrieval service searches. Row-level security
+# decides which chunks a reader sees; see ADR 0012. The passwords come from the postgres Secret, which
+# bootstrap creates in the cluster, so none is stored here. Nothing can reach the database yet: the
+# default deny applies, and the ingestion Job and retrieval service get their own allow rules.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: retrieval
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-data
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local
+  local:
+    path: /var/lib/airgapai/postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [airgapai]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: retrieval
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local
+  volumeName: postgres-data
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: retrieval
+data:
+  # Runs once, when the image initialises an empty volume.
+  10-schema.sh: |
+    set -eu
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+      -v ingest_password="$INGEST_PASSWORD" -v retrieval_password="$RETRIEVAL_PASSWORD" <<'SQL'
+    CREATE EXTENSION vector;
+
+    -- Owns the schema and table. It cannot log in, and row-level security binds it too.
+    CREATE ROLE airgapai_owner NOLOGIN;
+    -- Reader roles. Policies grant them rows; the retrieval login picks one per transaction.
+    CREATE ROLE technician NOLOGIN;
+    CREATE ROLE engineer NOLOGIN;
+    -- Logins. Neither owns anything or bypasses row-level security.
+    CREATE ROLE ingest LOGIN NOBYPASSRLS PASSWORD :'ingest_password';
+    CREATE ROLE retrieval LOGIN NOINHERIT NOBYPASSRLS PASSWORD :'retrieval_password';
+    -- It may switch to a reader role, but gets none of its privileges or rows without switching.
+    GRANT technician, engineer TO retrieval WITH INHERIT FALSE, SET TRUE;
+    -- The vector type lives in public, so its usage stays. PostgreSQL 15 and later grant no CREATE there.
+
+    CREATE SCHEMA rag AUTHORIZATION airgapai_owner;
+    CREATE TABLE rag.chunks (
+      id bigserial PRIMARY KEY,
+      source text NOT NULL,
+      path text NOT NULL,
+      chunk_index integer NOT NULL,
+      -- Synthetic labels, to test the mechanism. The corpus is public; nothing in it is secret.
+      classification text NOT NULL CHECK (classification IN ('public', 'restricted')),
+      content text NOT NULL,
+      content_sha256 text NOT NULL,
+      embedding vector(768) NOT NULL,
+      UNIQUE (source, path, chunk_index)
+    );
+    CREATE INDEX chunks_embedding ON rag.chunks USING hnsw (embedding vector_cosine_ops);
+    ALTER TABLE rag.chunks OWNER TO airgapai_owner;
+    ALTER INDEX rag.chunks_embedding OWNER TO airgapai_owner;
+    ALTER TABLE rag.chunks ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE rag.chunks FORCE ROW LEVEL SECURITY;
+
+    GRANT USAGE ON SCHEMA rag TO ingest, retrieval, technician, engineer;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON rag.chunks TO ingest;
+    GRANT USAGE ON SEQUENCE rag.chunks_id_seq TO ingest;
+    -- The retrieval login can read the table, and with no policy of its own it gets no rows.
+    GRANT SELECT ON rag.chunks TO retrieval, technician, engineer;
+
+    CREATE POLICY ingest_all ON rag.chunks TO ingest USING (true) WITH CHECK (true);
+    CREATE POLICY technician_public ON rag.chunks FOR SELECT TO technician
+      USING (classification = 'public');
+    CREATE POLICY engineer_all ON rag.chunks FOR SELECT TO engineer
+      USING (classification IN ('public', 'restricted'));
+    SQL
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: retrieval
+spec:
+  replicas: 1
+  # One server on the volume at a time.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: 10.43.0.50:5000/pgvector/pgvector@sha256:d624420861924efe8691ecb2060205a9c6bd949aace5cc754da0c907171ca742
+          env:
+            - name: POSTGRES_DB
+              value: rag
+            - name: POSTGRES_USER
+              value: postgres
+            # Passwords on every path. The image's default trusts any connection over loopback.
+            - name: POSTGRES_INITDB_ARGS
+              value: --auth-local=scram-sha-256 --auth-host=scram-sha-256
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: postgres, key: superuser}
+            - name: INGEST_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: postgres, key: ingest}
+            - name: RETRIEVAL_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: postgres, key: retrieval}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -q, -h, 127.0.0.1, -U, postgres, -d, rag]
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: init
+          configMap:
+            name: postgres-init
+        - name: run
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: retrieval
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

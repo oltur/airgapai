@@ -68,4 +68,8 @@ secret="$(openssl rand -hex 20)"
 for workload in deployment/argocd-repo-server deployment/argocd-redis statefulset/argocd-application-controller; do
   "${kubectl[@]}" -n argocd rollout status "$workload" --timeout=300s
 done
+# PostgreSQL's passwords exist only in the cluster. Argo CD deploys the database, which reads them.
+"${kubectl[@]}" create namespace retrieval --dry-run=client -o yaml | "${kubectl[@]}" apply -f -
+"${kubectl[@]}" -n retrieval create secret generic postgres --from-literal=superuser="$(openssl rand -hex 24)" \
+  --from-literal=ingest="$(openssl rand -hex 24)" --from-literal=retrieval="$(openssl rand -hex 24)" >/dev/null
 "${kubectl[@]}" apply -f "$bootstrap/root-app.yaml"

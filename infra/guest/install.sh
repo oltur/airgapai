@@ -33,6 +33,11 @@ chcon -R -t container_file_t /var/lib/airgapai/registry
 mkdir -p /var/lib/airgapai/forgejo/data /var/lib/airgapai/forgejo/config
 chown -R 1000:1000 /var/lib/airgapai/forgejo
 chcon -R -t container_file_t /var/lib/airgapai/forgejo
+# PostgreSQL's volume, created empty. It runs as uid 999, the image's postgres user.
+mkdir -p /var/lib/airgapai/postgres
+chown 999:999 /var/lib/airgapai/postgres
+chmod 700 /var/lib/airgapai/postgres
+chcon -R -t container_file_t /var/lib/airgapai/postgres
 cp manifests/*.yaml /var/lib/rancher/rke2/server/manifests/
 restorecon -R /usr/local/bin /usr/local/lib/systemd /var/lib/rancher /etc/rancher 2>/dev/null || true
 

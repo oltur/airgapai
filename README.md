@@ -33,6 +33,7 @@ so far. The write-up is
 |---|---|---|
 | The commit guard blocks a generated fake secret or denylisted term, and lets a clean file through | `make test-secrets` | That every secret is caught. Gitleaks works from known patterns, and the denylist holds only terms listed in advance |
 | No commit on any ref contains a detected secret or a denylisted term | `make check` | The same limit. Without a local `.denylist` this check refuses to run |
+| Under row-level security, the retrieval login sees no chunk without a reader role, a technician sees only public chunks, and the login cannot switch to a writer or owner role | `make test-rls`, part of `make rebuild` | That retrieval results respect the roles, or that the right role is chosen for a user. Labels are synthetic, and the superuser can read everything. See [ADR 0012](docs/adr/0012-row-level-security-for-retrieval.md) |
 | In a single-node lab, pods reach a canary outside the cluster only with both the network policy and the VM path removed | `make test-egress`, part of `make rebuild` | That no other path exists. The canary is on the host, public targets have no open-path control, and only TCP and DNS were tested. See [ADR 0008](docs/adr/0008-egress-test-and-layer-matrix.md) |
 
 ## What Phase 1 contains
@@ -63,6 +64,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0009](docs/adr/0009-pull-request-checks-outside-the-air-gap.md) | Pull request checks outside the air gap |
 | [0010](docs/adr/0010-answer-and-embedding-models.md) | Answer and embedding models, with host measurements |
 | [0011](docs/adr/0011-model-images-and-serving.md) | Model images and serving in the cluster, with VM measurements |
+| [0012](docs/adr/0012-row-level-security-for-retrieval.md) | PostgreSQL, pgvector and row-level security for retrieval |
 
 ## Requirements
 
