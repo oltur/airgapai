@@ -1,7 +1,7 @@
 # The answer and embedding models, each served by llama.cpp behind its OpenAI-compatible API.
-# Settings match the host measurements in ADR 0010, including one request at a time. Nothing can
-# reach these yet: the default deny applies, and the retrieval service gets its own allow rule when it
-# exists.
+# Settings match the host measurements in ADR 0010, including one request at a time. Only the
+# ingestion Job can reach the embedding server, by the rules in
+# infra/guest/manifests/retrieval-policy.yaml. Nothing can reach the chat server yet.
 apiVersion: v1
 kind: Namespace
 metadata:

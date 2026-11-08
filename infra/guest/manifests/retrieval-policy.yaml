@@ -1,0 +1,61 @@
+# What ingestion needs through the default deny, and nothing more: the ingestion Job reaches
+# PostgreSQL and the embedding server, and nothing else reaches either. The rules match the app
+# label, so any pod in the retrieval namespace that carries app=ingest gets the same paths.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: ingest-egress
+spec:
+  selector: app == "ingest"
+  namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+  types:
+    - Egress
+  egress:
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+        selector: app == "postgres"
+        ports: [5432]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "inference"
+        selector: app == "embed"
+        ports: [8080]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: postgres-reachable
+spec:
+  selector: app == "postgres"
+  namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+        selector: app == "ingest"
+      destination:
+        ports: [5432]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: embed-reachable
+spec:
+  selector: app == "embed"
+  namespaceSelector: kubernetes.io/metadata.name == "inference"
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+        selector: app == "ingest"
+      destination:
+        ports: [8080]

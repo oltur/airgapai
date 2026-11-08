@@ -91,10 +91,17 @@ model_image() { # name url sha256 pinned-digest
 }
 model_image ministral "$MINISTRAL_GGUF_URL" "$MINISTRAL_GGUF_SHA256" "$MINISTRAL_IMAGE_DIGEST"
 model_image nomic "$NOMIC_GGUF_URL" "$NOMIC_GGUF_SHA256" "$NOMIC_IMAGE_DIGEST"
+# The ingestion image holds the program and the corpus files images/ingest/corpus.lock pins.
+corpus="$DATA_DIR/downloads/corpus/$(awk '$1 == "commit" {print $2}' "$here/../images/ingest/corpus.lock")"
+"$here/fetch-corpus.sh" "$corpus"
+digest="$("$here/build-ingest-image.sh" "$crane" "$corpus" "$local_reg/airgapai/ingest:bundle")"
+[[ $digest == "$INGEST_IMAGE_DIGEST" ]] || { echo "airgapai/ingest built as $digest, but versions.env pins $INGEST_IMAGE_DIGEST"; exit 1; }
+sign airgapai/ingest "$digest" "$keys/cosign.key"
 # Argo CD deploys these from Git, so the manifests must name exactly the pinned digests: no other
 # image, and none of these missing.
 pinned="$(printf '%s\n' "$target/models/ministral@$MINISTRAL_IMAGE_DIGEST" "$target/models/nomic@$NOMIC_IMAGE_DIGEST" \
-  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}" "$target/pgvector/pgvector@${PGVECTOR_IMAGE#*@}" | sort -u)"
+  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}" "$target/pgvector/pgvector@${PGVECTOR_IMAGE#*@}" \
+  "$target/airgapai/ingest@$INGEST_IMAGE_DIGEST" | sort -u)"
 named="$(grep -rhE '^\s+image:' "$here/../deploy" | awk '{print $2}' | tr -d '"' | sort -u)"
 [[ $named == "$pinned" ]] || { echo "deploy/ names other images than versions.env pins:"; diff <(echo "$pinned") <(echo "$named"); exit 1; }
 

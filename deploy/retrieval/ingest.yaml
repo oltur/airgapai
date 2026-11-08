@@ -1,0 +1,63 @@
+# Ingests the corpus baked into the ingestion image: chunks, embeds and writes them with the ingest
+# login. It is idempotent, so a second run changes nothing; see ADR 0013. Argo CD replaces the Job
+# when this file changes, because a Job's pod template cannot be edited in place. Its network paths,
+# to PostgreSQL and the embedding server only, are in infra/guest/manifests/retrieval-policy.yaml.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ingest
+  namespace: retrieval
+  annotations:
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app: ingest
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ingest
+          image: 10.43.0.50:5000/airgapai/ingest@sha256:2080c390fd30f6b15bdb850d92e135cfd949399fcf0aa4b674545f7de783bc1f
+          args:
+            - -corpus=/corpus
+            - -source=kubernetes-docs
+            # The synthetic label rule: the security concepts are restricted, the rest public.
+            - -restricted=content/en/docs/concepts/security/
+            - -embed-url=http://embed.inference.svc:8080
+          env:
+            - name: PGHOST
+              value: postgres.retrieval.svc
+            - name: PGUSER
+              value: ingest
+            - name: PGDATABASE
+              value: rag
+            # Plain TCP inside the cluster: the server has no certificate yet. See ADR 0013.
+            - name: PGSSLMODE
+              value: disable
+            - name: PGCONNECT_TIMEOUT
+              value: "10"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: {name: postgres, key: ingest}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 128Mi
