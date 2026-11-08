@@ -104,4 +104,9 @@ The first run used an earlier version of the chunker, which left shortcodes that
 every chunk found them, and the fixed chunker gives the same 507 chunks with none left. Its first run
 was not timed on the host.
 
-In the VM: not yet measured.
+In the VM, on 2026-11-08, `make rebuild` passed every suite, including every check of `make test-ingest`:
+built in 251 s and tested in 690 s, against 539 s for the rebuild before ingestion existed. The Job from
+Git inserted 507 chunks, 314 public and 193 restricted. Argo CD's recreated Job wrote nothing, and the rows,
+ids and embeddings hashed the same before and after. The Job was not replaced in the minute after. The
+first run's own duration was not recorded, because the test dropped it from its output; the test now
+prints it. No out-of-memory kills were reported, and afterwards the guest had 4335 MiB available.

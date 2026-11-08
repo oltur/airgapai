@@ -28,7 +28,7 @@ job_summary() {
     case "$state" in
       *Complete*)
         uid="$("${k[@]}" get job ingest -o jsonpath='{.metadata.uid}')"
-        "${k[@]}" logs -l "batch.kubernetes.io/controller-uid=$uid" --tail=-1 2>/dev/null | grep '^files=' | sed 's/ seconds=.*//'
+        "${k[@]}" logs -l "batch.kubernetes.io/controller-uid=$uid" --tail=-1 2>/dev/null | grep '^files='
         return ;;
       *Failed*) echo "job failed"; return ;;
     esac
@@ -43,6 +43,7 @@ field() { tr ' ' '\n' <<<"$1" | awk -F= -v k="$2" '$1 == k {print $2}'; }
 echo "== The Job from Git fills the table"
 first="$(job_summary)"
 echo "info first run: $first"
+first="${first% seconds=*}"
 chunks="$(field "$first" chunks)"
 [[ $chunks =~ ^[1-9][0-9]*$ ]] || { echo "FAIL the Job reported no chunks: $first"; exit 1; }
 # A run on an empty table inserts every chunk. A run that found rows already shows unchanged ones.
@@ -63,6 +64,7 @@ kubectl -n argocd annotate application retrieval argocd.argoproj.io/refresh=hard
 for _ in $(seq 60); do "${k[@]}" get job ingest >/dev/null 2>&1 && break; sleep 5; done
 second="$(job_summary)"
 echo "info second run: $second"
+second="${second% seconds=*}"
 result "Argo CD recreated the Job and it wrote nothing" \
   "files=$(field "$first" files) chunks=$chunks inserted=0 updated=0 relabelled=0 unchanged=$chunks deleted=0" "$second"
 result "rows, ids and embeddings unchanged" "$before" \
