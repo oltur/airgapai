@@ -1,7 +1,7 @@
 # PostgreSQL with pgvector, holding the chunks the retrieval service searches. Row-level security
 # decides which chunks a reader sees; see ADR 0012. The passwords come from the postgres Secret, which
-# bootstrap creates in the cluster, so none is stored here. Nothing can reach the database yet: the
-# default deny applies, and the ingestion Job and retrieval service get their own allow rules.
+# bootstrap creates in the cluster, so none is stored here. Only the ingestion Job can reach the
+# database, by the rules in infra/guest/manifests/retrieval-policy.yaml; the default deny stops the rest.
 apiVersion: v1
 kind: Namespace
 metadata:

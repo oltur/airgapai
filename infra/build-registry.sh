@@ -80,21 +80,24 @@ models="$DATA_DIR/downloads/models"
 mkdir -p "$models"
 model_image() { # name url sha256 pinned-digest
   local file="$models/${2##*/}" digest
-  if ! { [[ -f $file ]] && echo "$3  $file" | sha256sum -c --quiet - 2>/dev/null; }; then
-    curl -fsSL --retry 3 -o "$file.part" "$2"
-    echo "$3  $file.part" | sha256sum -c --quiet - || { rm -f "$file.part"; echo "hash mismatch: $2"; exit 1; }
-    mv "$file.part" "$file"
-  fi
+  "$here/fetch-verified.sh" "$2" "$file" "$3"
   digest="$("$here/build-model-image.sh" "$crane" "$file" "$local_reg/models/$1:bundle")"
   [[ $digest == "$4" ]] || { echo "models/$1 built as $digest, but versions.env pins $4"; exit 1; }
   sign "models/$1" "$digest" "$keys/cosign.key"
 }
 model_image ministral "$MINISTRAL_GGUF_URL" "$MINISTRAL_GGUF_SHA256" "$MINISTRAL_IMAGE_DIGEST"
 model_image nomic "$NOMIC_GGUF_URL" "$NOMIC_GGUF_SHA256" "$NOMIC_IMAGE_DIGEST"
+# The ingestion image holds the program and the corpus files images/ingest/corpus.lock pins.
+corpus="$DATA_DIR/downloads/corpus/$(awk '$1 == "commit" {print $2}' "$here/../images/ingest/corpus.lock")"
+"$here/fetch-corpus.sh" "$corpus"
+digest="$("$here/build-ingest-image.sh" "$crane" "$corpus" "$local_reg/airgapai/ingest:bundle")"
+[[ $digest == "$INGEST_IMAGE_DIGEST" ]] || { echo "airgapai/ingest built as $digest, but versions.env pins $INGEST_IMAGE_DIGEST"; exit 1; }
+sign airgapai/ingest "$digest" "$keys/cosign.key"
 # Argo CD deploys these from Git, so the manifests must name exactly the pinned digests: no other
 # image, and none of these missing.
 pinned="$(printf '%s\n' "$target/models/ministral@$MINISTRAL_IMAGE_DIGEST" "$target/models/nomic@$NOMIC_IMAGE_DIGEST" \
-  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}" "$target/pgvector/pgvector@${PGVECTOR_IMAGE#*@}" | sort -u)"
+  "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}" "$target/pgvector/pgvector@${PGVECTOR_IMAGE#*@}" \
+  "$target/airgapai/ingest@$INGEST_IMAGE_DIGEST" | sort -u)"
 named="$(grep -rhE '^\s+image:' "$here/../deploy" | awk '{print $2}' | tr -d '"' | sort -u)"
 [[ $named == "$pinned" ]] || { echo "deploy/ names other images than versions.env pins:"; diff <(echo "$pinned") <(echo "$named"); exit 1; }
 
