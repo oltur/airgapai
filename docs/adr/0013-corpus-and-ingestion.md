@@ -110,9 +110,18 @@ The first, second and last rows are from the version in this ADR. The label and 
 an earlier version, which matched embeddings by position only and stripped placeholders such as
 `<namespace>`. It gave the same chunk counts and the same first and second runs.
 
-In the VM, on 2026-11-08, with the earlier version, `make rebuild` passed every suite, including
-every check of `make test-ingest`: built in 251 s and tested in 690 s, against 539 s for the rebuild before ingestion existed. The Job from
-Git inserted 507 chunks, 314 public and 193 restricted. Argo CD's recreated Job wrote nothing, and the rows,
-ids and embeddings hashed the same before and after. The Job was not replaced in the minute after. The
-first run's own duration was not recorded, because the test dropped it from its output; the test now
-prints it. No out-of-memory kills were reported, and afterwards the guest had 4335 MiB available.
+In the VM, on 2026-11-09, with the version in this ADR, `make rebuild` passed every suite, including
+every check of `make test-ingest`: built in 247 s and tested in 649 s, against 539 s for the rebuild
+before ingestion existed.
+
+| Check | Result |
+|---|---|
+| First run, from Git | 507 chunks inserted in 141.4 s, 314 public and 193 restricted, while the other suites ran |
+| Second run, the Job Argo CD recreated | 507 unchanged, nothing written, 0.1 s; rows, ids and embeddings hashed the same |
+| After a fresh comparison by Argo CD | Synced and Healthy, and the Job not replaced in the 30 s after |
+| Roles | No role: 0 chunks. Technician: 314 public, 0 restricted. Engineer: 314 and 193 |
+| Network, from the Job's label | PostgreSQL and the embedding server reached; chat, Forgejo and the registry timed out |
+| Network, from another label | PostgreSQL and the embedding server timed out |
+
+No out-of-memory kills were reported, and afterwards the guest had 4453 MiB available. An earlier version
+also passed a rebuild on 2026-11-08, built in 251 s and tested in 690 s.
