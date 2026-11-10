@@ -79,10 +79,6 @@ and the Phase 3 gateway will wrap it.
   scans and the largest k, through this service and these policies. Other paths to the table are
   covered by ADR 0012's tests, not this one.
 - **Latency under load.** Requests were sequential, and include embedding the query.
-- **That no cached plan was reused in the measurement below.** It ran before the custom-plan setting
-  was added. The exact scans gave recall 1.0 against themselves by definition, and the strict scans'
-  different recall shows they did not share the iterative scans' plan, but an index plan serving an
-  exact request cannot be ruled out from the numbers. The rebuild after the fix repeats it.
 
 ## Measurements
 
@@ -110,3 +106,9 @@ the same recall, minimums and short counts as the host for every cell of the tab
 roles' top five again differed for 16 of the 24 queries. Median latency was 25.6 to 31.4 ms, over
 kubectl port-forward. The results are in
 [`test/retrieval/results/`](../../test/retrieval/results/).
+
+After the review fixes, which force a custom plan for every scan, `make rebuild` on 2026-11-10 passed
+every suite again: built in 370 s and tested in 671 s. `make measure-retrieval` then gave the same
+recall, minimums and short counts in every cell, and the same 16 of 24, so the first measurement was
+not affected by a shared cached plan. Median latency was 23.4 to 27.8 ms. The saved results are from
+this run.
