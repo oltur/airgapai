@@ -94,4 +94,24 @@ confirmation got 403 and filed nothing. The confirmed call filed one issue with 
 Leaving the team after confirming was refused. When Forgejo failed, the token was still used up, the
 failure was logged, and a retry was refused.
 
-In the VM: not yet measured.
+In the VM, on 2026-11-10, `make rebuild` passed every suite before the executor's in about 15 minutes,
+then failed two checks of `make test-executor`: carol's and bob's proposals were refused as they
+should be, but the test piped the refused command into `grep -q`, and under `pipefail` its non-zero
+exit failed the check. Run by hand, both gave the expected refusals. With the test fixed to capture
+the output first, `make test-executor` passed on the same cluster, then `make test-egress`, which the
+failed rebuild had not reached. That run showed:
+
+| Check | Result |
+|---|---|
+| No token, a forged one, bob with alice's, another tool, altered arguments | 403 each, no issue filed |
+| Carol, with no team, and bob, an engineer without a grant, proposing | Refused: no role, and role may not use the tool |
+| Alice's confirmed call | 200, one issue, with the confirmed title and the proposal named in its body |
+| The same token again | 403 |
+| Alice removed from `technicians` in Forgejo after confirming | 403; back in the team, the same token ran |
+| Audit | Chain unbroken; 7 refused executions and 2 results logged by this run |
+| Executor label | Reached PostgreSQL and Forgejo; timed out to the embedding and retrieval services |
+| Another label | Timed out to PostgreSQL, Forgejo and the executor |
+
+Both runs left their issues in `maintenance/tickets`, four in all, each filed by the `executor` account.
+The rerun on a cluster that already had the first run's rows also shows the test does not depend on
+an empty audit log.

@@ -70,8 +70,10 @@ result "another user, bob, with alice's token" 403 "$(execute "$token" bob creat
 result "another tool" 403 "$(execute "$token" alice delete_repository "$args")"
 result "altered arguments" 403 "$(execute "$token" alice create_ticket "${args/high/low}")"
 result "no issue filed by the refused calls" "$before" "$(issues)"
-result "carol, with no team, cannot propose" true "$(propose carol "$args" | grep -q 'no role' && echo true)"
-result "bob, an engineer with no grant, cannot propose" true "$(propose bob "$args" | grep -q 'may not use' && echo true)"
+# Captured first: a refused command exits non-zero, which under pipefail would fail a pipe into grep.
+carol="$(propose carol "$args")" bob="$(propose bob "$args")"
+result "carol, with no team, cannot propose" "denied: the user has no role" "$(head -1 <<<"$carol")"
+result "bob, an engineer with no grant, cannot propose" "denied: the user's role may not use this tool" "$(head -1 <<<"$bob")"
 
 echo "== The confirmed call files one issue"
 result "alice's confirmed call" 200 "$(execute "$token" alice create_ticket "$args")"
