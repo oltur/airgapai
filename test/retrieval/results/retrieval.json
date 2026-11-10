@@ -1,0 +1,2691 @@
+{
+  "when": "2026-11-10T17:36:39+00:00",
+  "where": "VM pods, requests over kubectl port-forward, latency includes query embedding",
+  "image": "10.43.0.50:5000/airgapai/retrieval@sha256:07e6d794dc78c0747702af10d9c026c203cdd85ea87e0319716d100dad244428",
+  "rows": [
+    "public=314",
+    "restricted=193"
+  ],
+  "queries": 24,
+  "roles_differ_at_5": 16,
+  "summary": {
+    "technician k=5 hnsw": {
+      "mean_recall": 0.983,
+      "min_recall": 0.8,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 25.6
+    },
+    "technician k=5 hnsw-strict": {
+      "mean_recall": 0.9,
+      "min_recall": 0.0,
+      "queries_short_of_k": 3,
+      "median_latency_ms": 26.4
+    },
+    "technician k=5 exact": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 27.4
+    },
+    "technician k=10 hnsw": {
+      "mean_recall": 0.988,
+      "min_recall": 0.9,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 27.0
+    },
+    "technician k=10 hnsw-strict": {
+      "mean_recall": 0.846,
+      "min_recall": 0.0,
+      "queries_short_of_k": 6,
+      "median_latency_ms": 28.0
+    },
+    "technician k=10 exact": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 26.4
+    },
+    "technician k=20 hnsw": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 26.6
+    },
+    "technician k=20 hnsw-strict": {
+      "mean_recall": 0.744,
+      "min_recall": 0.0,
+      "queries_short_of_k": 12,
+      "median_latency_ms": 27.8
+    },
+    "technician k=20 exact": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 26.6
+    },
+    "engineer k=5 hnsw": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 26.8
+    },
+    "engineer k=5 hnsw-strict": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 27.0
+    },
+    "engineer k=5 exact": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 31.4
+    },
+    "engineer k=10 hnsw": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 30.1
+    },
+    "engineer k=10 hnsw-strict": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 26.3
+    },
+    "engineer k=10 exact": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 29.8
+    },
+    "engineer k=20 hnsw": {
+      "mean_recall": 0.996,
+      "min_recall": 0.95,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 29.9
+    },
+    "engineer k=20 hnsw-strict": {
+      "mean_recall": 0.996,
+      "min_recall": 0.95,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 27.1
+    },
+    "engineer k=20 exact": {
+      "mean_recall": 1.0,
+      "min_recall": 1.0,
+      "queries_short_of_k": 0,
+      "median_latency_ms": 26.6
+    }
+  },
+  "per_query": [
+    {
+      "query": "What are the three Pod Security Standards profiles?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.5
+        },
+        "hnsw-strict": {
+          "returned": 0,
+          "recall": 0.0,
+          "latency_ms": 18.3
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 20.2
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 19.7
+        },
+        "hnsw-strict": {
+          "returned": 0,
+          "recall": 0.0,
+          "latency_ms": 19.4
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 19.7
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 21.9
+        },
+        "hnsw-strict": {
+          "returned": 0,
+          "recall": 0.0,
+          "latency_ms": 19.2
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 21.5
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 20.8
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 28.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 21.6
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 27.7
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 27.2
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.6
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.5
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.6
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.4
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "How do I enforce a Pod Security level on a namespace?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 30.2
+        },
+        "hnsw-strict": {
+          "returned": 3,
+          "recall": 0.6,
+          "latency_ms": 27.6
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 31.0
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 67.8
+        },
+        "hnsw-strict": {
+          "returned": 3,
+          "recall": 0.3,
+          "latency_ms": 23.9
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.1
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.0
+        },
+        "hnsw-strict": {
+          "returned": 3,
+          "recall": 0.15,
+          "latency_ms": 28.9
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.5
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.4
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.6
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 24.0
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.8
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.1
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.2
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 39.1
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.3
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.0
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "Which RBAC permissions allow privilege escalation?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 24.7
+        },
+        "hnsw-strict": {
+          "returned": 2,
+          "recall": 0.4,
+          "latency_ms": 20.9
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 22.8
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.9
+        },
+        "hnsw-strict": {
+          "returned": 2,
+          "recall": 0.2,
+          "latency_ms": 21.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 22.7
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 29.2
+        },
+        "hnsw-strict": {
+          "returned": 2,
+          "recall": 0.1,
+          "latency_ms": 20.7
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 32.4
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 22.1
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 28.4
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 38.0
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 49.2
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 31.8
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 31.8
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 31.4
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 21.2
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.9
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "How should Secrets be protected at rest in etcd?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 20.9
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.0
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 21.7
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 20.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 20.7
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 21.5
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.1
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.4
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.4
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 20.4
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.9
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 24.9
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.1
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 21.5
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 29.3
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 31.6
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 35.3
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.0
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 4
+    },
+    {
+      "query": "How does a pod get a service account token?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 21.2
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 21.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 20.8
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 31.2
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 27.3
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.3
+        },
+        "hnsw-strict": {
+          "returned": 14,
+          "recall": 0.7,
+          "latency_ms": 26.4
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.0
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 22.5
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 20.8
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 30.3
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.3
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.3
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.1
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.7
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 20.0
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.7
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 4
+    },
+    {
+      "query": "What kernel features restrict what a container process can do?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.4
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.5
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 31.0
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 73.7
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 164.9
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 63.1
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 102.0
+        },
+        "hnsw-strict": {
+          "returned": 14,
+          "recall": 0.7,
+          "latency_ms": 67.0
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 67.7
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 39.0
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.7
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 37.8
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 40.6
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 27.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.5
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.7
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.8
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.6
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "How can tenants be isolated from each other in a shared cluster?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 28.5
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.3
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.5
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.7
+        },
+        "hnsw-strict": {
+          "returned": 8,
+          "recall": 0.8,
+          "latency_ms": 24.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.9
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.7
+        },
+        "hnsw-strict": {
+          "returned": 8,
+          "recall": 0.4,
+          "latency_ms": 27.6
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.6
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.7
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.0
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.1
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.7
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 22.8
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.9
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.7
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.8
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.4
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "How are requests to the Kubernetes API authenticated and authorized?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.5
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 28.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 33.1
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.8
+        },
+        "hnsw-strict": {
+          "returned": 6,
+          "recall": 0.6,
+          "latency_ms": 25.7
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 26.5
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.6
+        },
+        "hnsw-strict": {
+          "returned": 6,
+          "recall": 0.3,
+          "latency_ms": 29.3
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.0
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 26.2
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 24.4
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.3
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.6
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.6
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.0
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.3
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.6
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "Which settings should be checked before running an application in production securely?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.3
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.6
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 0.9,
+          "latency_ms": 23.8
+        },
+        "hnsw-strict": {
+          "returned": 6,
+          "recall": 0.6,
+          "latency_ms": 24.6
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.3
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.2
+        },
+        "hnsw-strict": {
+          "returned": 6,
+          "recall": 0.3,
+          "latency_ms": 23.5
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.2
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 22.4
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.1
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.9
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.3
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.5
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.5
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.8
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.3
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "How can someone bypass the API server and reach a node directly?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 0.8,
+          "latency_ms": 24.1
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 0.8,
+          "latency_ms": 23.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.7
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 0.9,
+          "latency_ms": 31.2
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 0.9,
+          "latency_ms": 31.4
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.7
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.0
+        },
+        "hnsw-strict": {
+          "returned": 17,
+          "recall": 0.85,
+          "latency_ms": 26.1
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 34.8
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 48.2
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 39.1
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.6
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 26.4
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 22.9
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.5
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 0.95,
+          "latency_ms": 24.7
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 0.95,
+          "latency_ms": 29.8
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 30.9
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "What does the kube-scheduler need to be hardened against?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.4
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.3
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 24.0
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.2
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.9
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.0
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.8
+        },
+        "hnsw-strict": {
+          "returned": 15,
+          "recall": 0.75,
+          "latency_ms": 24.5
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.6
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 28.7
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.9
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 31.7
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.7
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.6
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.9
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 31.3
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.1
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.2
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "How do I run a container as a non-root user?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 0.8,
+          "latency_ms": 24.1
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 0.8,
+          "latency_ms": 26.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 24.5
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 0.9,
+          "latency_ms": 23.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 0.9,
+          "latency_ms": 28.1
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 26.4
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.3
+        },
+        "hnsw-strict": {
+          "returned": 14,
+          "recall": 0.7,
+          "latency_ms": 25.8
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.8
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.9
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 22.9
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.5
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 22.3
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 32.2
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 0.95,
+          "latency_ms": 30.3
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 0.95,
+          "latency_ms": 26.5
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.6
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 5
+    },
+    {
+      "query": "How do I pass configuration to a pod without rebuilding the image?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.4
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.4
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.5
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 27.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 26.6
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 26.9
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.8
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.4
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.5
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 26.0
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 41.9
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 31.1
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 27.5
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 31.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 31.6
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.7
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 28.1
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 30.1
+        }
+      },
+      "roles_differ_at_5": false,
+      "engineer_top5_restricted": 0
+    },
+    {
+      "query": "How do I set CPU and memory requests and limits for a container?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.8
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.8
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.6
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.5
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 29.2
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 29.0
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.1
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.9
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.6
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.5
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 48.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 36.5
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 29.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 32.1
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 36.5
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 43.8
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 38.4
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.5
+        }
+      },
+      "roles_differ_at_5": false,
+      "engineer_top5_restricted": 0
+    },
+    {
+      "query": "How do I limit the total resources a namespace can use?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 54.0
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 42.6
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 34.5
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 44.3
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 33.8
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 36.4
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 37.5
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 29.1
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 33.8
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 50.7
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.4
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 33.5
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 40.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 29.6
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 35.7
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 34.6
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 34.5
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 35.6
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 2
+    },
+    {
+      "query": "What happens when a container exceeds its memory limit?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 47.5
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 28.1
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.1
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 25.1
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 29.3
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.5
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 33.9
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 36.1
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 33.2
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 55.9
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 26.8
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 40.7
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 34.3
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.3
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 36.1
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 40.2
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.6
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 46.6
+        }
+      },
+      "roles_differ_at_5": false,
+      "engineer_top5_restricted": 0
+    },
+    {
+      "query": "How does a Service select the pods it sends traffic to?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 21.9
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 21.9
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 28.8
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 27.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 28.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.1
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.6
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 30.0
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 24.6
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.9
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 43.8
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.4
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 21.7
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.1
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.1
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 28.8
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.5
+        }
+      },
+      "roles_differ_at_5": false,
+      "engineer_top5_restricted": 0
+    },
+    {
+      "query": "How do I expose an HTTP application outside the cluster with host-based routing?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.5
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.0
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 25.8
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 36.7
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 27.7
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.6
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 28.2
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 38.2
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 36.6
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 31.1
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 26.7
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 34.7
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 35.0
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 38.3
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.3
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 29.5
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 28.7
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 31.3
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 1
+    },
+    {
+      "query": "How do I block all traffic to pods in a namespace except from one application?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 30.3
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 43.9
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 27.4
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 28.2
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 36.9
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 39.7
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 45.2
+        },
+        "hnsw-strict": {
+          "returned": 18,
+          "recall": 0.9,
+          "latency_ms": 44.6
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 71.9
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 46.9
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 52.8
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 53.1
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 39.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 44.7
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 47.2
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 44.1
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 59.0
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 47.3
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 1
+    },
+    {
+      "query": "How do pods find a Service by its DNS name?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 35.1
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 35.8
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 36.0
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 32.1
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 29.9
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 33.6
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 41.0
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 43.9
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 35.3
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.8
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 36.0
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 42.7
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 36.2
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 43.8
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 143.2
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 48.1
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 35.6
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 38.1
+        }
+      },
+      "roles_differ_at_5": false,
+      "engineer_top5_restricted": 0
+    },
+    {
+      "query": "What is an EndpointSlice?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 30.8
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.2
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 40.1
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 26.1
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 31.7
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.8
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 34.5
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 31.7
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 47.3
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 39.7
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 33.4
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 26.5
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 31.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.4
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.1
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 35.1
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 28.5
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.8
+        }
+      },
+      "roles_differ_at_5": false,
+      "engineer_top5_restricted": 0
+    },
+    {
+      "query": "How does the Gateway API differ from Ingress?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 24.2
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 37.5
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 35.3
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 38.9
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 28.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 22.1
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 21.7
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.4
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 20.9
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 21.8
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 22.7
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 32.4
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 24.3
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.6
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 22.9
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.9
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 21.1
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.3
+        }
+      },
+      "roles_differ_at_5": false,
+      "engineer_top5_restricted": 0
+    },
+    {
+      "query": "How can traffic be kept within the same zone?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 20.5
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 26.7
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 22.6
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.4
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 28.4
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.8
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.5
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 25.0
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.0
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 22.8
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 23.0
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 26.3
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 34.4
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 23.7
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 23.7
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.6
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 22.8
+        }
+      },
+      "roles_differ_at_5": true,
+      "engineer_top5_restricted": 1
+    },
+    {
+      "query": "How do I give a pod both IPv4 and IPv6 addresses?",
+      "technician@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 39.0
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.7
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 29.5
+        }
+      },
+      "technician@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.8
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 28.7
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 29.5
+        }
+      },
+      "technician@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 35.0
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 28.5
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 27.9
+        }
+      },
+      "engineer@5": {
+        "hnsw": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 44.5
+        },
+        "hnsw-strict": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 31.9
+        },
+        "exact": {
+          "returned": 5,
+          "recall": 1.0,
+          "latency_ms": 35.3
+        }
+      },
+      "engineer@10": {
+        "hnsw": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 30.6
+        },
+        "hnsw-strict": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 33.0
+        },
+        "exact": {
+          "returned": 10,
+          "recall": 1.0,
+          "latency_ms": 55.5
+        }
+      },
+      "engineer@20": {
+        "hnsw": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 33.6
+        },
+        "hnsw-strict": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 29.8
+        },
+        "exact": {
+          "returned": 20,
+          "recall": 1.0,
+          "latency_ms": 26.9
+        }
+      },
+      "roles_differ_at_5": false,
+      "engineer_top5_restricted": 0
+    }
+  ]
+}

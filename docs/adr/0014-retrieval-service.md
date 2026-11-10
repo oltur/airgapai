@@ -87,4 +87,10 @@ already chosen its candidates, so some queries got fewer chunks than asked for, 
 engineer, whose policy discards nothing, was not affected. The two roles' top five differed for 16
 of the 24 queries. Median latency was 24 to 26 ms for every scan, including the query's embedding.
 
-In the VM: not yet measured.
+In the VM, on 2026-11-10, `make rebuild` passed every suite, including every check of
+`make test-retrieval`: built in 378 s and tested in 672 s. For the 24 queries, the same requests as an
+engineer returned 230 restricted chunks, and as a technician none. `make measure-retrieval` then gave
+the same recall, minimums and short counts as the host for every cell of the table above, and the two
+roles' top five again differed for 16 of the 24 queries. Median latency was 25.6 to 31.4 ms, over
+kubectl port-forward. The results are in
+[`test/retrieval/results/`](../../test/retrieval/results/).
