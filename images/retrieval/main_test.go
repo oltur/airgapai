@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -16,20 +17,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func intp(n int) *int { return &n }
+
 func TestValidate(t *testing.T) {
 	for _, c := range []struct {
 		r  request
 		ok bool
 	}{
 		{request{Query: "q"}, true},
-		{request{Query: "q", Role: "technician", K: 20, Scan: "exact"}, true},
+		{request{Query: "q", Role: "technician", K: intp(20), Scan: "exact"}, true},
 		{request{Query: "  "}, false},
 		{request{Query: strings.Repeat("x", maxQuery+1)}, false},
 		{request{Query: "q", Role: "Engineer"}, false},
 		{request{Query: "q", Role: "ingest"}, false},
 		{request{Query: "q", Role: "engineer; RESET ROLE"}, false},
-		{request{Query: "q", K: 21}, false},
-		{request{Query: "q", K: -1}, false},
+		{request{Query: "q", K: intp(21)}, false},
+		{request{Query: "q", K: intp(-1)}, false},
+		{request{Query: "q", K: intp(0)}, false},
 		{request{Query: "q", Scan: "seq"}, false},
 	} {
 		r := c.r
@@ -37,21 +41,28 @@ func TestValidate(t *testing.T) {
 			t.Errorf("%+v: got %v", c.r, err)
 		}
 	}
+	// An explicit 0 in JSON is refused; a missing k is the default.
+	var zero request
+	if err := json.Unmarshal([]byte(`{"query":"q","k":0}`), &zero); err != nil || zero.validate() == nil {
+		t.Errorf(`{"k":0} was accepted`)
+	}
 	r := request{Query: " q "}
-	if err := r.validate(); err != nil || r.K != defaultK || r.Scan != "hnsw" || r.Query != "q" {
+	if err := r.validate(); err != nil || r.k != defaultK || r.Scan != "hnsw" || r.Query != "q" {
 		t.Errorf("defaults: %+v, %v", r, err)
 	}
 }
 
-// The role must only ever be set for the transaction. A plain SET ROLE, or a RESET, in any SQL this
-// program sends would be a bug that row-level security cannot catch (ADR 0012). Every string literal in
-// the program's source is checked, so comments may name what is forbidden.
+// The role must only ever be set for the transaction. A plain SET ROLE, a RESET, or set_config on the
+// role, in any SQL this program sends, would be a bug that row-level security cannot catch (ADR 0012).
+// Each string literal in the program's source is checked, so comments may name what is forbidden. A
+// statement assembled from pieces at run time would not be caught; the guard in search() is the
+// backstop for that.
 func TestOnlySetLocalRole(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	plain := regexp.MustCompile(`(?i)(^|[^a-z])(SET\s+(SESSION\s+)?ROLE|RESET\s+ROLE|SET\s+SESSION\s+AUTHORIZATION|RESET\s+ALL)\b`)
+	plain := regexp.MustCompile(`(?i)(^|[^a-z])(SET\s+(SESSION\s+)?ROLE|RESET\s+ROLE|SET\s+SESSION\s+AUTHORIZATION|RESET\s+ALL)\b|set_config\s*\(\s*'role'`)
 	literals := 0
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {
@@ -79,9 +90,20 @@ func TestOnlySetLocalRole(t *testing.T) {
 			t.Errorf("%s: %q", role, stmt)
 		}
 	}
-	// The check itself: it must catch the statement it exists to stop.
-	if !plain.MatchString(`"SET ROLE engineer"`) || plain.MatchString(`"SET LOCAL ROLE engineer"`) {
-		t.Fatal("the pattern does not tell SET ROLE from SET LOCAL ROLE")
+	// The check itself: it must catch the statements it exists to stop.
+	for _, bad := range []string{`"SET ROLE engineer"`, `"reset role"`, `"SELECT set_config('role', 'engineer', false)"`} {
+		if !plain.MatchString(bad) {
+			t.Errorf("the pattern misses %s", bad)
+		}
+	}
+	if plain.MatchString(`"SET LOCAL ROLE engineer"`) {
+		t.Error("the pattern refuses SET LOCAL ROLE")
+	}
+	// Every scan forces a custom plan, so a cached plan from another scan's settings is never reused.
+	for name, stmts := range scans {
+		if len(stmts) == 0 || stmts[0] != customPlan {
+			t.Errorf("scan %s does not start with %q", name, customPlan)
+		}
 	}
 }
 
@@ -154,7 +176,7 @@ func TestRolesOnOneConnection(t *testing.T) {
 	s, vec := database(t)
 	ctx := context.Background()
 	run := func(role, scan string) string {
-		r := request{Query: "q", Role: role, K: 10, Scan: scan}
+		r := request{Query: "q", Role: role, K: intp(10), Scan: scan}
 		if err := r.validate(); err != nil {
 			t.Fatal(err)
 		}

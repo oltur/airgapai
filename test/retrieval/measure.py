@@ -80,20 +80,23 @@ def main():
         per_query = []
         for query in queries:
             entry = {"query": query}
+            top = {}  # each role's default results at k=5, kept from the loop below
             for role in ROLES:
                 for k in KS:
                     found = {scan: search(query, role, k, scan) for scan in SCANS}
                     exact = set(key(found["exact"][0]))
+                    # With no rows to find, recall is undefined rather than zero or one.
                     entry[f"{role}@{k}"] = {
                         scan: {"returned": len(results),
-                               "recall": len(exact & set(key(results))) / len(exact),
+                               "recall": len(exact & set(key(results))) / len(exact)
+                               if exact else None,
                                "latency_ms": round(seconds * 1000, 1)}
                         for scan, (results, seconds) in found.items()}
-            top = {role: key(search(query, role, 5, "hnsw")[0]) for role in ROLES}
-            entry["roles_differ_at_5"] = top["technician"] != top["engineer"]
+                    if k == 5:
+                        top[role] = found["hnsw"][0]
+            entry["roles_differ_at_5"] = key(top["technician"]) != key(top["engineer"])
             entry["engineer_top5_restricted"] = sum(
-                r["classification"] == "restricted"
-                for r in search(query, "engineer", 5, "hnsw")[0])
+                r["classification"] == "restricted" for r in top["engineer"])
             per_query.append(entry)
     finally:
         process.terminate()
@@ -103,10 +106,11 @@ def main():
         for k in KS:
             for scan in SCANS:
                 cells = [q[f"{role}@{k}"][scan] for q in per_query]
-                recalls = [c["recall"] for c in cells]
+                recalls = [c["recall"] for c in cells if c["recall"] is not None]
                 summary[f"{role} k={k} {scan}"] = {
-                    "mean_recall": round(statistics.mean(recalls), 3),
-                    "min_recall": round(min(recalls), 3),
+                    "mean_recall": round(statistics.mean(recalls), 3) if recalls else None,
+                    "min_recall": round(min(recalls), 3) if recalls else None,
+                    "queries_with_nothing_to_find": len(cells) - len(recalls),
                     "queries_short_of_k": sum(c["returned"] < k for c in cells),
                     "median_latency_ms": round(
                         statistics.median(c["latency_ms"] for c in cells), 1),
@@ -123,8 +127,10 @@ def main():
     }
     width = max(map(len, summary))
     for name, s in summary.items():
-        print(f"{name:<{width}}  recall {s['mean_recall']:.3f} (min {s['min_recall']:.3f})"
-              f"  short of k: {s['queries_short_of_k']:>2}  median {s['median_latency_ms']} ms")
+        recall = (f"recall {s['mean_recall']:.3f} (min {s['min_recall']:.3f})"
+                  if s["mean_recall"] is not None else "recall undefined, nothing to find")
+        print(f"{name:<{width}}  {recall}  short of k: {s['queries_short_of_k']:>2}"
+              f"  median {s['median_latency_ms']} ms")
     differ = report["roles_differ_at_5"]
     print(f"queries where the two roles' top 5 differ: {differ} of {len(queries)}")
     if args.out:

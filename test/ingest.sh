@@ -2,7 +2,7 @@
 # Runs inside the VM as root. Tests that the ingestion Job from Git fills rag.chunks with the corpus,
 # that a second run changes nothing, that the labels follow the rule and each reader role sees its
 # share, and that the Job's network paths reach PostgreSQL and the embedding server only, with
-# controls.
+# controls. test/lib/probe.sh is sent ahead of it.
 set -uo pipefail
 
 export KUBECONFIG=/etc/rancher/rke2/rke2.yaml PATH=/var/lib/rancher/rke2/bin:$PATH
@@ -96,37 +96,16 @@ result "technician sees the public chunks" "$public/0" "$(as_role technician "$b
 result "engineer sees all chunks" "$public/$restricted" "$(as_role engineer "$by_label")"
 
 echo "== Network paths"
-digest="$(curl -sI -H 'Accept: application/vnd.oci.image.manifest.v1+json' http://10.43.0.50:5000/v2/probe/manifests/v1 | awk 'tolower($1) == "docker-content-digest:" {print $2}' | tr -d '\r')"
-[[ $digest == sha256:* ]] || { echo "FAIL could not read the probe digest"; exit 1; }
-probe_pod() { # name app-label
-  cat <<EOF
-apiVersion: v1
-kind: Pod
-metadata: {name: $1, namespace: retrieval, labels: {app: $2}}
-spec:
-  automountServiceAccountToken: false
-  securityContext: {runAsNonRoot: true, runAsUser: 65534, seccompProfile: {type: RuntimeDefault}}
-  containers:
-    - name: probe
-      image: 10.43.0.50:5000/probe@$digest
-      args: ["serve", ":8080"]
-      securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
-EOF
-}
-cleanup() { "${k[@]}" delete pod probe-ingest probe-other --ignore-not-found --wait=false >/dev/null 2>&1; }
-trap cleanup EXIT
-probe_pod probe-ingest ingest | kubectl apply -f - >/dev/null
-probe_pod probe-other other | kubectl apply -f - >/dev/null
-"${k[@]}" wait --for=condition=Ready pod/probe-ingest pod/probe-other --timeout=120s >/dev/null || { echo "FAIL probe pods not ready"; exit 1; }
-probe() { "${k[@]}" exec "$1" -- /probe connect "$2" 2>/dev/null; }
+trap 'stop_probes retrieval probe-ingest probe-ingest-other' EXIT
+start_probes retrieval probe-ingest=ingest probe-ingest-other=other || exit 1
 # The allowed paths, which also show the probe can connect at all.
-result "ingest label reaches PostgreSQL" reached "$(probe probe-ingest postgres.retrieval.svc:5432)"
-result "ingest label reaches the embedding server" reached "$(probe probe-ingest embed.inference.svc:8080)"
-result "ingest label cannot reach the chat model" timeout "$(probe probe-ingest chat.inference.svc:8080)"
-result "ingest label cannot reach Forgejo" timeout "$(probe probe-ingest forgejo.forgejo.svc:3000)"
-result "ingest label cannot reach the registry" timeout "$(probe probe-ingest 10.43.0.50:5000)"
-result "other label cannot reach PostgreSQL" timeout "$(probe probe-other postgres.retrieval.svc:5432)"
-result "other label cannot reach the embedding server" timeout "$(probe probe-other embed.inference.svc:8080)"
+result "ingest label reaches PostgreSQL" reached "$(probe retrieval probe-ingest postgres.retrieval.svc:5432)"
+result "ingest label reaches the embedding server" reached "$(probe retrieval probe-ingest embed.inference.svc:8080)"
+result "ingest label cannot reach the chat model" timeout "$(probe retrieval probe-ingest chat.inference.svc:8080)"
+result "ingest label cannot reach Forgejo" timeout "$(probe retrieval probe-ingest forgejo.forgejo.svc:3000)"
+result "ingest label cannot reach the registry" timeout "$(probe retrieval probe-ingest 10.43.0.50:5000)"
+result "other label cannot reach PostgreSQL" timeout "$(probe retrieval probe-ingest-other postgres.retrieval.svc:5432)"
+result "other label cannot reach the embedding server" timeout "$(probe retrieval probe-ingest-other embed.inference.svc:8080)"
 
 if (( failed )); then echo "ingestion checks failed"; exit 1; fi
 echo "all ingestion checks passed"

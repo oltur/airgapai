@@ -19,8 +19,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -47,12 +49,18 @@ var setRole = map[string]string{
 // Scans. "hnsw" is the default; the other two exist to measure it against. On a table this small the
 // planner prefers a sequential scan, which is exact, so the index scans turn sequential scans off:
 // otherwise the index would never be used and nothing about it would be measured. See ADR 0014.
+//
+// Each starts by forcing a custom plan. The query is a prepared statement, and after a few runs
+// PostgreSQL may reuse one generic plan, built under whichever scan's settings came first, since
+// changing these settings does not invalidate it.
 var scans = map[string][]string{
 	// Iterative scans keep reading the index until enough rows pass the role's policy.
-	"hnsw":        {"SET LOCAL enable_seqscan = off", "SET LOCAL hnsw.iterative_scan = relaxed_order"},
-	"hnsw-strict": {"SET LOCAL enable_seqscan = off", "SET LOCAL hnsw.iterative_scan = off"},
-	"exact":       {"SET LOCAL enable_indexscan = off", "SET LOCAL enable_bitmapscan = off"},
+	"hnsw":        {customPlan, "SET LOCAL enable_seqscan = off", "SET LOCAL hnsw.iterative_scan = relaxed_order"},
+	"hnsw-strict": {customPlan, "SET LOCAL enable_seqscan = off", "SET LOCAL hnsw.iterative_scan = off"},
+	"exact":       {customPlan, "SET LOCAL enable_indexscan = off", "SET LOCAL enable_bitmapscan = off"},
 }
+
+const customPlan = "SET LOCAL plan_cache_mode = force_custom_plan"
 
 // relaxed_order may return rows slightly out of order, so they are sorted again after the limit.
 const searchSQL = `WITH nearest AS MATERIALIZED (
@@ -63,8 +71,10 @@ const searchSQL = `WITH nearest AS MATERIALIZED (
 type request struct {
 	Query string `json:"query"`
 	Role  string `json:"role"`
-	K     int    `json:"k"`
-	Scan  string `json:"scan"`
+	// A pointer, so that a missing k takes the default and an explicit 0 is refused.
+	K    *int   `json:"k"`
+	Scan string `json:"scan"`
+	k    int
 }
 
 type result struct {
@@ -99,10 +109,11 @@ func (r *request) validate() error {
 	if _, ok := setRole[r.Role]; !ok && r.Role != "" {
 		return fmt.Errorf("unknown role %q", r.Role)
 	}
-	if r.K == 0 {
-		r.K = defaultK
+	r.k = defaultK
+	if r.K != nil {
+		r.k = *r.K
 	}
-	if r.K < 1 || r.K > maxK {
+	if r.k < 1 || r.k > maxK {
 		return fmt.Errorf("k must be between 1 and %d", maxK)
 	}
 	if r.Scan == "" {
@@ -142,7 +153,7 @@ func (s *server) search(ctx context.Context, r request, vector string) ([]result
 			return nil, err
 		}
 	}
-	rows, err := tx.Query(ctx, searchSQL, vector, r.K)
+	rows, err := tx.Query(ctx, searchSQL, vector, r.k)
 	if err != nil {
 		return nil, err
 	}
@@ -274,9 +285,19 @@ func main() {
 	mux.HandleFunc("/ready", s.handleReady)
 	srv := &http.Server{Addr: *addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 10 * time.Second, WriteTimeout: 60 * time.Second}
+	// On SIGTERM, finish the requests in flight, then close the pool.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdown)
+	}()
 	log.Printf("listening on %s", *addr)
-	if err := srv.ListenAndServe(); err != nil {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	pool.Close()
 }

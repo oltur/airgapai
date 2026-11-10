@@ -2,8 +2,9 @@
 # Runs inside the VM as root, after make test-ingest has filled the table. Tests that the retrieval
 # service gives the same question different chunks under two roles, nothing with no role, never a
 # restricted chunk to a technician, refuses unknown roles, and that its network paths reach PostgreSQL
-# and the embedding server only, with controls. QUERIES holds test/retrieval/queries.txt in base64.
-# Requests go through kubectl port-forward, which does not pass through the network policy.
+# and the embedding server only, with controls. test/lib/probe.sh is sent ahead of it, and QUERIES
+# holds test/retrieval/queries.txt in base64. Requests go through kubectl port-forward, which does not
+# pass through the network policy.
 set -uo pipefail
 
 export KUBECONFIG=/etc/rancher/rke2/rke2.yaml PATH=/var/lib/rancher/rke2/bin:$PATH
@@ -21,7 +22,7 @@ result() { # name expected actual
 forward=$!
 cleanup() {
   kill "$forward" 2>/dev/null
-  "${k[@]}" delete pod probe-retrieval probe-other --ignore-not-found --wait=false >/dev/null 2>&1
+  stop_probes retrieval probe-retrieval probe-retrieval-other
 }
 trap cleanup EXIT
 for _ in $(seq 30); do curl -fs "http://127.0.0.1:$port/ready" >/dev/null && break; sleep 1; done
@@ -92,33 +93,13 @@ raise SystemExit(1 if failed else 0)
 PY
 
 echo "== Network paths"
-digest="$(curl -sI -H 'Accept: application/vnd.oci.image.manifest.v1+json' http://10.43.0.50:5000/v2/probe/manifests/v1 | awk 'tolower($1) == "docker-content-digest:" {print $2}' | tr -d '\r')"
-[[ $digest == sha256:* ]] || { echo "FAIL could not read the probe digest"; exit 1; }
-probe_pod() { # name app-label
-  cat <<EOF
-apiVersion: v1
-kind: Pod
-metadata: {name: $1, namespace: retrieval, labels: {app: $2}}
-spec:
-  automountServiceAccountToken: false
-  securityContext: {runAsNonRoot: true, runAsUser: 65534, seccompProfile: {type: RuntimeDefault}}
-  containers:
-    - name: probe
-      image: 10.43.0.50:5000/probe@$digest
-      args: ["serve", ":8080"]
-      securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
-EOF
-}
-probe_pod probe-retrieval retrieval | kubectl apply -f - >/dev/null
-probe_pod probe-other other | kubectl apply -f - >/dev/null
-"${k[@]}" wait --for=condition=Ready pod/probe-retrieval pod/probe-other --timeout=120s >/dev/null || { echo "FAIL probe pods not ready"; exit 1; }
-probe() { "${k[@]}" exec "$1" -- /probe connect "$2" 2>/dev/null; }
-result "retrieval label reaches PostgreSQL" reached "$(probe probe-retrieval postgres.retrieval.svc:5432)"
-result "retrieval label reaches the embedding server" reached "$(probe probe-retrieval embed.inference.svc:8080)"
-result "retrieval label cannot reach the chat model" timeout "$(probe probe-retrieval chat.inference.svc:8080)"
-result "retrieval label cannot reach Forgejo" timeout "$(probe probe-retrieval forgejo.forgejo.svc:3000)"
-result "another pod cannot call the retrieval service" timeout "$(probe probe-other retrieval.retrieval.svc:8080)"
-result "the retrieval label cannot call it either" timeout "$(probe probe-retrieval retrieval.retrieval.svc:8080)"
+start_probes retrieval probe-retrieval=retrieval probe-retrieval-other=other || exit 1
+result "retrieval label reaches PostgreSQL" reached "$(probe retrieval probe-retrieval postgres.retrieval.svc:5432)"
+result "retrieval label reaches the embedding server" reached "$(probe retrieval probe-retrieval embed.inference.svc:8080)"
+result "retrieval label cannot reach the chat model" timeout "$(probe retrieval probe-retrieval chat.inference.svc:8080)"
+result "retrieval label cannot reach Forgejo" timeout "$(probe retrieval probe-retrieval forgejo.forgejo.svc:3000)"
+result "another pod cannot call the retrieval service" timeout "$(probe retrieval probe-retrieval-other retrieval.retrieval.svc:8080)"
+result "the retrieval label cannot call it either" timeout "$(probe retrieval probe-retrieval retrieval.retrieval.svc:8080)"
 
 if (( failed )); then echo "retrieval checks failed"; exit 1; fi
 echo "all retrieval checks passed"

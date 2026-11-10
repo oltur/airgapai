@@ -14,8 +14,8 @@ and the Phase 3 gateway will wrap it.
 
 ## Decision
 
-- **A small Go service, `POST /search`,** taking a query, a role, a result count `k` from 1 to 20 and a
-  scan. It embeds the query with Nomic's `search_query: ` prefix and returns the nearest chunks with
+- **A small Go service, `POST /search`,** taking a query, a role, a result count `k` from 1 to 20 (5 when
+  absent; 0 is refused) and a scan. It embeds the query with Nomic's `search_query: ` prefix and returns the nearest chunks with
   their path, label and distance. It connects as the `retrieval` login from ADR 0012.
 - **One transaction per request,** with the role set by `SET LOCAL ROLE`. The two role statements are
   constants, picked from the role name, so no input reaches the SQL. An unknown role, including a
@@ -24,13 +24,21 @@ and the Phase 3 gateway will wrap it.
   returns nothing. The service does not special-case it.
 - **A guard against a leftover role.** Each transaction first checks that the current user is the
   login. If not, the request fails and the connection is closed, so the pool does not reuse it.
-- **A test that the program sends no plain `SET ROLE`.** It parses the source and checks every string
-  literal, with a control showing the pattern catches `SET ROLE` and passes `SET LOCAL ROLE`.
+- **A test that the program's SQL holds no plain `SET ROLE`.** It parses the source and checks every
+  string literal for `SET ROLE`, `RESET ROLE`, `SET SESSION AUTHORIZATION`, `RESET ALL` and
+  `set_config('role'`, with controls showing the pattern catches them and passes `SET LOCAL ROLE`. A
+  statement assembled from pieces at run time would get past it; the guard is the backstop for that.
 - **Iterative HNSW scans by default** (`relaxed_order`), with the results sorted again after the limit.
   Two other scans exist to measure against: the index without iterative scans, and an exact scan.
 - **The index scans turn sequential scans off.** On 507 rows the planner chose a sequential scan, which
   is exact, so every scan gave recall 1.0 and nothing about the index was measured. A test checks the
   plan of each scan.
+- **Every scan forces a custom plan.** The query is a prepared statement, and PostgreSQL may switch
+  to one cached generic plan after a few runs. Changing the planner settings does not invalidate it,
+  so without this one scan's plan could serve another, and the exact baseline could become an index
+  scan.
+- **The database tests run in CI.** `make test-retrieval-db` starts a container from the pinned image,
+  with the schema read from the manifest, and fails if any database test skips.
 - **The caller names the role.** Nothing here authenticates the caller. Mapping a user to a role is the
   gateway's job in Phase 3.
 - **Network:** the service reaches PostgreSQL and the embedding server through the rules from ADR
@@ -44,6 +52,10 @@ and the Phase 3 gateway will wrap it.
 - **One pool per role.** The role would be a login, so it could not be unset, which the plan needs.
 - **The default planner on this small table.** It is exact and fast here, but it would leave the index
   untested until the corpus grew, and the role filter's effect on the index is what needs measuring.
+- **The guard in the pool's connection hooks,** as the review suggested. It would cover any future
+  user of the pool, but it would run outside the request's transaction, so something could still run
+  between the check and the query. Here the check, the role and the query share one transaction, and
+  the pool has one user.
 - **Strict ordering for iterative scans.** `relaxed_order` with a sort after the limit gives the same
   final order, and pgvector recommends it.
 
@@ -67,6 +79,10 @@ and the Phase 3 gateway will wrap it.
   scans and the largest k, through this service and these policies. Other paths to the table are
   covered by ADR 0012's tests, not this one.
 - **Latency under load.** Requests were sequential, and include embedding the query.
+- **That no cached plan was reused in the measurement below.** It ran before the custom-plan setting
+  was added. The exact scans gave recall 1.0 against themselves by definition, and the strict scans'
+  different recall shows they did not share the iterative scans' plan, but an index plan serving an
+  exact request cannot be ruled out from the numbers. The rebuild after the fix repeats it.
 
 ## Measurements
 

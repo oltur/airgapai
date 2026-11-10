@@ -29,3 +29,5 @@ jobs:
         run: make test-secrets
       - name: Lint
         run: make lint
+      - name: Retrieval database tests, in a PostgreSQL container
+        run: make test-retrieval-db
