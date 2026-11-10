@@ -1,0 +1,62 @@
+# What the executor needs through the default deny, and nothing more: it reaches the gateway database
+# on PostgreSQL and the Forgejo API, and nothing may call it yet. Calico adds these to the other
+# rules for PostgreSQL and Forgejo. They match the app label, so any pod in the gateway namespace that
+# carries app=executor gets the same paths.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: executor-egress
+spec:
+  selector: app == "executor"
+  namespaceSelector: kubernetes.io/metadata.name == "gateway"
+  types:
+    - Egress
+  egress:
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+        selector: app == "postgres"
+        ports: [5432]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "forgejo"
+        selector: app == "forgejo"
+        ports: [3000]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: postgres-reachable-from-executor
+spec:
+  selector: app == "postgres"
+  namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "gateway"
+        selector: app == "executor"
+      destination:
+        ports: [5432]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: forgejo-reachable-from-executor
+spec:
+  selector: app == "forgejo"
+  namespaceSelector: kubernetes.io/metadata.name == "forgejo"
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "gateway"
+        selector: app == "executor"
+      destination:
+        ports: [3000]

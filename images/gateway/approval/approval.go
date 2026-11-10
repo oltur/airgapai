@@ -96,6 +96,14 @@ func New(pool *pgxpool.Pool, roles Roles, tools []Tool, now func() time.Time) *S
 	return s
 }
 
+// Ping checks the database connection.
+func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
+
+// VerifyAudit walks the audit log; see Verify.
+func (s *Store) VerifyAudit(ctx context.Context) (firstBad, rows int64, err error) {
+	return Verify(ctx, s.pool)
+}
+
 // toolName is what the log may say about a tool name the caller sent: the name if it is a known
 // tool, and otherwise only that it was not one, since the text came from the model.
 func (s *Store) toolName(tool string) string {

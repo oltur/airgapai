@@ -17,8 +17,9 @@ the tools come in later slices and build on it.
 
 ## Decision
 
-- **A Go package, `images/gateway/approval`,** over a PostgreSQL schema in `images/gateway/schema.sql`,
-  in a database of its own named `gateway`.
+- **A Go package, `images/gateway/approval`,** over a PostgreSQL schema in a database of its own named
+  `gateway`. The schema was in `images/gateway/schema.sql`, and ADR 0016 moved it into the PostgreSQL
+  init ConfigMap.
 - **A model can only propose.** `Propose` checks that the tool exists and that the user's current role
   may use it, validates the arguments, and stores them in canonical form with their SHA-256 and the
   identities and hashes of the chunks they drew on. It returns no token.

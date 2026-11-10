@@ -1,0 +1,93 @@
+# The executor: the only workload that holds the ticket credential. It runs a call only by consuming
+# the user's one-time confirmation in the gateway database, then files exactly the confirmed
+# arguments as a Forgejo issue. See ADR 0016. It reaches PostgreSQL and Forgejo by the rules in
+# infra/guest/manifests/gateway-policy.yaml. Nothing can call it yet: the gateway gets its own rule.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: executor
+  namespace: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: executor
+      component: server
+  template:
+    metadata:
+      labels:
+        # The network rules match app. The Service matches component too, so a test pod that carries
+        # app=executor gets the network paths without receiving the service's traffic.
+        app: executor
+        component: server
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: executor
+          image: 10.43.0.50:5000/airgapai/executor@sha256:762d202bdd4d05a24bcd79fa3bece67baefe0dc1b4f31b45730b74f5c025c22b
+          args: [serve, -listen=:8080]
+          env:
+            - name: PGHOST
+              value: postgres.retrieval.svc
+            - name: PGUSER
+              value: gateway_app
+            - name: PGDATABASE
+              value: gateway
+            # Plain TCP inside the cluster, as elsewhere: the server has no certificate yet.
+            - name: PGSSLMODE
+              value: disable
+            - name: PGCONNECT_TIMEOUT
+              value: "10"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: {name: executor, key: database}
+            - name: FORGEJO_URL
+              value: http://forgejo.forgejo.svc:3000
+            - name: FORGEJO_TOKEN
+              valueFrom:
+                secretKeyRef: {name: executor, key: forgejo-token}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: executor
+  namespace: gateway
+spec:
+  selector:
+    app: executor
+    component: server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

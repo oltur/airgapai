@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// The tests below need the schema in ../schema.sql. GATEWAY_TEST_DSN connects as gateway_app and
+// The tests below need the gateway schema from the postgres-init ConfigMap in deploy/retrieval. GATEWAY_TEST_DSN connects as gateway_app and
 // GATEWAY_ADMIN_DSN as a superuser, which the tests use only to reset tables and for the controls
 // that tamper with the log. Without them, they are skipped; make test-db runs them.
 
