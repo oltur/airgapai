@@ -1,0 +1,27 @@
+# Questions for measuring retrieval, one per line. Written for this project against the topics of
+# the 42 corpus pages, before any result was seen. Half are on security topics, whose pages are
+# restricted, and half on the public pages. They are not real users' questions.
+What are the three Pod Security Standards profiles?
+How do I enforce a Pod Security level on a namespace?
+Which RBAC permissions allow privilege escalation?
+How should Secrets be protected at rest in etcd?
+How does a pod get a service account token?
+What kernel features restrict what a container process can do?
+How can tenants be isolated from each other in a shared cluster?
+How are requests to the Kubernetes API authenticated and authorized?
+Which settings should be checked before running an application in production securely?
+How can someone bypass the API server and reach a node directly?
+What does the kube-scheduler need to be hardened against?
+How do I run a container as a non-root user?
+How do I pass configuration to a pod without rebuilding the image?
+How do I set CPU and memory requests and limits for a container?
+How do I limit the total resources a namespace can use?
+What happens when a container exceeds its memory limit?
+How does a Service select the pods it sends traffic to?
+How do I expose an HTTP application outside the cluster with host-based routing?
+How do I block all traffic to pods in a namespace except from one application?
+How do pods find a Service by its DNS name?
+What is an EndpointSlice?
+How does the Gateway API differ from Ingress?
+How can traffic be kept within the same zone?
+How do I give a pod both IPv4 and IPv6 addresses?

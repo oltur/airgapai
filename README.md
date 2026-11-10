@@ -15,9 +15,10 @@ private, non-commercial project, written independently from public specification
 ## Status
 
 Phase 1 of 4, the air gap, is complete. **The claim above is not proven yet:** only its air-gap part
-has tests. The models are served in the cluster, and a pinned slice of the Kubernetes documentation
-(CC BY 4.0) is ingested into a row-level secured table, but no retrieval service or gateway exists
-so far. The write-up is
+has tests. The models are served in the cluster, a pinned slice of the Kubernetes documentation
+(CC BY 4.0) is ingested into a row-level secured table, and a retrieval service returns the chunks a
+named role may see. No gateway exists so far, so nothing authenticates who names the role. The
+write-up is
 [A blocked connection proves nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
 
 | Phase | What it should demonstrate |
@@ -36,6 +37,7 @@ so far. The write-up is
 | No commit on any ref contains a detected secret or a denylisted term | `make check` | The same limit. Without a local `.denylist` this check refuses to run |
 | Under row-level security, the retrieval login sees no chunk without a reader role, a technician sees only public chunks, a role set with `SET LOCAL` ends with its transaction, and the login cannot switch to a writer or owner role | `make test-rls`, part of `make rebuild` | That retrieval results respect the roles, or that the right role is chosen for a user. The database cannot require `SET LOCAL`: a plain `SET ROLE` lasts for the session, so the retrieval service must avoid it. Labels are synthetic, and the superuser can read everything. See [ADR 0012](docs/adr/0012-row-level-security-for-retrieval.md) |
 | The ingestion Job from Git fills the table with the pinned corpus, a second run writes nothing, labels follow the path rule, and each reader role sees its share. The Job's label reaches PostgreSQL and the embedding server but not the chat model, Forgejo or the registry, and another label in the namespace reaches neither | `make test-ingest`, part of `make rebuild` | That the chunks are good for retrieval, or that the labels fit the content. Other targets and other namespaces were not probed, and any pod in the namespace with the Job's label gets its network paths. See [ADR 0013](docs/adr/0013-corpus-and-ingestion.md) |
+| Through the retrieval service, the same question gets different chunks as a technician and as an engineer, no role gets nothing, unknown roles are refused, and no restricted chunk reached a technician over 24 queries, three scans and k=20. A role left on a pooled connection is refused | `make test-retrieval`, part of `make rebuild`, and the service's Go tests | That the right role is chosen for a user: the caller names it, and nothing authenticates the caller yet. Recall compares the index with an exact scan, not with what a reader needed. See [ADR 0014](docs/adr/0014-retrieval-service.md) |
 | In a single-node lab, pods reach a canary outside the cluster only with both the network policy and the VM path removed | `make test-egress`, part of `make rebuild` | That no other path exists. The canary is on the host, public targets have no open-path control, and only TCP and DNS were tested. See [ADR 0008](docs/adr/0008-egress-test-and-layer-matrix.md) |
 
 ## What Phase 1 contains
@@ -68,6 +70,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0011](docs/adr/0011-model-images-and-serving.md) | Model images and serving in the cluster, with VM measurements |
 | [0012](docs/adr/0012-row-level-security-for-retrieval.md) | PostgreSQL, pgvector and row-level security for retrieval |
 | [0013](docs/adr/0013-corpus-and-ingestion.md) | Corpus and ingestion |
+| [0014](docs/adr/0014-retrieval-service.md) | Retrieval service, with recall per role |
 
 ## Requirements
 
@@ -109,6 +112,8 @@ make test-signed-images  # test signed-image admission and the read-only registr
 make test-gitops  # test that Git drives the cluster and CI catches a secret, with controls
 make test-rls     # test row-level security on the chunks table, with controls
 make test-ingest  # test ingestion, a second run, the labels and the Job's network paths, with controls
+make test-retrieval  # test retrieval by role, a leak test and the service's network paths, with controls
+make measure-retrieval  # measure recall per role against an exact scan, in the VM
 make test-egress  # test every egress path and the layer matrix from the host, with controls
 make rebuild      # destroy everything, rebuild from the bundle and run all of the above
 ```

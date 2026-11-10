@@ -1,0 +1,85 @@
+# The retrieval service: nearest chunks for a query and a reader role, with the role set per
+# transaction. See ADR 0014. It reaches PostgreSQL and the embedding server by the rules in
+# infra/guest/manifests/retrieval-policy.yaml. Nothing can call it yet: the gateway gets its own allow
+# rule when it exists.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval
+  namespace: retrieval
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: retrieval
+      component: server
+  template:
+    metadata:
+      labels:
+        # The network rules match app. The Service matches component too, so a test pod that carries
+        # app=retrieval gets the network paths without receiving the service's traffic.
+        app: retrieval
+        component: server
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: retrieval
+          image: 10.43.0.50:5000/airgapai/retrieval@sha256:f8685e3c1d9bf7676581583f2601cbbca479268d39e04a252868978bd0c3e94f
+          args:
+            - -listen=:8080
+            - -embed-url=http://embed.inference.svc:8080
+          env:
+            - name: PGHOST
+              value: postgres.retrieval.svc
+            - name: PGUSER
+              value: retrieval
+            - name: PGDATABASE
+              value: rag
+            # Plain TCP inside the cluster, as for ingestion: the server has no certificate yet.
+            - name: PGSSLMODE
+              value: disable
+            - name: PGCONNECT_TIMEOUT
+              value: "10"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: {name: postgres, key: retrieval}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrieval
+  namespace: retrieval
+spec:
+  selector:
+    app: retrieval
+    component: server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

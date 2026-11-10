@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest measure-inference rebuild
+.PHONY: help setup check test-secrets tools lint test-retrieval-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval measure-inference measure-retrieval rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -37,6 +37,9 @@ lint: ## Run ShellCheck, Ruff, go vet, go test and govulncheck
 	done
 	@echo "lint clean"
 
+test-retrieval-db: ## Run the retrieval service's database tests in a throwaway PostgreSQL container
+	@scripts/test-retrieval-db.sh
+
 hours: ## Regenerate docs/hours.md from session and commit activity
 	@scripts/hours.py
 
@@ -65,13 +68,20 @@ test-rls: ## Test row-level security on the chunks table, with controls
 	@infra/vm-ssh.sh sudo bash -s <test/rls.sh
 
 test-ingest: ## Test the ingestion Job, a second run, the labels and its network paths, with controls
-	@infra/vm-ssh.sh sudo bash -s <test/ingest.sh
+	@cat test/lib/probe.sh test/ingest.sh | infra/vm-ssh.sh sudo bash -s
+
+test-retrieval: ## Test the retrieval service's roles, a leak test and its network paths, with controls
+	@cat test/lib/probe.sh test/retrieval.sh | \
+		infra/vm-ssh.sh sudo QUERIES="$$(base64 -w0 test/retrieval/queries.txt)" bash -s
 
 test-egress: ## Test every egress path and the layer matrix from outside the cluster, with controls
 	@go -C test/egress run . -root "$(CURDIR)"
 
 measure-inference: ## Restart the model pods in the VM and measure start-up, memory, speed and tool calls
 	@test/inference/measure.py --out test/inference/results
+
+measure-retrieval: ## Measure recall per role against an exact scan, and search latency, in the VM
+	@test/retrieval/measure.py --out test/retrieval/results
 
 rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	@start=$$(date +%s); \
@@ -84,5 +94,6 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	$(MAKE) --no-print-directory test-gitops && \
 	$(MAKE) --no-print-directory test-rls && \
 	$(MAKE) --no-print-directory test-ingest && \
+	$(MAKE) --no-print-directory test-retrieval && \
 	$(MAKE) --no-print-directory test-egress && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"

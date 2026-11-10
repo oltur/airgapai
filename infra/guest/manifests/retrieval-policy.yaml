@@ -1,12 +1,13 @@
-# What ingestion needs through the default deny, and nothing more: the ingestion Job reaches
-# PostgreSQL and the embedding server, and nothing else reaches either. The rules match the app
-# label, so any pod in the retrieval namespace that carries app=ingest gets the same paths.
+# What ingestion and retrieval need through the default deny, and nothing more: the ingestion Job and
+# the retrieval service reach PostgreSQL and the embedding server, and nothing else reaches either.
+# Nothing may call the retrieval service yet. The rules match the app label, so any pod in the
+# retrieval namespace that carries app=ingest or app=retrieval gets the same paths.
 apiVersion: crd.projectcalico.org/v1
 kind: GlobalNetworkPolicy
 metadata:
-  name: ingest-egress
+  name: retrieval-workloads-egress
 spec:
-  selector: app == "ingest"
+  selector: app in {"ingest", "retrieval"}
   namespaceSelector: kubernetes.io/metadata.name == "retrieval"
   types:
     - Egress
@@ -38,7 +39,7 @@ spec:
       protocol: TCP
       source:
         namespaceSelector: kubernetes.io/metadata.name == "retrieval"
-        selector: app == "ingest"
+        selector: app in {"ingest", "retrieval"}
       destination:
         ports: [5432]
 ---
@@ -56,6 +57,6 @@ spec:
       protocol: TCP
       source:
         namespaceSelector: kubernetes.io/metadata.name == "retrieval"
-        selector: app == "ingest"
+        selector: app in {"ingest", "retrieval"}
       destination:
         ports: [8080]
