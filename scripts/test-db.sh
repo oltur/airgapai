@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Runs the Go tests that need PostgreSQL, for the retrieval service and the gateway, against one
-# throwaway container started from the pinned pgvector image. The retrieval schema is read from
-# deploy/retrieval/postgres.yaml and the gateway schema from images/gateway/schema.sql. Needs Docker.
-# The tests skip without a database, so this is what runs them, here and in CI, and it fails if any
-# of them skips.
+# Runs the Go tests that need PostgreSQL, for the retrieval service, the gateway's approval core and
+# the executor, against one throwaway container started from the pinned pgvector image. The init
+# scripts are read from the postgres-init ConfigMap in deploy/retrieval/postgres.yaml, so the tests
+# get exactly the cluster's schema. Needs Docker. The tests skip without a database, so this is what
+# runs them, here and in CI, and it fails if any of them skips.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,36 +13,34 @@ tmp="$(mktemp -d)"
 cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; rm -rf "$tmp"; }
 trap cleanup EXIT
 
-# The retrieval init script, exactly as the cluster's ConfigMap holds it.
-python3 -I - "$root/deploy/retrieval/postgres.yaml" "$tmp/10-schema.sh" <<'PY'
-import sys
+# Each init script, exactly as the ConfigMap holds it: a key at two spaces, its text at four.
+python3 -I - "$root/deploy/retrieval/postgres.yaml" "$tmp" <<'PY'
+import os, re, sys
 text = open(sys.argv[1]).read()
-start = text.index("  10-schema.sh: |\n") + len("  10-schema.sh: |\n")
-lines = []
-for line in text[start:].splitlines():
-    if line.startswith("---") or (line and not line.startswith("    ")):
-        break
-    lines.append(line[4:])
-open(sys.argv[2], "w").write("\n".join(lines).rstrip() + "\n")
+data = text[text.index("name: postgres-init"):].split("\n---", 1)[0]
+scripts, current = {}, None
+for line in data.splitlines():
+    key = re.match(r"^  ([0-9a-z-]+\.sh): \|$", line)
+    if key:
+        current = scripts.setdefault(key.group(1), [])
+    elif current is not None and (line.startswith("    ") or line == ""):
+        current.append(line[4:])
+    elif current is not None:
+        current = None
+assert scripts, "no init scripts found"
+for name, lines in scripts.items():
+    open(os.path.join(sys.argv[2], name), "w").write("\n".join(lines).rstrip() + "\n")
+print(" ".join(sorted(scripts)))
 PY
-grep -q "FORCE ROW LEVEL SECURITY" "$tmp/10-schema.sh" || { echo "could not read the schema from the manifest"; exit 1; }
-cp "$root/images/gateway/schema.sql" "$tmp/gateway.sql"
-cat >"$tmp/20-gateway.sh" <<'EOF'
-set -eu
-psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE DATABASE gateway"
-psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d gateway -v gateway_password="$GATEWAY_PASSWORD" \
-  -f /docker-entrypoint-initdb.d/gateway.sql.txt
-EOF
+grep -q "FORCE ROW LEVEL SECURITY" "$tmp/10-schema.sh" && grep -q "CREATE TABLE gateway.audit" "$tmp/20-gateway.sh" \
+  || { echo "could not read the init scripts from the manifest"; exit 1; }
 
 # Test-only passwords, for a container that listens on loopback and is removed on exit.
 docker create --name "$name" -p 127.0.0.1::5432 -e POSTGRES_DB=rag -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=test-postgres -e INGEST_PASSWORD=test-ingest -e RETRIEVAL_PASSWORD=test-retrieval \
   -e GATEWAY_PASSWORD=test-gateway_app \
   -e "POSTGRES_INITDB_ARGS=--auth-local=scram-sha-256 --auth-host=scram-sha-256" "$PGVECTOR_IMAGE" >/dev/null
-docker cp "$tmp/10-schema.sh" "$name:/docker-entrypoint-initdb.d/10-schema.sh"
-docker cp "$tmp/20-gateway.sh" "$name:/docker-entrypoint-initdb.d/20-gateway.sh"
-# A name the entrypoint does not run by itself: 20-gateway.sh applies it to the gateway database.
-docker cp "$tmp/gateway.sql" "$name:/docker-entrypoint-initdb.d/gateway.sql.txt"
+for script in "$tmp"/*.sh; do docker cp "$script" "$name:/docker-entrypoint-initdb.d/"; done
 docker start "$name" >/dev/null
 port="$(docker port "$name" 5432/tcp | head -1 | sed 's/.*://')"
 # The entrypoint restarts the server after initialising, so wait for that and a working login. The
@@ -77,4 +75,5 @@ run() { # module, then environment assignments
 }
 run retrieval RETRIEVAL_TEST_DSN="$(dsn retrieval rag)" INGEST_TEST_DSN="$(dsn ingest rag)"
 run gateway GATEWAY_TEST_DSN="$(dsn gateway_app gateway)" GATEWAY_ADMIN_DSN="$(dsn postgres gateway)"
+run executor GATEWAY_TEST_DSN="$(dsn gateway_app gateway)" GATEWAY_ADMIN_DSN="$(dsn postgres gateway)"
 echo "all database tests passed"

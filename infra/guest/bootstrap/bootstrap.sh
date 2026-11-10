@@ -73,5 +73,38 @@ done
 "${kubectl[@]}" create namespace retrieval --dry-run=client -o yaml | "${kubectl[@]}" apply -f -
 "${kubectl[@]}" -n retrieval get secret postgres >/dev/null 2>&1 ||
   "${kubectl[@]}" -n retrieval create secret generic postgres --from-literal=superuser="$(openssl rand -hex 24)" \
-    --from-literal=ingest="$(openssl rand -hex 24)" --from-literal=retrieval="$(openssl rand -hex 24)" >/dev/null
+    --from-literal=ingest="$(openssl rand -hex 24)" --from-literal=retrieval="$(openssl rand -hex 24)" \
+    --from-literal=gateway="$(openssl rand -hex 24)" >/dev/null
+# A Secret kept from before the gateway has no key for it, and PostgreSQL would not start without one.
+# A volume kept from then has no gateway database either: that needs a migration, as ADR 0012 says
+# of any schema change on an existing volume. A rebuild starts with neither.
+if [[ -z $("${kubectl[@]}" -n retrieval get secret postgres -o jsonpath='{.data.gateway}') ]]; then
+  "${kubectl[@]}" -n retrieval patch secret postgres --type=merge \
+    -p "{\"stringData\":{\"gateway\":\"$(openssl rand -hex 24)\"}}" >/dev/null
+fi
+
+# Tickets live in a private Forgejo organisation. Its teams are the reader roles, and the executor is
+# an owner of this organisation only, with a token scoped to issues and to reading the organisation:
+# enough to check team membership and file issues, and not to change teams or repositories. See ADR 0016.
+api() { # method path [json]: as the bootstrap admin, failing on any error status
+  "${forgejo[@]}" curl -fsS -o /dev/null -X "$1" -H "Authorization: token $token" -H 'Content-Type: application/json' \
+    ${3:+-d "$3"} "http://localhost:3000/api/v1$2"
+}
+team_id() { # name
+  "${forgejo[@]}" curl -fsS -H "Authorization: token $token" http://localhost:3000/api/v1/orgs/maintenance/teams \
+    | python3 -c "import json,sys; print(next(t['id'] for t in json.load(sys.stdin) if t['name'] == sys.argv[1]))" "$1"
+}
+api POST /orgs '{"username":"maintenance","visibility":"private"}'
+api POST /orgs/maintenance/repos '{"name":"tickets","private":true,"default_branch":"main"}'
+for team in technicians engineers; do
+  api POST /orgs/maintenance/teams "{\"name\":\"$team\",\"permission\":\"read\",\"units\":[\"repo.issues\"],\"includes_all_repositories\":true}"
+done
+"${forgejo[@]}" forgejo admin user create --username executor --password "$(openssl rand -hex 24)" \
+  --email executor@airgapai.local --must-change-password=false >/dev/null
+api PUT "/teams/$(team_id Owners)/members/executor"
+executor_token="$("${forgejo[@]}" forgejo admin user generate-access-token --username executor --token-name executor \
+  --scopes write:issue,read:organization --raw)"
+"${kubectl[@]}" create namespace gateway --dry-run=client -o yaml | "${kubectl[@]}" apply -f -
+"${kubectl[@]}" -n gateway create secret generic executor --from-literal=forgejo-token="$executor_token" \
+  --from-literal=database="$("${kubectl[@]}" -n retrieval get secret postgres -o jsonpath='{.data.gateway}' | base64 -d)" >/dev/null
 "${kubectl[@]}" apply -f "$bootstrap/root-app.yaml"

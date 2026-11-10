@@ -17,8 +17,9 @@ private, non-commercial project, written independently from public specification
 Phases 1 and 2, the air gap and role-filtered retrieval, are complete. **The claim above is not
 proven yet:** the "act safely" part needs the gateway. The models are served in the cluster, a pinned
 slice of the Kubernetes documentation (CC BY 4.0) is ingested into a row-level secured table, and a
-retrieval service returns the chunks a named role may see. Of the gateway, only its approval core
-exists, as a tested library: nothing authenticates users or runs tools yet. The write-up is
+retrieval service returns the chunks a named role may see. Of the gateway, its approval core and an
+executor that files a Forgejo issue only for a confirmed call exist. Nothing authenticates users yet,
+and no model calls tools. The write-up is
 [A blocked connection proves nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
 
 | Phase | What it should demonstrate |
@@ -73,6 +74,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0013](docs/adr/0013-corpus-and-ingestion.md) | Corpus and ingestion |
 | [0014](docs/adr/0014-retrieval-service.md) | Retrieval service, with recall per role |
 | [0015](docs/adr/0015-approval-core.md) | Approval core: proposals, confirmations and the audit log |
+| [0016](docs/adr/0016-executor.md) | The executor, and Forgejo as the directory and ticket system |
 
 ## Requirements
 
@@ -116,6 +118,7 @@ make test-gitops  # test that Git drives the cluster and CI catches a secret, wi
 make test-rls     # test row-level security on the chunks table, with controls
 make test-ingest  # test ingestion, a second run, the labels and the Job's network paths, with controls
 make test-retrieval  # test retrieval by role, a leak test and the service's network paths, with controls
+make test-executor   # test that only a confirmed call files a Forgejo issue, with audit and network checks
 make measure-retrieval  # measure recall per role against an exact scan, in the VM
 make test-egress  # test every egress path and the layer matrix from the host, with controls
 make rebuild      # destroy everything, rebuild from the bundle and run all of the above

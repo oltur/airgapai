@@ -96,11 +96,15 @@ sign airgapai/ingest "$digest" "$keys/cosign.key"
 digest="$("$here/build-go-image.sh" "$crane" retrieval "$local_reg/airgapai/retrieval:bundle")"
 [[ $digest == "$RETRIEVAL_IMAGE_DIGEST" ]] || { echo "airgapai/retrieval built as $digest, but versions.env pins $RETRIEVAL_IMAGE_DIGEST"; exit 1; }
 sign airgapai/retrieval "$digest" "$keys/cosign.key"
+digest="$("$here/build-go-image.sh" "$crane" executor "$local_reg/airgapai/executor:bundle")"
+[[ $digest == "$EXECUTOR_IMAGE_DIGEST" ]] || { echo "airgapai/executor built as $digest, but versions.env pins $EXECUTOR_IMAGE_DIGEST"; exit 1; }
+sign airgapai/executor "$digest" "$keys/cosign.key"
 # Argo CD deploys these from Git, so the manifests must name exactly the pinned digests: no other
 # image, and none of these missing.
 pinned="$(printf '%s\n' "$target/models/ministral@$MINISTRAL_IMAGE_DIGEST" "$target/models/nomic@$NOMIC_IMAGE_DIGEST" \
   "$target/ggml-org/llama.cpp@${LLAMA_SERVER_IMAGE#*@}" "$target/pgvector/pgvector@${PGVECTOR_IMAGE#*@}" \
-  "$target/airgapai/ingest@$INGEST_IMAGE_DIGEST" "$target/airgapai/retrieval@$RETRIEVAL_IMAGE_DIGEST" | sort -u)"
+  "$target/airgapai/ingest@$INGEST_IMAGE_DIGEST" "$target/airgapai/retrieval@$RETRIEVAL_IMAGE_DIGEST" \
+  "$target/airgapai/executor@$EXECUTOR_IMAGE_DIGEST" | sort -u)"
 named="$(grep -rhE '^\s+image:' "$here/../deploy" | awk '{print $2}' | tr -d '"' | sort -u)"
 [[ $named == "$pinned" ]] || { echo "deploy/ names other images than versions.env pins:"; diff <(echo "$pinned") <(echo "$named"); exit 1; }
 
