@@ -131,3 +131,9 @@ failed rebuild had not reached. That run showed:
 Both runs left their issues in `maintenance/tickets`, four in all, each filed by the `executor` account.
 The rerun on a cluster that already had the first run's rows also shows the test does not depend on
 an empty audit log.
+
+After the review fixes, `make rebuild` on 2026-11-10 passed every suite, the executor's included:
+built in 372 s and tested in 726 s. A proposal made and confirmed by hand afterwards behaved the same:
+changed text and another user were refused, the genuine call filed an issue, and its replay was
+refused. The audit chain verified, at 26 rows.
+
