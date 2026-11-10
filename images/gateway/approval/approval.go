@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,10 +22,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Denied is returned when a request is refused. Reason is safe to show the user and is logged.
-type Denied struct{ Reason string }
+// Denied is returned when a request is refused. Reason is a fixed phrase, safe to log. Hint may name
+// what the caller sent, so it is shown to the caller and never logged.
+type Denied struct{ Reason, Hint string }
 
-func (d *Denied) Error() string { return "denied: " + d.Reason }
+func (d *Denied) Error() string {
+	if d.Hint != "" {
+		return "denied: " + d.Reason + ": " + d.Hint
+	}
+	return "denied: " + d.Reason
+}
 
 // IsDenied reports whether err is a refusal, as opposed to a failure.
 func IsDenied(err error) bool {
@@ -37,7 +44,8 @@ type Roles interface {
 	Role(ctx context.Context, user string) (string, error)
 }
 
-// Tool is a side-effecting tool. Validate checks decoded, canonical arguments.
+// Tool is a side-effecting tool. Validate checks decoded, canonical arguments. Its errors are shown
+// to the caller and not logged, because they may quote what the model wrote.
 type Tool struct {
 	Name     string
 	Validate func(args map[string]any) error
@@ -88,29 +96,43 @@ func New(pool *pgxpool.Pool, roles Roles, tools []Tool, now func() time.Time) *S
 	return s
 }
 
+// toolName is what the log may say about a tool name the caller sent: the name if it is a known
+// tool, and otherwise only that it was not one, since the text came from the model.
+func (s *Store) toolName(tool string) string {
+	if _, ok := s.tools[tool]; ok {
+		return tool
+	}
+	return "(unknown)"
+}
+
 // permitted resolves the user's role now and checks it against the permissions table, in tx.
-func (s *Store) permitted(ctx context.Context, tx pgx.Tx, user, tool string) (string, error) {
+func (s *Store) permitted(ctx context.Context, tx pgx.Tx, user, tool string) error {
 	role, err := s.roles.Role(ctx, user)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if role == "" {
-		return "", &Denied{"the user has no role"}
+		return &Denied{Reason: "the user has no role"}
 	}
 	var ok bool
 	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM gateway.tool_permissions WHERE role = $1 AND tool = $2)",
 		role, tool).Scan(&ok); err != nil {
-		return "", err
+		return err
 	}
 	if !ok {
-		return "", &Denied{fmt.Sprintf("role %q may not use %s", role, tool)}
+		return &Denied{Reason: "the user's role may not use this tool"}
 	}
-	return role, nil
+	return nil
 }
 
-// decide runs f in a transaction that also writes its audit entry. On a refusal, f's work is rolled
-// back and the refusal is logged in a transaction of its own. If the audit write fails, so does the
-// call. f fills in the detail; a refusal's reason is added to it.
+// decide runs f in a transaction that also writes its audit entry, and logs every outcome:
+//   - allowed: f's work and the entry commit together, so if the entry fails, so does the work;
+//   - denied: f's work is rolled back and the refusal is logged on its own;
+//   - failed: f's work is rolled back and the failure is logged on its own, without its message,
+//     which may hold data.
+//
+// The audit lock is taken first and held to the end, so decisions run one at a time: a Revoke cannot
+// commit between an Execute's role check and its commit.
 func (s *Store) decide(ctx context.Context, actor, action string, f func(tx pgx.Tx, detail map[string]any) error) error {
 	detail := map[string]any{}
 	tx, err := s.pool.Begin(ctx)
@@ -118,6 +140,9 @@ func (s *Store) decide(ctx context.Context, actor, action string, f func(tx pgx.
 		return err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // a no-op after commit
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", auditLock); err != nil {
+		return err
+	}
 	ferr := f(tx, detail)
 	if ferr == nil {
 		if err := appendAudit(ctx, tx, s.now(), Entry{actor, action, "allowed", detail}); err != nil {
@@ -129,22 +154,33 @@ func (s *Store) decide(ctx context.Context, actor, action string, f func(tx pgx.
 		return nil
 	}
 	_ = tx.Rollback(ctx)
-	if !IsDenied(ferr) {
-		return ferr
+	decision := "failed"
+	var d *Denied
+	if errors.As(ferr, &d) {
+		decision, detail["reason"] = "denied", d.Reason
 	}
-	detail["reason"] = ferr.(*Denied).Reason
 	logTx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return errors.Join(ferr, err)
 	}
 	defer logTx.Rollback(ctx) //nolint:errcheck // a no-op after commit
-	if err := appendAudit(ctx, logTx, s.now(), Entry{actor, action, "denied", detail}); err != nil {
-		return errors.Join(ferr, fmt.Errorf("logging the refusal failed: %w", err))
+	if err := appendAudit(ctx, logTx, s.now(), Entry{actor, action, decision, detail}); err != nil {
+		return errors.Join(ferr, fmt.Errorf("logging the %s %s failed: %w", decision, action, err))
 	}
 	if err := logTx.Commit(ctx); err != nil {
 		return errors.Join(ferr, err)
 	}
 	return ferr
+}
+
+// canonicalArgs returns the canonical text and its decoded form, or a refusal whose hint, not its
+// reason, says what was wrong.
+func canonicalArgs(raw []byte) (string, map[string]any, error) {
+	text, decoded, err := canonical(raw)
+	if err != nil {
+		return "", nil, &Denied{Reason: "the arguments are not a single JSON object without duplicate keys", Hint: err.Error()}
+	}
+	return text, decoded, nil
 }
 
 func canonicalSources(sources []Source) (string, error) {
@@ -163,26 +199,20 @@ func canonicalSources(sources []Source) (string, error) {
 func (s *Store) Propose(ctx context.Context, user, tool string, rawArgs []byte, sources []Source) (Proposal, error) {
 	p := Proposal{ID: uuid.New(), User: user, Tool: tool, Sources: sources}
 	err := s.decide(ctx, user, "propose", func(tx pgx.Tx, detail map[string]any) error {
-		detail["proposal"], detail["tool"] = p.ID.String(), tool
+		detail["proposal"], detail["tool"] = p.ID.String(), s.toolName(tool)
 		t, ok := s.tools[tool]
 		if !ok {
-			return &Denied{"unknown tool"}
+			return &Denied{Reason: "unknown tool"}
 		}
-		if _, err := s.permitted(ctx, tx, user, tool); err != nil {
+		if err := s.permitted(ctx, tx, user, tool); err != nil {
 			return err
 		}
-		args, err := Canonical(rawArgs)
+		args, decoded, err := canonicalArgs(rawArgs)
 		if err != nil {
-			return &Denied{err.Error()}
-		}
-		var decoded map[string]any
-		dec := json.NewDecoder(stringsReader(args))
-		dec.UseNumber()
-		if err := dec.Decode(&decoded); err != nil {
 			return err
 		}
 		if err := t.Validate(decoded); err != nil {
-			return &Denied{"invalid arguments: " + err.Error()}
+			return &Denied{Reason: "the arguments do not fit the tool", Hint: err.Error()}
 		}
 		src, err := canonicalSources(sources)
 		if err != nil {
@@ -199,14 +229,18 @@ func (s *Store) Propose(ctx context.Context, user, tool string, rawArgs []byte, 
 	return p, err
 }
 
-// Proposal returns a stored proposal, for the confirmation page to render.
-func (s *Store) Proposal(ctx context.Context, id uuid.UUID) (Proposal, error) {
+// Proposal returns one of user's own proposals, for the confirmation page to render. Another user's
+// proposal is refused as if it did not exist, so its arguments are never shown to them.
+func (s *Store) Proposal(ctx context.Context, user string, id uuid.UUID) (Proposal, error) {
 	p := Proposal{ID: id}
 	var src string
 	err := s.pool.QueryRow(ctx, `SELECT user_id, tool, args, args_sha256, sources, created_at, expires_at
-		FROM gateway.proposals WHERE id = $1`, id).Scan(&p.User, &p.Tool, &p.Args, &p.ArgsSHA256, &src, &p.CreatedAt, &p.ExpiresAt)
+		FROM gateway.proposals WHERE id = $1 AND user_id = $2`, id, user).Scan(&p.User, &p.Tool, &p.Args, &p.ArgsSHA256, &src, &p.CreatedAt, &p.ExpiresAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Proposal{}, &Denied{Reason: "unknown proposal"}
+	}
 	if err != nil {
-		return p, err
+		return Proposal{}, err
 	}
 	var wrapped struct {
 		Sources []Source `json:"sources"`
@@ -230,18 +264,18 @@ func (s *Store) Confirm(ctx context.Context, user string, proposalID uuid.UUID) 
 		err := tx.QueryRow(ctx, "SELECT user_id, tool, expires_at FROM gateway.proposals WHERE id = $1",
 			proposalID).Scan(&owner, &tool, &expires)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return &Denied{"unknown proposal"}
+			return &Denied{Reason: "unknown proposal"}
 		}
 		if err != nil {
 			return err
 		}
 		switch {
 		case owner != user:
-			return &Denied{"the proposal belongs to another user"}
+			return &Denied{Reason: "the proposal belongs to another user"}
 		case !s.now().Before(expires):
-			return &Denied{"the proposal has expired"}
+			return &Denied{Reason: "the proposal has expired"}
 		}
-		if _, err := s.permitted(ctx, tx, user, tool); err != nil {
+		if err := s.permitted(ctx, tx, user, tool); err != nil {
 			return err
 		}
 		raw := make([]byte, 32)
@@ -254,7 +288,7 @@ func (s *Store) Confirm(ctx context.Context, user string, proposalID uuid.UUID) 
 			VALUES ($1, $2, $3, $4, $5)`, Hash(token), proposalID, user, now, now.Add(s.ConfirmTTL))
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return &Denied{"the proposal is already confirmed"}
+			return &Denied{Reason: "the proposal is already confirmed"}
 		}
 		return err
 	})
@@ -272,21 +306,23 @@ func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs [
 	var ex Execution
 	err := s.decide(ctx, user, "execute", func(tx pgx.Tx, detail map[string]any) error {
 		tokenHash := Hash(token)
-		detail["confirmation"], detail["tool"] = tokenHash[:16], tool
-		args, err := Canonical(rawArgs)
+		detail["confirmation"], detail["tool"] = tokenHash[:16], s.toolName(tool)
+		args, _, err := canonicalArgs(rawArgs)
 		if err != nil {
-			return &Denied{err.Error()}
+			return err
 		}
 		detail["args_sha256"] = Hash(args)
 		var owner, ptool, phash string
 		var proposal uuid.UUID
 		var expires time.Time
 		var consumed *time.Time
+		// The decision lock already serialises executions; the row lock keeps a token single-use even
+		// if that lock is ever narrowed.
 		err = tx.QueryRow(ctx, `SELECT c.user_id, c.expires_at, c.consumed_at, p.id, p.tool, p.args_sha256
 			FROM gateway.confirmations c JOIN gateway.proposals p ON p.id = c.proposal_id
 			WHERE c.token_sha256 = $1 FOR UPDATE OF c`, tokenHash).Scan(&owner, &expires, &consumed, &proposal, &ptool, &phash)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return &Denied{"unknown confirmation"}
+			return &Denied{Reason: "unknown confirmation"}
 		}
 		if err != nil {
 			return err
@@ -294,17 +330,17 @@ func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs [
 		detail["proposal"] = proposal.String()
 		switch {
 		case consumed != nil:
-			return &Denied{"the confirmation was already used"}
+			return &Denied{Reason: "the confirmation was already used"}
 		case !s.now().Before(expires):
-			return &Denied{"the confirmation has expired"}
+			return &Denied{Reason: "the confirmation has expired"}
 		case owner != user:
-			return &Denied{"the confirmation belongs to another user"}
+			return &Denied{Reason: "the confirmation belongs to another user"}
 		case ptool != tool:
-			return &Denied{"the confirmation is for another tool"}
+			return &Denied{Reason: "the confirmation is for another tool"}
 		case phash != Hash(args):
-			return &Denied{"the arguments differ from the confirmed proposal"}
+			return &Denied{Reason: "the arguments differ from the confirmed proposal"}
 		}
-		if _, err := s.permitted(ctx, tx, user, tool); err != nil {
+		if err := s.permitted(ctx, tx, user, tool); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, "UPDATE gateway.confirmations SET consumed_at = $1 WHERE token_sha256 = $2",
@@ -320,19 +356,29 @@ func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs [
 	return ex, nil
 }
 
-// RecordResult logs what happened when an execution ran. The execution was logged before it ran, so
-// a failure here loses only the outcome, which is the stated residual risk.
+// RecordResult logs what happened when an execution ran. It refuses a proposal whose confirmation was
+// never consumed, so no result can be logged for a call that was not allowed. The execution was logged
+// before it ran, so a failure here loses only the outcome, which is the stated residual risk.
 func (s *Store) RecordResult(ctx context.Context, ex Execution, outcome string, detail map[string]any) error {
-	if detail == nil {
-		detail = map[string]any{}
+	entry := maps.Clone(detail)
+	if entry == nil {
+		entry = map[string]any{}
 	}
-	detail["proposal"], detail["outcome"] = ex.ProposalID.String(), outcome
+	entry["proposal"], entry["outcome"] = ex.ProposalID.String(), outcome
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // a no-op after commit
-	if err := appendAudit(ctx, tx, s.now(), Entry{"executor", "result", outcome, detail}); err != nil {
+	var allowed bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM gateway.confirmations WHERE proposal_id = $1 AND consumed_at IS NOT NULL)",
+		ex.ProposalID).Scan(&allowed); err != nil {
+		return err
+	}
+	if !allowed {
+		return &Denied{Reason: "no allowed execution for this proposal"}
+	}
+	if err := appendAudit(ctx, tx, s.now(), Entry{"executor", "result", outcome, entry}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -341,9 +387,9 @@ func (s *Store) RecordResult(ctx context.Context, ex Execution, outcome string, 
 // Grant and Revoke change which roles may use which tools. Each change is logged as the admin's.
 func (s *Store) Grant(ctx context.Context, admin, role, tool string) error {
 	return s.decide(ctx, admin, "grant", func(tx pgx.Tx, detail map[string]any) error {
-		detail["role"], detail["tool"] = role, tool
+		detail["role"], detail["tool"] = role, s.toolName(tool)
 		if _, ok := s.tools[tool]; !ok {
-			return &Denied{"unknown tool"}
+			return &Denied{Reason: "unknown tool"}
 		}
 		_, err := tx.Exec(ctx, "INSERT INTO gateway.tool_permissions (role, tool) VALUES ($1, $2) ON CONFLICT DO NOTHING", role, tool)
 		return err
@@ -352,7 +398,7 @@ func (s *Store) Grant(ctx context.Context, admin, role, tool string) error {
 
 func (s *Store) Revoke(ctx context.Context, admin, role, tool string) error {
 	return s.decide(ctx, admin, "revoke", func(tx pgx.Tx, detail map[string]any) error {
-		detail["role"], detail["tool"] = role, tool
+		detail["role"], detail["tool"] = role, s.toolName(tool)
 		_, err := tx.Exec(ctx, "DELETE FROM gateway.tool_permissions WHERE role = $1 AND tool = $2", role, tool)
 		return err
 	})

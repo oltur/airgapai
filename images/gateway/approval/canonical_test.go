@@ -27,6 +27,7 @@ func TestCanonical(t *testing.T) {
 		`{"title":"a"} {"title":"b"}`,
 		`["not", "an", "object"]`,
 		`"text"`,
+		`null`,
 		``,
 	} {
 		if got, err := Canonical([]byte(bad)); err == nil {

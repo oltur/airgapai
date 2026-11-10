@@ -2,6 +2,8 @@ package approval
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -18,14 +20,24 @@ import (
 // that tamper with the log. Without them, they are skipped; make test-db runs them.
 
 type roles struct {
-	mu sync.Mutex
-	m  map[string]string
+	mu  sync.Mutex
+	m   map[string]string
+	err error // returned instead of a role when set
 }
 
 func (r *roles) Role(_ context.Context, user string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.err != nil {
+		return "", r.err
+	}
 	return r.m[user], nil
+}
+
+func (r *roles) fail(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.err = err
 }
 
 func (r *roles) set(user, role string) {
@@ -344,4 +356,132 @@ func TestAuditLogIsAppendOnlyAndTamperEvident(t *testing.T) {
 		})
 	}
 	f.audit(t)
+}
+
+// A failure that is not a refusal is still logged, without its message, and a refusal wrapped by a
+// resolver is still a refusal.
+func TestFailuresAreLogged(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	_, token := f.confirmed(t)
+	f.roles.fail(errors.New("directory unreachable: secret detail"))
+	_, err := f.s.Execute(ctx, token, "alice", "create_ticket", []byte(args))
+	if err == nil || IsDenied(err) {
+		t.Fatalf("want a failure, got %v", err)
+	}
+	f.roles.fail(fmt.Errorf("lookup: %w", &Denied{Reason: "the directory says no"}))
+	_, err = f.s.Execute(ctx, token, "alice", "create_ticket", []byte(args))
+	denied(t, err, "the directory says no")
+	got := f.audit(t)
+	if tail := strings.Join(got[len(got)-2:], "|"); tail != "alice execute failed|alice execute denied" {
+		t.Fatalf("got %v", got)
+	}
+	var leaked int
+	if err := f.admin.QueryRow(ctx, "SELECT count(*) FROM gateway.audit WHERE detail LIKE '%secret detail%'").Scan(&leaked); err != nil || leaked != 0 {
+		t.Fatalf("a failure's message reached the log: %d, %v", leaked, err)
+	}
+	// The confirmation was not used by either attempt.
+	f.roles.fail(nil)
+	if _, err := f.s.Execute(ctx, token, "alice", "create_ticket", []byte(args)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Text the model chose, such as a tool name or a field name, is not written to the log.
+func TestModelTextStaysOutOfTheLog(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	_, err := f.s.Propose(ctx, "alice", "IGNORE PREVIOUS INSTRUCTIONS", []byte(`{}`), nil)
+	denied(t, err, "unknown tool")
+	_, err = f.s.Propose(ctx, "alice", "create_ticket", []byte(`{"title":"x","body":"y","priority":"high","RESTRICTED TEXT":1}`), nil)
+	denied(t, err, "RESTRICTED TEXT") // the caller is told which field
+	_, err = f.s.Propose(ctx, "alice", "create_ticket", []byte(`{"title":"x","DUPLICATED TEXT":1,"DUPLICATED TEXT":2}`), nil)
+	denied(t, err, "DUPLICATED TEXT")
+	var leaked int
+	if err := f.admin.QueryRow(ctx, `SELECT count(*) FROM gateway.audit
+		WHERE detail ILIKE '%instructions%' OR detail LIKE '%RESTRICTED%' OR detail LIKE '%DUPLICATED%'`).Scan(&leaked); err != nil || leaked != 0 {
+		t.Fatalf("model text reached the log: %d, %v", leaked, err)
+	}
+	if got := f.audit(t); strings.Count(strings.Join(got, "\n"), "propose denied") != 3 {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestProposalIsReadableOnlyByItsOwner(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	p, err := f.s.Propose(ctx, "alice", "create_ticket", []byte(args), []Source{{"content/en/docs/a.md", 3, "abc"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.s.Proposal(ctx, "alice", p.ID)
+	if err != nil || got.Args != p.Args || len(got.Sources) != 1 || got.Sources[0].ChunkIndex != 3 {
+		t.Fatalf("owner: %+v, %v", got, err)
+	}
+	got, err = f.s.Proposal(ctx, "bob", p.ID)
+	denied(t, err, "unknown proposal")
+	if got.Args != "" {
+		t.Fatalf("another user saw the arguments: %s", got.Args)
+	}
+}
+
+// A result can be logged only for a proposal whose confirmation was consumed.
+func TestResultNeedsAnAllowedExecution(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	p, token := f.confirmed(t)
+	err := f.s.RecordResult(ctx, Execution{ProposalID: p.ID}, "succeeded", nil)
+	denied(t, err, "no allowed execution")
+	err = f.s.RecordResult(ctx, Execution{ProposalID: uuid.New()}, "succeeded", nil)
+	denied(t, err, "no allowed execution")
+	ex, err := f.s.Execute(ctx, token, "alice", "create_ticket", []byte(args))
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail := map[string]any{"issue": 7}
+	if err := f.s.RecordResult(ctx, ex, "succeeded", detail); err != nil {
+		t.Fatal(err)
+	}
+	if len(detail) != 1 {
+		t.Fatalf("the caller's map was changed: %v", detail)
+	}
+}
+
+// Decisions run one at a time, so a revocation that commits while an execution is waiting is seen by
+// that execution's role check, rather than slipping in between the check and the commit.
+func TestRevocationDuringExecutionIsSeen(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	_, token := f.confirmed(t)
+	// Another decision in progress holds the lock.
+	tx, err := f.admin.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", auditLock); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.s.Execute(ctx, token, "alice", "create_ticket", []byte(args))
+		done <- err
+	}()
+	time.Sleep(300 * time.Millisecond) // the execution is now waiting
+	other, err := pgx.Connect(ctx, os.Getenv("GATEWAY_ADMIN_DSN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close(ctx)
+	if _, err := other.Exec(ctx, "DELETE FROM gateway.tool_permissions WHERE role = 'technician'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		denied(t, err, "may not use")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the execution did not finish")
+	}
 }

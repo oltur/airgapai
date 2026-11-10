@@ -7,8 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-func stringsReader(s string) *strings.Reader { return strings.NewReader(s) }
-
 // CreateTicket files a maintenance ticket. Every field is checked, and no other field is allowed.
 var CreateTicket = Tool{
 	Name: "create_ticket",

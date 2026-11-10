@@ -45,14 +45,23 @@ docker cp "$tmp/20-gateway.sh" "$name:/docker-entrypoint-initdb.d/20-gateway.sh"
 docker cp "$tmp/gateway.sql" "$name:/docker-entrypoint-initdb.d/gateway.sql.txt"
 docker start "$name" >/dev/null
 port="$(docker port "$name" 5432/tcp | head -1 | sed 's/.*://')"
-# The entrypoint restarts the server after initialising, so wait for that and a working login.
+# The entrypoint restarts the server after initialising, so wait for that and a working login. The
+# logs go to a file first: grep -q stops reading at its match, and under pipefail the writer's broken
+# pipe would fail the check.
+initialised() {
+  docker logs "$name" >"$tmp/postgres.log" 2>&1
+  grep -q "PostgreSQL init process complete" "$tmp/postgres.log"
+}
+ready=0
 for _ in $(seq 60); do
-  docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" \
-    && docker exec -e PGPASSWORD=test-gateway_app "$name" psql -h 127.0.0.1 -U gateway_app -d gateway -Atc "SELECT 1" >/dev/null 2>&1 \
-    && break
+  if initialised && docker exec -e PGPASSWORD=test-gateway_app "$name" \
+    psql -h 127.0.0.1 -U gateway_app -d gateway -Atc "SELECT 1" >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
   sleep 1
 done
-docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" || { docker logs "$name" | tail -20; echo "PostgreSQL did not initialise"; exit 1; }
+(( ready )) || { tail -20 "$tmp/postgres.log"; echo "PostgreSQL did not initialise"; exit 1; }
 dsn() { echo "postgres://$1:test-$1@127.0.0.1:$port/$2?sslmode=disable"; }
 
 run() { # module, then environment assignments

@@ -22,8 +22,9 @@ the tools come in later slices and build on it.
 - **A model can only propose.** `Propose` checks that the tool exists and that the user's current role
   may use it, validates the arguments, and stores them in canonical form with their SHA-256 and the
   identities and hashes of the chunks they drew on. It returns no token.
-- **Canonical arguments:** keys sorted, no insignificant whitespace, numbers as written. Duplicate keys
-  are refused, so that the text shown to a person and the arguments executed cannot differ by parser.
+- **Canonical arguments:** keys sorted, no insignificant whitespace, numbers as written, so `1` and
+  `1.0` differ and a call that rewrites a number is refused. Duplicate keys are refused, so that the
+  text shown to a person and the arguments executed cannot differ by parser.
   `create_ticket` allows exactly `title`, `body` and `priority`, with limits on each.
 - **A person confirms.** `Confirm` checks that the proposal is the user's own, unexpired and unconfirmed,
   and that the role still permits the tool. It returns a random 256-bit token once and stores only its
@@ -33,8 +34,18 @@ the tools come in later slices and build on it.
   was issued to this user for this tool, the arguments hash to the confirmed hash, and the role permits
   the tool now. It locks the confirmation row, marks it used and writes the audit entry. The executor
   gets back the canonical arguments, and runs those, not its own.
-- **A refusal does not use up a confirmation.** Its work is rolled back, and the refusal is logged in a
-  transaction of its own.
+- **A refusal or a failure does not use up a confirmation.** Its work is rolled back, and it is logged
+  in a transaction of its own: a refusal with its fixed reason, and a failure, such as an unreachable
+  role resolver, without its message, which may hold data.
+- **Decisions run one at a time.** Each takes the audit lock before it checks anything, so a revocation
+  cannot commit between an execution's role check and its commit. The confirmation row lock stays as
+  a second layer.
+- **Text the model chose stays out of the log.** An unknown tool is logged as `(unknown)`, and a
+  refusal's reason is a fixed phrase. What exactly was wrong, which may quote a field name the model
+  wrote, goes back to the caller only.
+- **Proposals are readable by their owner only,** so the confirmation page cannot show one user's
+  arguments to another.
+- **A result can be logged only for a proposal whose confirmation was consumed.**
 - **The audit entry is in the same transaction as the decision,** so if it cannot be written, the
   decision is rolled back and the call does not run. The outcome of a call that ran is logged after it,
   separately.
@@ -66,12 +77,14 @@ the tools come in later slices and build on it.
 - **The confirmation page must show the canonical arguments,** because those are what will run.
 - **The role resolver is called at each step,** so its answer must be current. Until the login slice
   exists, it is an interface, and the tests change roles through a fake.
-- **The audit lock serialises every decision.** One lock is simple and keeps the chain in order. It
-  would limit throughput under load, which this lab does not have.
-- **Whoever can write to the database can still rewrite the whole chain consistently.** The chain only
-  shows changes against a last hash kept somewhere else, which the off-VM copy in a later slice
-  provides. Until then it is tamper-evident only against partial changes, and against the gateway's
-  own login, which cannot change rows at all.
+- **The audit lock serialises every decision,** from its first check to its commit. One lock is simple,
+  keeps the chain in order and closes the revocation race. It would limit throughput under load, which
+  this lab does not have.
+- **Whoever can write to the database can still rewrite the whole chain consistently,** and the
+  gateway's own login, which can only append, can still append false entries that verify: the hash has
+  no key. The chain only shows changes against a last hash kept somewhere else, which the off-VM copy
+  in a later slice provides. Until then it is tamper-evident against partial changes by others, and
+  the gateway cannot change or remove what is already there.
 - **The outcome entry can be lost** if the process dies after the call ran and before the entry is
   written. The decision entry before it still shows the call was allowed.
 
@@ -104,7 +117,14 @@ from the pinned pgvector image, with the gateway schema applied, connected as `g
 | UPDATE, DELETE and TRUNCATE of the log by the gateway's login | Each refused by the database |
 | A superuser changing, removing, rehashing or renumbering a row | Each found by `Verify` |
 | Ticket text in the log | None |
+| A role resolver that fails, then one that wraps a refusal | Logged as failed, without the message, then as denied; the confirmation stayed unused |
+| An injected tool name, and field names the model wrote | Refused, told to the caller, and absent from the log |
+| Another user reading a proposal | Refused as unknown |
+| A result for an unconsumed or made-up proposal | Refused |
+| A permission revoked while an execution waits for the lock | The execution saw it and was refused |
 
 Every case above was logged, and the chain verified after each test. As controls, each check was
 removed from the code in turn: the argument hash, the used flag, the user, the role re-check, the
-expiry and the row lock. Each removal made the test for it fail.
+expiry, the decision lock and the owner check on reading a proposal. Each removal made the test for
+it fail. Removing the confirmation row lock failed nothing, because the decision lock now serialises
+executions by itself.
