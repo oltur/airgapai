@@ -37,8 +37,9 @@ and the Phase 3 gateway will wrap it.
   to one cached generic plan after a few runs. Changing the planner settings does not invalidate it,
   so without this one scan's plan could serve another, and the exact baseline could become an index
   scan.
-- **The database tests run in CI.** `make test-retrieval-db` starts a container from the pinned image,
-  with the schema read from the manifest, and fails if any database test skips.
+- **The database tests run in CI.** `make test-db` (named `make test-retrieval-db` when this ADR was
+  accepted) starts a container from the pinned image, with the schema read from the manifest, and
+  fails if any database test skips.
 - **The caller names the role.** Nothing here authenticates the caller. Mapping a user to a role is the
   gateway's job in Phase 3.
 - **Network:** the service reaches PostgreSQL and the embedding server through the rules from ADR

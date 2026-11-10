@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-retrieval-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval measure-inference measure-retrieval rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval measure-inference measure-retrieval rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -37,8 +37,8 @@ lint: ## Run ShellCheck, Ruff, go vet, go test and govulncheck
 	done
 	@echo "lint clean"
 
-test-retrieval-db: ## Run the retrieval service's database tests in a throwaway PostgreSQL container
-	@scripts/test-retrieval-db.sh
+test-db: ## Run the retrieval and gateway database tests in a throwaway PostgreSQL container
+	@scripts/test-db.sh
 
 hours: ## Regenerate docs/hours.md from session and commit activity
 	@scripts/hours.py

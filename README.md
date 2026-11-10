@@ -14,11 +14,11 @@ private, non-commercial project, written independently from public specification
 
 ## Status
 
-Phase 1 of 4, the air gap, is complete. **The claim above is not proven yet:** only its air-gap part
-has tests. The models are served in the cluster, a pinned slice of the Kubernetes documentation
-(CC BY 4.0) is ingested into a row-level secured table, and a retrieval service returns the chunks a
-named role may see. No gateway exists so far, so nothing authenticates who names the role. The
-write-up is
+Phases 1 and 2, the air gap and role-filtered retrieval, are complete. **The claim above is not
+proven yet:** the "act safely" part needs the gateway. The models are served in the cluster, a pinned
+slice of the Kubernetes documentation (CC BY 4.0) is ingested into a row-level secured table, and a
+retrieval service returns the chunks a named role may see. Of the gateway, only its approval core
+exists, as a tested library: nothing authenticates users or runs tools yet. The write-up is
 [A blocked connection proves nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
 
 | Phase | What it should demonstrate |
@@ -38,6 +38,7 @@ write-up is
 | Under row-level security, the retrieval login sees no chunk without a reader role, a technician sees only public chunks, a role set with `SET LOCAL` ends with its transaction, and the login cannot switch to a writer or owner role | `make test-rls`, part of `make rebuild` | That retrieval results respect the roles, or that the right role is chosen for a user. The database cannot require `SET LOCAL`: a plain `SET ROLE` lasts for the session, so the retrieval service must avoid it. Labels are synthetic, and the superuser can read everything. See [ADR 0012](docs/adr/0012-row-level-security-for-retrieval.md) |
 | The ingestion Job from Git fills the table with the pinned corpus, a second run writes nothing, labels follow the path rule, and each reader role sees its share. The Job's label reaches PostgreSQL and the embedding server but not the chat model, Forgejo or the registry, and another label in the namespace reaches neither | `make test-ingest`, part of `make rebuild` | That the chunks are good for retrieval, or that the labels fit the content. Other targets and other namespaces were not probed, and any pod in the namespace with the Job's label gets its network paths. See [ADR 0013](docs/adr/0013-corpus-and-ingestion.md) |
 | Through the retrieval service, the same question gets different chunks as a technician and as an engineer, no role gets nothing, unknown roles are refused, and no restricted chunk reached a technician over 24 queries, three scans and k=20. A role left on a pooled connection is refused | `make test-retrieval`, part of `make rebuild`, and the service's Go tests | That the right role is chosen for a user: the caller names it, and nothing authenticates the caller yet. Recall compares the index with an exact scan, not with what a reader needed. See [ADR 0014](docs/adr/0014-retrieval-service.md) |
+| In the gateway's approval core, a tool call runs only with an unused, unexpired confirmation issued to the same user for the same tool and canonical arguments, with a role that still permits it. Replay, altered arguments, another user's token, expiry, a revoked role and 20 concurrent uses are refused but one. Every decision, including failures, is logged in a hash chain whose existing rows the gateway's login cannot change or delete, and a failed audit write stops the call | `make test-db`, also in CI | That the user is authenticated, that the token stays out of the model's context, or that a misled user does not confirm a harmful request: those come with later slices, or stay residual risks. The gateway can still append false entries that verify, until the chain's last hash is kept off the VM. See [ADR 0015](docs/adr/0015-approval-core.md) |
 | In a single-node lab, pods reach a canary outside the cluster only with both the network policy and the VM path removed | `make test-egress`, part of `make rebuild` | That no other path exists. The canary is on the host, public targets have no open-path control, and only TCP and DNS were tested. See [ADR 0008](docs/adr/0008-egress-test-and-layer-matrix.md) |
 
 ## What Phase 1 contains
@@ -71,6 +72,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0012](docs/adr/0012-row-level-security-for-retrieval.md) | PostgreSQL, pgvector and row-level security for retrieval |
 | [0013](docs/adr/0013-corpus-and-ingestion.md) | Corpus and ingestion |
 | [0014](docs/adr/0014-retrieval-service.md) | Retrieval service, with recall per role |
+| [0015](docs/adr/0015-approval-core.md) | Approval core: proposals, confirmations and the audit log |
 
 ## Requirements
 
@@ -95,6 +97,7 @@ make setup         # check the tools and enable the git hooks
 make test-secrets  # prove the guard in a temporary repo, using generated fake values
 make check         # scan the full history
 make lint          # run ShellCheck, Ruff, go vet and govulncheck
+make test-db       # run the retrieval and gateway database tests in a PostgreSQL container, needs Docker
 ```
 
 For CI on a clean clone, `DENYLIST_OPTIONAL=1` runs the gitleaks part alone. Pull requests run these
