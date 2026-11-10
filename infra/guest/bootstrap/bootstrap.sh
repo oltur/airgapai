@@ -75,6 +75,13 @@ done
   "${kubectl[@]}" -n retrieval create secret generic postgres --from-literal=superuser="$(openssl rand -hex 24)" \
     --from-literal=ingest="$(openssl rand -hex 24)" --from-literal=retrieval="$(openssl rand -hex 24)" \
     --from-literal=gateway="$(openssl rand -hex 24)" >/dev/null
+# A Secret kept from before the gateway has no key for it, and PostgreSQL would not start without one.
+# A volume kept from then has no gateway database either: that needs a migration, as ADR 0012 says
+# of any schema change on an existing volume. A rebuild starts with neither.
+if [[ -z $("${kubectl[@]}" -n retrieval get secret postgres -o jsonpath='{.data.gateway}') ]]; then
+  "${kubectl[@]}" -n retrieval patch secret postgres --type=merge \
+    -p "{\"stringData\":{\"gateway\":\"$(openssl rand -hex 24)\"}}" >/dev/null
+fi
 
 # Tickets live in a private Forgejo organisation. Its teams are the reader roles, and the executor is
 # an owner of this organisation only, with a token scoped to issues and to reading the organisation:

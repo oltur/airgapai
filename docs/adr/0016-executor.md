@@ -19,9 +19,17 @@ Forgejo as its identity provider, so its teams are the natural source.
   back, then logs the outcome. A refusal is 403 and files nothing.
 - **Roles come from Forgejo teams, asked at every decision:** `engineers` means engineer and
   `technicians` means technician, in a private `maintenance` organisation. Leaving a team takes effect
-  on the next decision.
-- **Tickets are issues in the private `maintenance/tickets` repository.** The body is the confirmed body,
-  then the priority, the user and the proposal it came from.
+  on the next decision. The lookup runs before the decision lock, with a 10-second limit, so a slow
+  Forgejo delays only that decision. The permissions table is still read inside the lock.
+- **User names in lower case only.** Forgejo matches names without regard to case, but a confirmation
+  binds the exact string, so any other form gets no role.
+- **Tickets are issues in the private `maintenance/tickets` repository.** The body starts with the user,
+  the proposal and the priority, written by the executor, then the confirmed body, so the body cannot
+  pose as that line.
+- **Once a confirmation is consumed, the executor finishes regardless of the caller.** Filing the issue
+  and logging its outcome run on a context detached from the request, limited to 30 seconds. The
+  outcome is `succeeded`, `failed` when Forgejo answered with a refusal, or `unknown` when no answer
+  came, since the issue may then exist.
 - **The executor's Forgejo account owns that organisation only, with a token scoped to `write:issue`
   and `read:organization`.** Owner is the least that lets a member check team membership. A local
   Forgejo from the pinned image showed what the token can and cannot do; see Measurements.
@@ -55,7 +63,13 @@ Forgejo as its identity provider, so its teams are the natural source.
   just creating issues.
 - **Forgejo must be reachable for every decision.** If it is not, the decision fails and is logged as
   failed, and nothing runs.
-- **Team names are the role mapping.** Renaming a team removes the role.
+- **Team names are the role mapping.** Renaming a team removes the role. Team ids are looked up for
+  every decision, not cached, so a recreated team is never matched by an old id.
+- **A role change in Forgejo is not serialised with decisions.** A change that lands after the lookup
+  and before the commit is seen by the next decision, not this one.
+- **Bootstrap runs once on a fresh VM.** Its Forgejo steps are not written to be run again, as its
+  earlier Forgejo steps are not. A kept `postgres` Secret gets the gateway key if it lacks one, but a
+  kept volume would still lack the gateway database.
 - **`propose` and `confirm` in the executor are temporary.** They go when the gateway and its
   confirmation page take over, and the threat model must list them until then.
 - **Restricted text in a ticket.** A ticket is visible to everyone in both teams. Stopping restricted
@@ -92,7 +106,9 @@ was refused. The audit chain verified.
 `make test-db` ran the executor's tests against a fake Forgejo and passed. Five calls without a valid
 confirmation got 403 and filed nothing. The confirmed call filed one issue with the confirmed text.
 Leaving the team after confirming was refused. When Forgejo failed, the token was still used up, the
-failure was logged, and a retry was refused.
+failure was logged, and a retry was refused. A caller that went away while the issue was being filed
+did not stop it: the issue was filed and its result logged. Bound to the request instead, that test
+failed. The executor's tests also pass under Go's race detector.
 
 In the VM, on 2026-11-10, `make rebuild` passed every suite before the executor's in about 15 minutes,
 then failed two checks of `make test-executor`: carol's and bob's proposals were refused as they

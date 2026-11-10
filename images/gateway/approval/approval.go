@@ -113,12 +113,31 @@ func (s *Store) toolName(tool string) string {
 	return "(unknown)"
 }
 
-// permitted resolves the user's role now and checks it against the permissions table, in tx.
-func (s *Store) permitted(ctx context.Context, tx pgx.Tx, user, tool string) error {
+// lookup is a user's role as resolved at the start of a decision.
+type lookup struct {
+	role string
+	err  error
+}
+
+// roleTimeout bounds how long a decision waits for the role resolver.
+const roleTimeout = 10 * time.Second
+
+// lookupRole asks the resolver before the decision lock is taken, so a slow directory delays only
+// this decision, not every other one. The directory's own changes are not serialised by the lock
+// anyway; the permissions table, which is, is read inside it.
+func (s *Store) lookupRole(ctx context.Context, user string) lookup {
+	ctx, cancel := context.WithTimeout(ctx, roleTimeout)
+	defer cancel()
 	role, err := s.roles.Role(ctx, user)
-	if err != nil {
-		return err
+	return lookup{role, err}
+}
+
+// permitted checks a looked-up role against the permissions table, in tx.
+func (s *Store) permitted(ctx context.Context, tx pgx.Tx, who lookup, tool string) error {
+	if who.err != nil {
+		return who.err
 	}
+	role := who.role
 	if role == "" {
 		return &Denied{Reason: "the user has no role"}
 	}
@@ -140,7 +159,8 @@ func (s *Store) permitted(ctx context.Context, tx pgx.Tx, user, tool string) err
 //     which may hold data.
 //
 // The audit lock is taken first and held to the end, so decisions run one at a time: a Revoke cannot
-// commit between an Execute's role check and its commit.
+// commit between an Execute's permission check and its commit. The role itself is looked up before,
+// outside the lock; see lookupRole.
 func (s *Store) decide(ctx context.Context, actor, action string, f func(tx pgx.Tx, detail map[string]any) error) error {
 	detail := map[string]any{}
 	tx, err := s.pool.Begin(ctx)
@@ -206,13 +226,14 @@ func canonicalSources(sources []Source) (string, error) {
 // valid. It is the only thing a model's tool call can do.
 func (s *Store) Propose(ctx context.Context, user, tool string, rawArgs []byte, sources []Source) (Proposal, error) {
 	p := Proposal{ID: uuid.New(), User: user, Tool: tool, Sources: sources}
+	who := s.lookupRole(ctx, user)
 	err := s.decide(ctx, user, "propose", func(tx pgx.Tx, detail map[string]any) error {
 		detail["proposal"], detail["tool"] = p.ID.String(), s.toolName(tool)
 		t, ok := s.tools[tool]
 		if !ok {
 			return &Denied{Reason: "unknown tool"}
 		}
-		if err := s.permitted(ctx, tx, user, tool); err != nil {
+		if err := s.permitted(ctx, tx, who, tool); err != nil {
 			return err
 		}
 		args, decoded, err := canonicalArgs(rawArgs)
@@ -263,6 +284,7 @@ func (s *Store) Proposal(ctx context.Context, user string, id uuid.UUID) (Propos
 // from anything a model can reach. The token is returned once and only its hash is stored.
 func (s *Store) Confirm(ctx context.Context, user string, proposalID uuid.UUID) (string, error) {
 	var token string
+	who := s.lookupRole(ctx, user)
 	err := s.decide(ctx, user, "confirm", func(tx pgx.Tx, detail map[string]any) error {
 		detail["proposal"] = proposalID.String()
 		var owner, tool string
@@ -283,7 +305,7 @@ func (s *Store) Confirm(ctx context.Context, user string, proposalID uuid.UUID) 
 		case !s.now().Before(expires):
 			return &Denied{Reason: "the proposal has expired"}
 		}
-		if err := s.permitted(ctx, tx, user, tool); err != nil {
+		if err := s.permitted(ctx, tx, who, tool); err != nil {
 			return err
 		}
 		raw := make([]byte, 32)
@@ -312,6 +334,7 @@ func (s *Store) Confirm(ctx context.Context, user string, proposalID uuid.UUID) 
 // arguments, not its own.
 func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs []byte) (Execution, error) {
 	var ex Execution
+	who := s.lookupRole(ctx, user)
 	err := s.decide(ctx, user, "execute", func(tx pgx.Tx, detail map[string]any) error {
 		tokenHash := Hash(token)
 		detail["confirmation"], detail["tool"] = tokenHash[:16], s.toolName(tool)
@@ -348,7 +371,7 @@ func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs [
 		case phash != Hash(args):
 			return &Denied{Reason: "the arguments differ from the confirmed proposal"}
 		}
-		if err := s.permitted(ctx, tx, user, tool); err != nil {
+		if err := s.permitted(ctx, tx, who, tool); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, "UPDATE gateway.confirmations SET consumed_at = $1 WHERE token_sha256 = $2",

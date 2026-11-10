@@ -23,8 +23,15 @@ func newForgejo(base, token, org, repo string) *forgejo {
 	return &forgejo{base: base, token: token, org: org, repo: repo, client: &http.Client{Timeout: 15 * time.Second}}
 }
 
-// Forgejo's user names. Anything else is refused before it reaches a URL.
-var userName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$`)
+// User names, in lower case only. Forgejo matches names without regard to case, but the approval core
+// binds the exact string, so "Alice" and "alice" would be one Forgejo user and two identities. Only the
+// lower-case form gets a role. Anything else is refused before it reaches a URL.
+var userName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,39}$`)
+
+// refusedError is Forgejo answering and refusing, as opposed to no answer: then the issue does not exist.
+type refusedError struct{ status int }
+
+func (e *refusedError) Error() string { return fmt.Sprintf("Forgejo refused the issue: %d", e.status) }
 
 func (f *forgejo) do(ctx context.Context, method, path string, body any) (int, []byte, error) {
 	var r io.Reader
@@ -104,7 +111,7 @@ func (f *forgejo) createIssue(ctx context.Context, title, body string) (int64, e
 		return 0, err
 	}
 	if status != http.StatusCreated {
-		return 0, fmt.Errorf("creating the issue: %d", status)
+		return 0, &refusedError{status}
 	}
 	var issue struct {
 		Number int64 `json:"number"`

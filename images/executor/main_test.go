@@ -25,6 +25,7 @@ type fakeForgejo struct {
 	members map[string]string // user to team
 	issues  []map[string]string
 	fail    bool
+	onIssue func() // called when an issue request arrives, before it is filed
 }
 
 func (f *fakeForgejo) handler(t *testing.T) http.Handler {
@@ -48,6 +49,12 @@ func (f *fakeForgejo) handler(t *testing.T) http.Handler {
 	})
 	mux.HandleFunc("POST /api/v1/repos/maintenance/tickets/issues", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
+		hook := f.onIssue
+		f.mu.Unlock()
+		if hook != nil {
+			hook()
+		}
+		f.mu.Lock()
 		defer f.mu.Unlock()
 		if f.fail {
 			http.Error(w, "", http.StatusInternalServerError)
@@ -70,6 +77,18 @@ func (f *fakeForgejo) setTeam(user, team string) {
 	f.members[user] = team
 }
 
+func (f *fakeForgejo) setFail(fail bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fail = fail
+}
+
+func (f *fakeForgejo) issue(i int) map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.issues[i]
+}
+
 func (f *fakeForgejo) filed() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -81,7 +100,7 @@ func TestRoleFromTeams(t *testing.T) {
 	srv := httptest.NewServer(fake.handler(t))
 	defer srv.Close()
 	fj := newForgejo(srv.URL, "test-token", "maintenance", "tickets")
-	for user, want := range map[string]string{"alice": "technician", "bob": "engineer", "carol": "", "../admin": "", "a b": ""} {
+	for user, want := range map[string]string{"alice": "technician", "bob": "engineer", "carol": "", "../admin": "", "a b": "", "Alice": ""} {
 		if got, err := fj.Role(context.Background(), user); err != nil || got != want {
 			t.Errorf("%q: got %q, %v; want %q", user, got, err, want)
 		}
@@ -166,8 +185,9 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	if n := fake.filed(); n != 1 {
 		t.Fatalf("%d issues filed, want 1", n)
 	}
-	issue := fake.issues[0]
-	if issue["title"] != "Pump 3 leaks" || !strings.HasPrefix(issue["body"], "Seen at the seal.\n\n---\nPriority: high\nFiled for alice") {
+	issue := fake.issue(0)
+	if issue["title"] != "Pump 3 leaks" || !strings.HasPrefix(issue["body"], "Filed for alice after their confirmation of proposal ") ||
+		!strings.HasSuffix(issue["body"], ". Priority: high.\n\n---\n\nSeen at the seal.") {
 		t.Fatalf("the issue: %v", issue)
 	}
 
@@ -179,20 +199,34 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	}
 	fake.setTeam("alice", "technicians")
 
-	// If Forgejo fails, the confirmation is still used up and the failure is logged.
-	fake.fail = true
+	// If Forgejo refuses, the confirmation is still used up and the failure is logged.
+	fake.setFail(true)
 	if code := post(token, "alice", "create_ticket", args); code != http.StatusInternalServerError {
 		t.Fatalf("with Forgejo failing: %d", code)
 	}
-	fake.fail = false
+	fake.setFail(false)
 	if code := post(token, "alice", "create_ticket", args); code != http.StatusForbidden {
 		t.Fatalf("a retry of a consumed token: %d", code)
 	}
 	if n := fake.filed(); n != 1 {
 		t.Fatalf("%d issues filed, want 1", n)
 	}
+	// A caller that goes away after the token is consumed does not stop the call or its logging.
+	token = confirm()
+	reqCtx, cancelReq := context.WithCancel(ctx)
+	fake.mu.Lock()
+	fake.onIssue = cancelReq
+	fake.mu.Unlock()
+	number, err := s.run(reqCtx, executeRequest{Token: token, User: "alice", Tool: "create_ticket", Args: json.RawMessage(args)})
+	fake.mu.Lock()
+	fake.onIssue = nil
+	fake.mu.Unlock()
+	if err != nil || number != 2 || reqCtx.Err() == nil {
+		t.Fatalf("with the caller gone: issue %d, %v, context %v", number, err, reqCtx.Err())
+	}
+
 	var outcomes string
-	if err := admin.QueryRow(ctx, "SELECT string_agg(decision, ',' ORDER BY seq) FROM gateway.audit WHERE action = 'result'").Scan(&outcomes); err != nil || outcomes != "succeeded,failed" {
+	if err := admin.QueryRow(ctx, "SELECT string_agg(decision, ',' ORDER BY seq) FROM gateway.audit WHERE action = 'result'").Scan(&outcomes); err != nil || outcomes != "succeeded,failed,succeeded" {
 		t.Fatalf("result entries: %q, %v", outcomes, err)
 	}
 	if bad, _, err := store.VerifyAudit(ctx); err != nil || bad != 0 {

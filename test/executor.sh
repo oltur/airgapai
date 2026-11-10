@@ -80,7 +80,7 @@ result "alice's confirmed call" 200 "$(execute "$token" alice create_ticket "$ar
 number="$(json "d['issue']" </tmp/execute.out)"
 issue="$(fj GET "/repos/maintenance/tickets/issues/$number" | sed '$d')"
 result "the issue's title" "Pump 3 leaks" "$(json "d['title']" <<<"$issue")"
-result "the issue names the proposal" true "$(json "str('$proposal' in d['body'] and d['body'].startswith('Seen at the seal')).lower()" <<<"$issue")"
+result "the issue names the proposal" true "$(json "str('$proposal' in d['body'] and d['body'].startswith('Filed for alice') and d['body'].endswith('Seen at the seal during the morning round.')).lower()" <<<"$issue")"
 result "replay of the same token" 403 "$(execute "$token" alice create_ticket "$args")"
 result "exactly one new issue" "$((before + 1))" "$(issues)"
 

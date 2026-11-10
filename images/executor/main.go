@@ -39,11 +39,15 @@ type server struct {
 	forgejo *forgejo
 }
 
-// ticketBody is what the issue says: the confirmed body, then where it came from.
+// ticketBody is what the issue says: where it came from, then the confirmed body. The provenance comes
+// first, written by the executor, so text in the body cannot pose as it.
 func ticketBody(ex approval.Execution, args map[string]string) string {
-	return fmt.Sprintf("%s\n\n---\nPriority: %s\nFiled for %s after their confirmation of proposal %s.",
-		args["body"], args["priority"], ex.User, ex.ProposalID)
+	return fmt.Sprintf("Filed for %s after their confirmation of proposal %s. Priority: %s.\n\n---\n\n%s",
+		ex.User, ex.ProposalID, args["priority"], args["body"])
 }
+
+// finishTimeout bounds the work after a confirmation is consumed.
+const finishTimeout = 30 * time.Second
 
 // run executes one confirmed call. A refusal is returned as such; the token is consumed only if the
 // call is allowed, and the outcome is logged either way.
@@ -52,19 +56,32 @@ func (s *server) run(ctx context.Context, r executeRequest) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	// The token is used up now, so finish even if the caller goes away: a cancelled request must not
+	// leave a consumed confirmation with no attempt and no result.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishTimeout)
+	defer cancel()
+	record := func(outcome string, detail map[string]any) {
+		if err := s.store.RecordResult(ctx, ex, outcome, detail); err != nil {
+			log.Printf("proposal %s %s, but its result was not logged: %v", ex.ProposalID, outcome, err)
+		}
+	}
 	var args map[string]string
 	if err := json.Unmarshal([]byte(ex.Args), &args); err != nil {
-		_ = s.store.RecordResult(ctx, ex, "failed", map[string]any{"stage": "arguments"})
+		record("failed", map[string]any{"stage": "arguments"})
 		return 0, err
 	}
 	number, err := s.forgejo.createIssue(ctx, args["title"], ticketBody(ex, args))
-	if err != nil {
-		_ = s.store.RecordResult(ctx, ex, "failed", map[string]any{"stage": "forgejo"})
+	var refused *refusedError
+	switch {
+	case errors.As(err, &refused):
+		record("failed", map[string]any{"stage": "forgejo", "status": refused.status})
+		return 0, err
+	case err != nil:
+		// The request may have reached Forgejo and created the issue before the answer was lost.
+		record("unknown", map[string]any{"stage": "forgejo"})
 		return 0, err
 	}
-	if err := s.store.RecordResult(ctx, ex, "succeeded", map[string]any{"issue": number}); err != nil {
-		log.Printf("issue %d filed, but its result was not logged: %v", number, err)
-	}
+	record("succeeded", map[string]any{"issue": number})
 	return number, nil
 }
 
