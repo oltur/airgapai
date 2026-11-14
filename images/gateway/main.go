@@ -40,11 +40,14 @@ type server struct {
 	origin    string // the gateway's own origin, as the browser reaches it
 	secure    bool   // whether cookies need HTTPS
 	ticketURL string // Forgejo's issue list, as the browser reaches it
+	now       func() time.Time
 }
 
+// Cookie names are specific to the gateway. Browsers do not separate cookies by port, so in the lab
+// every service tunnelled to 127.0.0.1 shares them; see ADR 0017.
 const (
-	sessionCookie = "session"
-	loginCookie   = "login"
+	sessionCookie = "airgapai_gateway_session"
+	loginCookie   = "airgapai_gateway_login"
 )
 
 // nextPath is where a sign-in may return to: the start page or a proposal, never another site.
@@ -131,7 +134,11 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !nextPath.MatchString(next) {
 		next = "/"
 	}
-	state, p := s.sessions.begin(next)
+	state, p, ok := s.sessions.begin(next)
+	if !ok {
+		s.render(w, http.StatusServiceUnavailable, "message", page{Title: "Busy", Message: "Too many sign-ins are in progress. Try again in a few minutes."})
+		return
+	}
 	// The state is tied to this browser, so a callback started elsewhere cannot sign it in.
 	http.SetCookie(w, s.cookie(loginCookie, state, "/callback", int(loginTTL.Seconds())))
 	http.Redirect(w, r, s.auth.authorizeURL(state, p.nonce, p.verifier), http.StatusSeeOther)
@@ -158,9 +165,7 @@ func (s *server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusBadRequest, "Forgejo did not sign you in")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-	who, err := s.auth.exchange(ctx, q.Get("code"), p.verifier, p.nonce)
+	who, err := s.auth.exchange(r.Context(), q.Get("code"), p.verifier, p.nonce) // the client bounds it
 	var refused *errLogin
 	switch {
 	case errors.As(err, &refused):
@@ -261,7 +266,10 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		s.render(w, http.StatusBadGateway, "message", page{Title: "Not filed", Session: &sess,
 			Message: "The confirmation was recorded, but the executor did not report a result. Check the tickets before proposing it again."})
 	case res.denied != "":
-		s.render(w, http.StatusForbidden, "message", page{Title: "Refused at execution", Session: &sess, Message: res.denied})
+		// The executor's refusal leaves the token unused, but the proposal stays confirmed and the
+		// token is dropped here, so the call cannot be retried; see ADR 0017.
+		s.render(w, http.StatusForbidden, "message", page{Title: "Refused at execution", Session: &sess,
+			Message: res.denied + ". Nothing was filed. This proposal cannot be confirmed again: once the reason is resolved, it has to be proposed anew."})
 	default:
 		s.render(w, http.StatusOK, "filed", page{Title: "Ticket filed", Session: &sess,
 			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%d", s.ticketURL, res.issue)})
@@ -384,5 +392,6 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 		origin:    gw.Scheme + "://" + gw.Host,
 		secure:    gw.Scheme == "https",
 		ticketURL: need["FORGEJO_BROWSER_URL"] + "/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/issues",
+		now:       now,
 	}, nil
 }

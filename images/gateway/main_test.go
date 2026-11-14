@@ -300,8 +300,23 @@ func TestSignInRefusals(t *testing.T) {
 		}
 	}
 
-	// A session ends after an hour, however long the ID token lasts.
-	h.clock.advance(sessionTTL)
+	// A sign-in left unfinished expires, and a session ends after an hour, however long the ID token
+	// lasts. Each expiry is crossed less than a minute after a prune, so the entry's own check is what
+	// ends it.
+	late := h.browser()
+	start = late.get("/login")
+	code, state = h.forgejo.signIn(t, start.location, "alice", nil)
+	h.clock.advance(loginTTL - time.Second)
+	b.get("/")
+	h.clock.advance(2 * time.Second)
+	if got := late.get("/callback?" + url.Values{"code": {code}, "state": {state}}.Encode()); got.status != http.StatusBadRequest {
+		t.Errorf("an expired sign-in: %d", got.status)
+	}
+	h.clock.advance(sessionTTL - loginTTL - 2*time.Second)
+	if home := b.get("/"); strings.Contains(home.body, "Sign in with Forgejo") {
+		t.Fatal("the session ended before its hour")
+	}
+	h.clock.advance(2 * time.Second)
 	if home := b.get("/"); !strings.Contains(home.body, "Sign in with Forgejo") {
 		t.Error("a session outlived its hour")
 	}
@@ -324,15 +339,61 @@ func TestPageHeaders(t *testing.T) {
 
 func TestVisible(t *testing.T) {
 	for in, want := range map[string]string{
-		"plain\ttext\n":   "plain\ttext\n",
-		"evil‮gnp.exe":    "evil⟨U+202E⟩gnp.exe",
-		"zero​width":      "zero⟨U+200B⟩width",
-		"bell\a":          "bell⟨U+0007⟩",
-		"Grüße, ключ, 漢字": "Grüße, ключ, 漢字",
+		"plain\ttext\n":        "plain\ttext\n",
+		"evil\u202Egnp.exe":    "evil⟨U+202E⟩gnp.exe",
+		"zero\u200Bwidth":      "zero⟨U+200B⟩width",
+		"bell\a":               "bell⟨U+0007⟩",
+		"vs\uFE0F\U000E0100":   "vs⟨U+FE0F⟩⟨U+E0100⟩",
+		"tag\U000E0041":        "tag⟨U+E0041⟩",
+		"line\u2028para\u2029": "line⟨U+2028⟩para⟨U+2029⟩",
+		"fill\u3164\u115F":     "fill⟨U+3164⟩⟨U+115F⟩",
+		"private\uE000":        "private⟨U+E000⟩",
+		"unassigned\U0010FFFF": "unassigned⟨U+10FFFF⟩",
+		"bad\uFFFD":            "bad⟨U+FFFD⟩",
+		"nbsp\u00A0space":      "nbsp\u00A0space",
+		"Grüße, ключ, 漢字":      "Grüße, ключ, 漢字",
 	} {
 		if got := visible(in); got != want {
 			t.Errorf("visible(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Values that are not strings are shown exactly as the canonical text holds them.
+func TestViewShowsRawValues(t *testing.T) {
+	s := &server{now: time.Now}
+	v, err := s.view(approval.Proposal{Tool: "other", Args: `{"n":12345678901234567890,"f":1.0,"o":{"a":"<&>"},"s":"text"}`}, session{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, f := range v.Proposal.Fields {
+		got[f.Name] = f.Value
+	}
+	want := map[string]string{"n": "12345678901234567890", "f": "1.0", "o": `{"a":"<&>"}`, "s": "text"}
+	for k, w := range want {
+		if got[k] != w {
+			t.Errorf("%s: shown as %q, want %q", k, got[k], w)
+		}
+	}
+}
+
+// Sign-ins in progress are bounded, so starting them cannot fill memory.
+func TestPendingSignInsAreBounded(t *testing.T) {
+	h := newHarness(t, nil)
+	b := h.browser()
+	for i := 0; i < maxPending; i++ {
+		if got := b.get("/login"); got.status != http.StatusSeeOther {
+			t.Fatalf("sign-in %d: %d", i, got.status)
+		}
+	}
+	if got := b.get("/login"); got.status != http.StatusServiceUnavailable {
+		t.Errorf("one more than the bound: %d", got.status)
+	}
+	// Expired ones are pruned, and then there is room again.
+	h.clock.advance(loginTTL + time.Minute)
+	if got := b.get("/login"); got.status != http.StatusSeeOther {
+		t.Errorf("after expiry: %d", got.status)
 	}
 }
 
@@ -385,7 +446,7 @@ func TestConfirmationPage(t *testing.T) {
 		}
 		return p
 	}
-	p := propose("alice", `{"title":"Pump 3 leaks","body":"<script>alert(1)</script> evil‮txt.exe","priority":"high"}`)
+	p := propose("alice", `{"title":"Pump 3 leaks","body":"<script>alert(1)</script> evil\u202Etxt.exe","priority":"high"}`)
 	path := "/proposals/" + p.ID.String()
 
 	alice := h.browser()

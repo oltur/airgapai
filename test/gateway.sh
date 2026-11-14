@@ -99,7 +99,7 @@ for _ in $(seq 30); do
 done
 
 # The model's text, with markup and a right-to-left override, as a compromised model might write it.
-body=$'Seen at the seal. <script>alert(1)</script> Invoice evil‮txt.exe'
+body=$'Seen at the seal. <script>alert(1)</script> Invoice evil\u202etxt.exe, tagged\U000E0041'
 args() { python3 -c 'import json,sys; print(json.dumps({"title": sys.argv[1], "body": sys.argv[2], "priority": "high"}))' "$1" "$2"; }
 propose() { cli propose alice create_ticket "$(args "$1" "$body")" | json "d['proposal']"; }
 proposal="$(propose "Pump 4 leaks")"
@@ -124,6 +124,7 @@ result "each argument marked as the model's" 3 "$(shown alice 'written by the mo
 result "the model's markup escaped" 1 "$(shown alice '&lt;script&gt;alert(1)&lt;/script&gt;')"
 result "no markup from the model" 0 "$(shown alice '<script>')"
 result "the right-to-left override shown as a code point" 1 "$(shown alice 'evil⟨U&#43;202E⟩txt.exe')"
+result "and an invisible tag character" 1 "$(shown alice 'tagged⟨U&#43;E0041⟩')"
 result "bob signs in" "303 /" "$(browse bob signin / "${passwords[bob]}")"
 result "bob cannot see alice's proposal" 404 "$(browse bob get "$path")"
 result "nor any of its text" 0 "$(shown bob 'Pump 4 leaks')"
@@ -140,7 +141,7 @@ number="$(grep -o 'ticket #[0-9]*' /tmp/gateway-test-alice.html | tr -dc 0-9)"
 issue="$(fj GET "/repos/maintenance/tickets/issues/${number:-0}" | sed '$d')"
 result "the ticket has the stored title" "Pump 4 leaks" "$(json "d.get('title')" <<<"$issue")"
 result "and names alice and the proposal, then the confirmed body" true \
-  "$(json "str(d['body'].startswith('Filed for alice after their confirmation of proposal $proposal') and d['body'].endswith('evil‮txt.exe')).lower()" <<<"$issue")"
+  "$(json "str(d['body'].startswith('Filed for alice after their confirmation of proposal $proposal') and d['body'].endswith('evil\u202etxt.exe, tagged\U000E0041')).lower()" <<<"$issue")"
 result "exactly one new issue" "$((before + 1))" "$(issues)"
 result "a second confirmation" 403 "$(browse alice post "$path/confirm" genuine)"
 result "is refused as already confirmed" 1 "$(shown alice 'already confirmed')"

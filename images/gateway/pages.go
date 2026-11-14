@@ -45,7 +45,9 @@ type proposalView struct {
 var fieldOrder = map[string][]string{"create_ticket": {"title", "priority", "body"}}
 
 func (s *server) view(p approval.Proposal, sess session) (page, error) {
-	var args map[string]any
+	// Raw values, so a number or an object is shown exactly as the canonical text holds it, and so as
+	// it will be filed, not as Go would re-encode it.
+	var args map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(p.Args), &args); err != nil {
 		return page{}, err
 	}
@@ -66,34 +68,42 @@ func (s *server) view(p approval.Proposal, sess session) (page, error) {
 		return ia - ib
 	})
 	v := &proposalView{ID: p.ID.String(), Tool: p.Tool, ArgsSHA256: p.ArgsSHA256, Sources: p.Sources,
-		Expires: p.ExpiresAt.UTC().Format(time.RFC3339), Expired: !s.sessions.now().Before(p.ExpiresAt)}
+		Expires: p.ExpiresAt.UTC().Format(time.RFC3339), Expired: !s.now().Before(p.ExpiresAt)}
 	for _, k := range names {
-		value, ok := args[k].(string)
-		if !ok {
-			raw, err := json.Marshal(args[k])
-			if err != nil {
-				return page{}, err
-			}
-			value = string(raw)
+		value := string(args[k])
+		var text string
+		if json.Unmarshal(args[k], &text) == nil {
+			value = text
 		}
 		v.Fields = append(v.Fields, field{k, value})
 	}
 	return page{Title: "Confirm a proposal", Session: &sess, Proposal: v}, nil
 }
 
-// visible shows characters that would otherwise hide or reorder text, such as bidirectional overrides
-// and zero-width spaces, as their code points, so what the page shows is what will be filed. Newlines
-// and tabs are kept as they are.
+// visible shows characters that would otherwise hide, disguise or reorder text as their code points,
+// so the user reads every character that will be filed. Newlines and tabs are kept. Shown are:
+// controls and format characters, such as bidirectional overrides, zero-width spaces and tag
+// characters; variation selectors; other default-ignorable characters, such as Hangul fillers; line
+// and paragraph separators; private-use and unassigned code points; and the replacement character.
+// Lookalike letters from other scripts are visible characters and are not flagged.
 func visible(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		if r == '\n' || r == '\t' || !(unicode.Is(unicode.Cf, r) || unicode.IsControl(r) || r == unicode.ReplacementChar) {
+		if r == '\n' || r == '\t' || !hidden(r) {
 			b.WriteRune(r)
 			continue
 		}
 		fmt.Fprintf(&b, "⟨U+%04X⟩", r)
 	}
 	return b.String()
+}
+
+// hidden: anything Go does not count as graphic, which takes in controls, format characters,
+// separators other than the space, private-use, surrogate and unassigned code points; and the graphic
+// ones that render as nothing or as a stand-in.
+func hidden(r rune) bool {
+	return !unicode.IsGraphic(r) || unicode.In(r, unicode.Variation_Selector, unicode.Other_Default_Ignorable_Code_Point) ||
+		r == unicode.ReplacementChar
 }
 
 var templates = template.Must(template.New("").Funcs(template.FuncMap{"visible": visible}).Parse(`

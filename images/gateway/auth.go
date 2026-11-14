@@ -160,20 +160,30 @@ const (
 	loginTTL   = 10 * time.Minute
 )
 
+// maxPending bounds the sign-ins in progress. Anyone who can reach the gateway can start one, so
+// without a bound they could fill its memory.
+const maxPending = 1000
+
 type sessions struct {
-	mu       sync.Mutex
-	active   map[string]*session // by cookie value
-	starting map[string]pending  // by state
-	now      func() time.Time
+	mu        sync.Mutex
+	active    map[string]*session // by cookie value
+	starting  map[string]pending  // by state
+	now       func() time.Time
+	lastPrune time.Time
 }
 
 func newSessions(now func() time.Time) *sessions {
 	return &sessions{active: map[string]*session{}, starting: map[string]pending{}, now: now}
 }
 
-// prune drops what has expired. Called with mu held.
+// prune drops what has expired, at most once a minute, so a request does not walk every entry. Each
+// lookup checks its own entry's expiry, so pruning only frees memory. Called with mu held.
 func (s *sessions) prune() {
 	now := s.now()
+	if now.Sub(s.lastPrune) < time.Minute {
+		return
+	}
+	s.lastPrune = now
 	for k, v := range s.active {
 		if !now.Before(v.expires) {
 			delete(s.active, k)
@@ -186,15 +196,18 @@ func (s *sessions) prune() {
 	}
 }
 
-// begin records a new sign-in and returns its state.
-func (s *sessions) begin(next string) (state string, p pending) {
+// begin records a new sign-in and returns its state, or false if too many are in progress.
+func (s *sessions) begin(next string) (state string, p pending, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.prune()
+	if len(s.starting) >= maxPending {
+		return "", pending{}, false
+	}
 	state = random()
 	p = pending{verifier: random(), nonce: random(), next: next, expires: s.now().Add(loginTTL)}
 	s.starting[state] = p
-	return state, p
+	return state, p, true
 }
 
 // finish takes a sign-in out, so that each state works once.
@@ -204,7 +217,10 @@ func (s *sessions) finish(state string) (pending, bool) {
 	s.prune()
 	p, ok := s.starting[state]
 	delete(s.starting, state)
-	return p, ok
+	if !ok || !s.now().Before(p.expires) {
+		return pending{}, false
+	}
+	return p, true
 }
 
 // start creates a session for who and returns its cookie value.
@@ -225,7 +241,8 @@ func (s *sessions) get(id string) (session, bool) {
 	defer s.mu.Unlock()
 	s.prune()
 	v, ok := s.active[id]
-	if !ok {
+	if !ok || !s.now().Before(v.expires) {
+		delete(s.active, id)
 		return session{}, false
 	}
 	return *v, true
