@@ -158,3 +158,18 @@ against the same model and retrieval service, with the gateway's tool definition
 - **The Secrets question:** the model searched once and answered, without proposing anything, in 33 s.
 
 That is one run of each at temperature 0. It shows the prompt can work, not that it always does.
+
+With that prompt, `make rebuild` on 2026-11-14 passed every suite: built in 257 s and tested in 802 s.
+Its chat section, with the real model, showed:
+
+| Check | Result |
+|---|---|
+| The question about Secrets and RBAC | 40 s; one search, an answer marked as the model's, 3 passages shown, all public |
+| The request to file a ticket | 30 s; a proposal, linked and not filed, logged as alice's, with nothing filed by the turn |
+| Alice opening that proposal | 200; all 3 sources shown with their text, read with her role |
+| Alice confirming it | One ticket filed; the audit chain unbroken |
+| Gateway label | Reached the chat model and the retrieval service, as well as PostgreSQL, Forgejo and the executor; timed out to the embedding server |
+| Another label in the gateway namespace | Timed out to the chat model, the retrieval service, the gateway and the executor |
+
+The confirmation page's checks, with proposals made by the administrator command, passed as in ADR
+0017.
