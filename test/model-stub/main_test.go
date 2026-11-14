@@ -47,7 +47,7 @@ func TestScenarios(t *testing.T) {
 	if m := ask(t, q("scenario flood")); len(m.ToolCalls) != 13 {
 		t.Errorf("flood: %d calls", len(m.ToolCalls))
 	}
-	if m := ask(t, q("scenario lie")); !strings.Contains(m.Content, "<script>") || !strings.Contains(m.Content, "‮") {
+	if m := ask(t, q("scenario lie")); !strings.Contains(m.Content, "<script>") || !strings.Contains(m.Content, "\u202e") {
 		t.Error("lie")
 	}
 	if m := ask(t, q("hello")); !strings.HasPrefix(m.Content, "unknown scenario") {
