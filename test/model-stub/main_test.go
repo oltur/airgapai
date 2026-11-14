@@ -47,8 +47,12 @@ func TestScenarios(t *testing.T) {
 	if m := ask(t, q("scenario flood")); len(m.ToolCalls) != 13 {
 		t.Errorf("flood: %d calls", len(m.ToolCalls))
 	}
-	if m := ask(t, q("scenario lie")); !strings.Contains(m.Content, "<script>") || !strings.Contains(m.Content, "\u202e") {
-		t.Error("lie")
+	if m := ask(t, q("scenario lie")); len(m.ToolCalls) != 1 || m.ToolCalls[0].Function.Name != "search_manuals" {
+		t.Error("lie does not search first")
+	}
+	if m := ask(t, append(q("scenario lie"), message{Role: "assistant"}, message{Role: "tool"})); !strings.Contains(m.Content, "<script>") ||
+		!strings.Contains(m.Content, "\u202e") || !strings.Contains(m.Content, "[1]") {
+		t.Error("lie's answer")
 	}
 	if m := ask(t, q("hello")); !strings.HasPrefix(m.Content, "unknown scenario") {
 		t.Error("no scenario")

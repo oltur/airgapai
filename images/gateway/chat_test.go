@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -54,6 +55,31 @@ func chatDatabase(t *testing.T) *pgxpool.Pool {
 }
 
 var proposalLink = regexp.MustCompile(`/proposals/([0-9a-f-]{36})`)
+
+func TestCited(t *testing.T) {
+	for _, c := range []struct {
+		answer   string
+		passages int
+		cites    []int
+		withheld string
+	}{
+		{"The seal leaks [1].", 2, []int{1}, ""},
+		{"See [2] and [1], and [1, 2] again.", 2, []int{1, 2}, ""},
+		{"Both say so [1,2].", 3, []int{1, 2}, ""},
+		{"It is Paris.", 3, nil, "it cites no passage from the manuals"},
+		{"The manuals do not answer this.", 0, nil, "it cites no passage from the manuals"},
+		{"As [4] says.", 3, nil, "it cites passage 4, which this turn did not find"},
+		{"As [0] says.", 3, nil, "it cites passage 0, which this turn did not find"},
+		{"Real [1] and made up [1, 9].", 3, nil, "it cites passage 9, which this turn did not find"},
+		{"Made up [1] with nothing found.", 0, nil, "it cites passage 1, which this turn did not find"},
+		{"Not a citation: [a], [], [1.5].", 3, nil, "it cites no passage from the manuals"},
+	} {
+		cites, withheld := cited(c.answer, c.passages)
+		if withheld != c.withheld || !slices.Equal(cites, c.cites) {
+			t.Errorf("%q with %d passages: %v, %q; want %v, %q", c.answer, c.passages, cites, withheld, c.cites, c.withheld)
+		}
+	}
+}
 
 // A whole turn against the test database, a scripted model and a fake retrieval service.
 func TestChatTurn(t *testing.T) {
@@ -138,6 +164,23 @@ func TestChatTurn(t *testing.T) {
 	}
 	if n := len(h.executor.calls()); n != 0 {
 		t.Errorf("a chat turn reached the executor %d times", n)
+	}
+
+	// The answer cited passage 1, so the page lists what it cites.
+	if !strings.Contains(got.body, "It cites passages [1], listed below.") {
+		t.Error("the page does not list the answer's citations")
+	}
+	// An answer that cites nothing, or a passage the turn did not find, is withheld, not shown.
+	for _, c := range []struct{ answer, why string }{
+		{"Paris, from what I know. <b>trust me</b>", "cites no passage"},
+		{"As passage [7] says.", "cites passage 7, which this turn did not find"},
+	} {
+		h.model.script(call("search_manuals", `{"query":"seal"}`), reply(c.answer))
+		got := ask(alice, "Uncited.", csrfToken)
+		if !strings.Contains(got.body, "No answer is shown,") || !strings.Contains(got.body, c.why) ||
+			strings.Contains(got.body, "trust me") || strings.Contains(got.body, "As passage") {
+			t.Errorf("an answer that %s was shown: %s", c.why, got.body)
+		}
 	}
 
 	// The model is stopped after maxSteps calls that only call tools. The third search is over the

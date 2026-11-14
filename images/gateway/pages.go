@@ -182,7 +182,10 @@ button{font:inherit;padding:.5rem 1rem;cursor:pointer}.confirm{background:#14532
 {{range .Steps}}{{if eq .Kind "search"}}<p class="note">Searched the manuals for “{{visible .Query}}”: {{.Found}} passages.</p>
 {{else if eq .Kind "proposal"}}<p><strong>A ticket was proposed, not filed.</strong> <a href="/proposals/{{.Proposal}}">Review and confirm it</a>.</p>
 {{else}}<p class="note">A tool call was refused: {{.Reason}}</p>{{end}}{{end}}
-{{if .Answer}}<div class="model"><div class="tag">answer · written by the model</div><pre>{{visible .Answer}}</pre></div>{{end}}
+{{if .Answer}}<div class="model"><div class="tag">answer · written by the model</div><pre>{{visible .Answer}}</pre></div>
+<p class="note">It cites passages {{range $i, $n := .Cites}}{{if $i}}, {{end}}[{{$n}}]{{end}}, listed below.</p>{{end}}
+{{with .Withheld}}<p><strong>No answer is shown,</strong> because the model's reply {{.}}. Answers here must cite the passages found.
+Either the manuals do not answer this, or the model answered without them.</p>{{end}}
 {{if .Stopped}}<p><strong>The model kept calling tools without answering, and was stopped.</strong></p>{{end}}
 {{if .Sources}}<h2>Passages found</h2><ol>{{range .Sources}}<li>{{.Path}}, chunk {{.ChunkIndex}}, {{.Classification}}</li>{{end}}</ol>{{end}}
 {{end}}

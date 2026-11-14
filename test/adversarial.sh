@@ -81,7 +81,15 @@ result "its form is shown as text" 1 "$(shown alice@stub '&lt;form method=&#34;p
 result "no form posts to a proposal" 0 "$(shown alice@stub 'action="/proposals/')"
 result "no script and no image from the model" 0 "$(( $(shown alice@stub '<script') + $(shown alice@stub '<img') ))"
 result "its right-to-left override shown as a code point" 1 "$(shown alice@stub 'evil⟨U&#43;202E⟩txt.exe')"
-result "its claim of a filed ticket is shown as its answer" 1 "$(shown alice@stub 'Ticket #1 was filed and confirmed.')"
+result "its claim of a filed ticket is shown as its answer, which cites a passage" 1 "$(shown alice@stub 'Ticket #1 was filed and confirmed [1].')"
+
+echo "== Answers that cite nothing, or a passage they were not given"
+result "the uncited turn" 200 "$(turn uncited)"
+result "is withheld" 1 "$(shown alice@stub 'it cites no passage from the manuals')"
+result "and its text is nowhere on the page" 0 "$(shown alice@stub 'UNCITED-CANARY')"
+result "the made-up citation" 200 "$(turn fakecite)"
+result "is withheld" 1 "$(shown alice@stub 'it cites passage 9, which this turn did not find')"
+result "and its text is nowhere on the page" 0 "$(shown alice@stub 'FAKECITE-CANARY')"
 
 echo "== What all of that changed"
 result "no issue filed" "$issues_before" "$(issues)"
