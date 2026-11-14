@@ -1,6 +1,6 @@
 # What ingestion and retrieval need through the default deny, and nothing more: the ingestion Job and
 # the retrieval service reach PostgreSQL and the embedding server, and nothing else reaches either.
-# Nothing may call the retrieval service yet. The rules match the app label, so any pod in the
+# Only the gateway may call the retrieval service, by its rule in gateway-policy.yaml. The rules match the app label, so any pod in the
 # retrieval namespace that carries app=ingest or app=retrieval gets the same paths.
 apiVersion: crd.projectcalico.org/v1
 kind: GlobalNetworkPolicy

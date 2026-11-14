@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -138,17 +139,129 @@ func (e *fakeExecutor) calls() []map[string]any {
 	return append([]map[string]any(nil), e.requests...)
 }
 
+// fakeModel answers each chat request with the next scripted reply, and records the requests.
+type fakeModel struct {
+	mu       sync.Mutex
+	replies  []string // the message object of each reply, as JSON
+	requests []map[string]any
+	fail     bool
+}
+
+func (m *fakeModel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var req map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	m.requests = append(m.requests, req)
+	if m.fail || len(m.replies) == 0 {
+		http.Error(w, "no reply scripted", http.StatusInternalServerError)
+		return
+	}
+	reply := m.replies[0]
+	m.replies = m.replies[1:]
+	_, _ = io.WriteString(w, `{"choices":[{"message":`+reply+`}]}`)
+}
+
+func (m *fakeModel) script(replies ...string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.replies, m.requests = replies, nil
+}
+
+func (m *fakeModel) seen() []map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]map[string]any(nil), m.requests...)
+}
+
+// call is a scripted assistant message that calls one tool.
+func call(name, args string) string {
+	raw, _ := json.Marshal(map[string]any{"role": "assistant", "content": "", "tool_calls": []map[string]any{
+		{"id": "call-" + name, "type": "function", "function": map[string]string{"name": name, "arguments": args}}}})
+	return string(raw)
+}
+
+func reply(text string) string {
+	raw, _ := json.Marshal(map[string]string{"role": "assistant", "content": text})
+	return string(raw)
+}
+
+// fakeRetrieval serves /search and /chunks over three chunks, one restricted, filtering by role as
+// the database would, and records the roles it was asked for.
+type fakeRetrieval struct {
+	mu    sync.Mutex
+	roles []string
+}
+
+var fakeCorpus = []map[string]any{
+	{"path": "pumps.md", "chunk_index": 0, "classification": "public", "content": "Check the seal for leaks.", "content_sha256": "h0"},
+	{"path": "pumps.md", "chunk_index": 1, "classification": "public", "content": "Replace the seal <b>yearly</b>.", "content_sha256": "h1"},
+	{"path": "secrets.md", "chunk_index": 0, "classification": "restricted", "content": "Restricted procedure.", "content_sha256": "h2"},
+}
+
+func (f *fakeRetrieval) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Role   string           `json:"role"`
+		Chunks []map[string]any `json:"chunks"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	f.mu.Lock()
+	f.roles = append(f.roles, req.Role)
+	f.mu.Unlock()
+	readable := func(c map[string]any) bool { return c["classification"] == "public" || req.Role == "engineer" }
+	switch r.URL.Path {
+	case "/search":
+		out := []map[string]any{}
+		for _, c := range fakeCorpus {
+			if readable(c) {
+				out = append(out, c)
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": out})
+	case "/chunks":
+		out := []map[string]any{}
+		for _, want := range req.Chunks {
+			got := map[string]any{"path": want["path"], "chunk_index": want["chunk_index"], "found": false}
+			for _, c := range fakeCorpus {
+				// JSON numbers decode as float64, so compare indexes as text.
+				if c["path"] == want["path"] && fmt.Sprint(c["chunk_index"]) == fmt.Sprint(want["chunk_index"]) &&
+					c["content_sha256"] == want["content_sha256"] && readable(c) {
+					got["found"], got["classification"], got["content"] = true, c["classification"], c["content"]
+				}
+			}
+			out = append(out, got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"chunks": out})
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (f *fakeRetrieval) asked() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.roles...)
+}
+
 type harness struct {
 	t        *testing.T
+	model    *fakeModel
+	search   *fakeRetrieval
 	gateway  *httptest.Server
 	forgejo  *fakeForgejo
 	executor *fakeExecutor
 	clock    *clock
 	store    *approval.Store
+	server   *server
 }
 
 func newHarness(t *testing.T, pool *pgxpool.Pool) *harness {
-	h := &harness{t: t, forgejo: &fakeForgejo{codes: map[string]grant{}}, executor: &fakeExecutor{status: 200, answer: `{"issue":7}`}, clock: &clock{}}
+	h := &harness{t: t, forgejo: &fakeForgejo{codes: map[string]grant{}}, executor: &fakeExecutor{status: 200, answer: `{"issue":7}`},
+		clock: &clock{}, model: &fakeModel{}, search: &fakeRetrieval{}}
+	msrv := httptest.NewServer(h.model)
+	t.Cleanup(msrv.Close)
+	rsrv := httptest.NewServer(h.search)
+	t.Cleanup(rsrv.Close)
 	fsrv := httptest.NewServer(h.forgejo.handler(t))
 	t.Cleanup(fsrv.Close)
 	h.forgejo.url = fsrv.URL
@@ -159,15 +272,20 @@ func newHarness(t *testing.T, pool *pgxpool.Pool) *harness {
 	h.gateway = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.routes().ServeHTTP(w, r) }))
 	t.Cleanup(h.gateway.Close)
 	env := map[string]string{"GATEWAY_URL": h.gateway.URL, "FORGEJO_URL": fsrv.URL, "FORGEJO_BROWSER_URL": fsrv.URL,
-		"EXECUTOR_URL": esrv.URL, "OAUTH_CLIENT_ID": "client", "OAUTH_CLIENT_SECRET": "secret"}
+		"EXECUTOR_URL": esrv.URL, "CHAT_URL": msrv.URL, "RETRIEVAL_URL": rsrv.URL, "OAUTH_CLIENT_ID": "client", "OAUTH_CLIENT_SECRET": "secret"}
 	var err error
 	s, err = newServer(pool, func(k string) string { return env[k] }, h.clock.now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	h.store = s.store
+	h.server = s
 	return h
 }
+
+// chatBusy and chatFree hold and release the one-turn slot, as a running turn would.
+func (h *harness) chatBusy() { h.server.chat.busy <- struct{}{} }
+func (h *harness) chatFree() { <-h.server.chat.busy }
 
 // browser is one user's browser: its own cookies, and redirects shown rather than followed.
 type browser struct {

@@ -1,9 +1,9 @@
-// Gateway is where a person signs in and confirms what a model proposed. It signs users in through
+// Gateway is where a person signs in, asks the model, and confirms what it proposed. It signs users in through
 // Forgejo, shows a proposal built from its stored canonical arguments rather than from anything a
 // model wrote about it, and on confirmation hands the one-time token straight to the executor. The
 // token is never sent to the browser, and nothing a model can reach ever sees it. See ADR 0017.
 //
-// It serves the pages below, and GET /ready. The browser reaches it through kubectl port-forward;
+// It serves the pages below, and GET /ready. The chat loop is in chat.go. The browser reaches it through kubectl port-forward;
 // nothing in the cluster may call it yet.
 package main
 
@@ -37,9 +37,11 @@ type server struct {
 	auth      *oidc
 	sessions  *sessions
 	executor  *executor
-	origin    string // the gateway's own origin, as the browser reaches it
-	secure    bool   // whether cookies need HTTPS
-	ticketURL string // Forgejo's issue list, as the browser reaches it
+	chat      *chatter
+	retrieval *retrieval // for the confirmation page's source text
+	origin    string     // the gateway's own origin, as the browser reaches it
+	secure    bool       // whether cookies need HTTPS
+	ticketURL string     // Forgejo's issue list, as the browser reaches it
 	now       func() time.Time
 }
 
@@ -51,7 +53,7 @@ const (
 )
 
 // nextPath is where a sign-in may return to: the start page or a proposal, never another site.
-var nextPath = regexp.MustCompile(`^/(proposals/[0-9a-f-]{36})?$`)
+var nextPath = regexp.MustCompile(`^/(chat|proposals/[0-9a-f-]{36})?$`)
 
 // headers apply to every answer: no scripts, no framing, forms only to this origin, no referrer,
 // which would carry proposal IDs and sign-in codes to Forgejo, and no caching.
@@ -72,6 +74,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /login", s.handleLogin)
 	mux.HandleFunc("GET /callback", s.handleCallback)
 	mux.HandleFunc("POST /logout", s.handleLogout)
+	mux.HandleFunc("GET /chat", s.handleChatPage)
+	mux.HandleFunc("POST /chat", s.handleChat)
 	mux.HandleFunc("GET /proposals/{id}", s.handleProposal)
 	mux.HandleFunc("POST /proposals/{id}/confirm", s.handleConfirm)
 	mux.HandleFunc("GET /ready", s.handleReady)
@@ -107,12 +111,17 @@ func (s *server) sameOrigin(r *http.Request) bool {
 
 // checkForm is the guard on every POST: a live session, this origin, and the session's CSRF token.
 func (s *server) checkForm(w http.ResponseWriter, r *http.Request) (string, session, bool) {
+	return s.checkFormUpTo(w, r, 4<<10)
+}
+
+// checkFormUpTo is checkForm for a form of up to limit bytes.
+func (s *server) checkFormUpTo(w http.ResponseWriter, r *http.Request, limit int64) (string, session, bool) {
 	id, sess, ok := s.current(r)
 	if !ok {
 		s.render(w, http.StatusUnauthorized, "message", page{Title: "Not signed in", Message: "Your session has ended. Sign in and open the proposal again."})
 		return "", session{}, false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if !s.sameOrigin(r) || subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(sess.csrf)) != 1 {
 		s.render(w, http.StatusForbidden, "message", page{Title: "Refused", Message: "This form did not come from this page."})
 		return "", session{}, false
@@ -225,6 +234,9 @@ func (s *server) handleProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := s.view(p, sess)
+	if err == nil {
+		s.sourceText(r.Context(), v.Proposal, sess, p.Sources)
+	}
 	if err != nil {
 		log.Printf("rendering proposal %s: %v", p.ID, err)
 		s.render(w, http.StatusInternalServerError, "message", page{Title: "Error", Message: "The proposal could not be shown."})
@@ -274,6 +286,44 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		s.render(w, http.StatusOK, "filed", page{Title: "Ticket filed", Session: &sess,
 			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%d", s.ticketURL, res.issue)})
 	}
+}
+
+func (s *server) handleChatPage(w http.ResponseWriter, r *http.Request) {
+	_, sess, ok := s.current(r)
+	if !ok {
+		http.Redirect(w, r, "/login?next=%2Fchat", http.StatusSeeOther)
+		return
+	}
+	s.render(w, http.StatusOK, "chat", page{Title: "Ask the manuals", Session: &sess})
+}
+
+func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
+	// A question of maxQuestion characters, each up to 4 bytes and 12 once form-encoded, and the token.
+	_, sess, ok := s.checkFormUpTo(w, r, 12*maxQuestion+1<<10)
+	if !ok {
+		return
+	}
+	question := strings.TrimSpace(r.PostFormValue("question"))
+	if question == "" || len([]rune(question)) > maxQuestion {
+		s.render(w, http.StatusBadRequest, "chat", page{Title: "Ask the manuals", Session: &sess,
+			Message: fmt.Sprintf("A question needs 1 to %d characters.", maxQuestion)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), turnTimeout)
+	defer cancel()
+	t, err := s.chat.chat(ctx, sess, question)
+	if errors.Is(err, errBusy) {
+		s.render(w, http.StatusServiceUnavailable, "chat", page{Title: "Ask the manuals", Session: &sess,
+			Message: "The model is answering another question. Try again when it has finished."})
+		return
+	}
+	if err != nil {
+		log.Printf("chat: %v", err)
+		s.render(w, http.StatusBadGateway, "chat", page{Title: "Ask the manuals", Session: &sess, Turn: &t,
+			Message: "The model did not answer. Any proposal made before that is listed below."})
+		return
+	}
+	s.render(w, http.StatusOK, "chat", page{Title: "Ask the manuals", Session: &sess, Turn: &t})
 }
 
 func (s *server) handleReady(w http.ResponseWriter, r *http.Request) {
@@ -344,7 +394,7 @@ func main() {
 		log.Fatal(err)
 	}
 	srv := &http.Server{Addr: *addr, Handler: s.routes(), ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout: 10 * time.Second, WriteTimeout: confirmTimeout + 10*time.Second}
+		ReadTimeout: 10 * time.Second, WriteTimeout: turnTimeout + 10*time.Second}
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, os.Interrupt)
 	defer stop()
 	go func() {
@@ -362,7 +412,8 @@ func main() {
 // newServer reads its settings from env. Every URL is required, so a missing one fails at start.
 func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time) (*server, error) {
 	need := map[string]string{}
-	for _, k := range []string{"GATEWAY_URL", "FORGEJO_URL", "FORGEJO_BROWSER_URL", "EXECUTOR_URL", "OAUTH_CLIENT_ID", "OAUTH_CLIENT_SECRET"} {
+	for _, k := range []string{"GATEWAY_URL", "FORGEJO_URL", "FORGEJO_BROWSER_URL", "EXECUTOR_URL", "CHAT_URL", "RETRIEVAL_URL",
+		"OAUTH_CLIENT_ID", "OAUTH_CLIENT_SECRET"} {
 		if need[k] = strings.TrimSuffix(env(k), "/"); need[k] == "" {
 			return nil, fmt.Errorf("%s is not set", k)
 		}
@@ -382,13 +433,20 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 	client := &http.Client{Timeout: 15 * time.Second,
 		// Forgejo's token endpoint and the executor answer directly; a redirect would be unexpected.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	store := approval.New(pool, sessionRoles{}, []approval.Tool{approval.CreateTicket}, now)
+	rv := &retrieval{url: need["RETRIEVAL_URL"], client: &http.Client{}}
 	return &server{
-		store: approval.New(pool, sessionRoles{}, []approval.Tool{approval.CreateTicket}, now),
+		store: store,
+		chat: &chatter{model: &model{url: need["CHAT_URL"], client: &http.Client{}}, retrieval: rv, busy: make(chan struct{}, 1),
+			propose: func(ctx context.Context, sess session, args []byte, sources []approval.Source) (approval.Proposal, error) {
+				return store.Propose(withSession(ctx, sess), sess.user, "create_ticket", args, sources)
+			}},
 		auth: &oidc{browserURL: need["FORGEJO_BROWSER_URL"], internalURL: need["FORGEJO_URL"], issuer: need["FORGEJO_URL"],
 			clientID: need["OAUTH_CLIENT_ID"], clientSecret: need["OAUTH_CLIENT_SECRET"],
 			redirectURL: need["GATEWAY_URL"] + "/callback", org: org, client: client, now: now},
 		sessions:  newSessions(now),
 		executor:  &executor{url: need["EXECUTOR_URL"], client: &http.Client{Timeout: confirmTimeout}},
+		retrieval: rv,
 		origin:    gw.Scheme + "://" + gw.Host,
 		secure:    gw.Scheme == "https",
 		ticketURL: need["FORGEJO_BROWSER_URL"] + "/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/issues",

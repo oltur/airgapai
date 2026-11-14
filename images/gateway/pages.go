@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -23,6 +24,7 @@ type page struct {
 	Issue    int64
 	IssueURL string
 	Proposal *proposalView
+	Turn     *turn
 }
 
 // User and Role let templates read the embedded identity, whose fields are unexported.
@@ -36,7 +38,8 @@ type field struct{ Name, Value string }
 type proposalView struct {
 	ID, Tool, ArgsSHA256 string
 	Fields               []field // written by the model
-	Sources              []approval.Source
+	Sources              []sourceView
+	SourcesError         bool
 	Expires              string
 	Expired              bool
 }
@@ -67,7 +70,7 @@ func (s *server) view(p approval.Proposal, sess session) (page, error) {
 		}
 		return ia - ib
 	})
-	v := &proposalView{ID: p.ID.String(), Tool: p.Tool, ArgsSHA256: p.ArgsSHA256, Sources: p.Sources,
+	v := &proposalView{ID: p.ID.String(), Tool: p.Tool, ArgsSHA256: p.ArgsSHA256,
 		Expires: p.ExpiresAt.UTC().Format(time.RFC3339), Expired: !s.now().Before(p.ExpiresAt)}
 	for _, k := range names {
 		value := string(args[k])
@@ -78,6 +81,40 @@ func (s *server) view(p approval.Proposal, sess session) (page, error) {
 		v.Fields = append(v.Fields, field{k, value})
 	}
 	return page{Title: "Confirm a proposal", Session: &sess, Proposal: v}, nil
+}
+
+// sourceView is one source as the page shows it: its identity, and its text if the viewer's role
+// can read it and it has not changed since it was found.
+type sourceView struct {
+	approval.Source
+	Found          bool
+	Classification string
+	Text           string
+}
+
+// sourceText fills in the sources' text, read through the retrieval service with the viewer's own
+// role. Without it the sources are still listed, by identity.
+func (s *server) sourceText(ctx context.Context, v *proposalView, sess session, sources []approval.Source) {
+	for _, src := range sources {
+		v.Sources = append(v.Sources, sourceView{Source: src})
+	}
+	if len(sources) == 0 {
+		return
+	}
+	found, err := s.retrieval.chunks(ctx, sess.role, sources)
+	if err == nil && len(found) != len(sources) {
+		err = fmt.Errorf("asked for %d sources, got %d", len(sources), len(found))
+	}
+	if err != nil {
+		log.Printf("source text: %v", err)
+		v.SourcesError = true
+		return
+	}
+	for i, f := range found {
+		if f.Found && f.Path == sources[i].Path && f.ChunkIndex == sources[i].ChunkIndex {
+			v.Sources[i].Found, v.Sources[i].Classification, v.Sources[i].Text = true, f.Classification, f.Content
+		}
+	}
 }
 
 // visible shows characters that would otherwise hide, disguise or reorder text as their code points,
@@ -119,6 +156,7 @@ pre{white-space:pre-wrap;word-break:break-word;margin:.25rem 0 0;font:15px/1.45 
 dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem}dt{color:#555}dd{margin:0;word-break:break-all}
 button{font:inherit;padding:.5rem 1rem;cursor:pointer}.confirm{background:#14532d;color:#fff;border:0;border-radius:4px}
 .note{color:#555;font-size:.9rem}
+.source{border-left:3px solid #2563eb;padding:.25rem .75rem;margin:.25rem 0 .75rem}
 @media (prefers-color-scheme:dark){body{background:#121212;color:#e8e8e8}.model{background:#2a1f0a;border-color:#d97706}.model .tag{color:#fbbf24}dt,.note{color:#aaa}}
 </style></head><body>
 <header><strong>Maintenance confirmations</strong>
@@ -128,11 +166,26 @@ button{font:inherit;padding:.5rem 1rem;cursor:pointer}.confirm{background:#14532
 {{define "bottom"}}</main></body></html>{{end}}
 
 {{define "home"}}{{template "top" .}}
-{{if .Session}}<p>You are signed in. Open a proposal from the link you were given to review and confirm it.</p>
+{{if .Session}}<p>You are signed in. <a href="/chat">Ask the manuals</a>, or open a proposal from its link to review and confirm it.</p>
 {{else}}<p><a href="/login">Sign in with Forgejo</a> to review and confirm proposals.</p>{{end}}
 {{template "bottom"}}{{end}}
 
 {{define "message"}}{{template "top" .}}<p>{{.Message}}</p><p><a href="/">Start page</a></p>{{template "bottom"}}{{end}}
+
+{{define "chat"}}{{template "top" .}}
+{{with .Message}}<p><strong>{{.}}</strong></p>{{end}}
+{{with .Turn}}<h2>Question</h2><pre>{{visible .Question}}</pre>
+{{range .Steps}}{{if eq .Kind "search"}}<p class="note">Searched the manuals for “{{visible .Query}}”: {{.Found}} passages.</p>
+{{else if eq .Kind "proposal"}}<p><strong>A ticket was proposed, not filed.</strong> <a href="/proposals/{{.Proposal}}">Review and confirm it</a>.</p>
+{{else}}<p class="note">A tool call was refused: {{.Reason}}</p>{{end}}{{end}}
+{{if .Answer}}<div class="model"><div class="tag">answer · written by the model</div><pre>{{visible .Answer}}</pre></div>{{end}}
+{{if .Stopped}}<p><strong>The model kept calling tools without answering, and was stopped.</strong></p>{{end}}
+{{if .Sources}}<h2>Passages found</h2><ol>{{range .Sources}}<li>{{.Path}}, chunk {{.ChunkIndex}}, {{.Classification}}</li>{{end}}</ol>{{end}}
+{{end}}
+{{with .Session}}<form method="post" action="/chat"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<p><textarea name="question" rows="4" cols="60" required maxlength="2000" placeholder="Ask about the manuals, or describe a fault to file a ticket"></textarea></p>
+<p><button class="confirm">Ask</button> <span class="note">The page waits while the model, on CPU, answers.</span></p></form>{{end}}
+{{template "bottom"}}{{end}}
 
 {{define "filed"}}{{template "top" .}}<p>The executor filed it as <a href="{{.IssueURL}}">ticket #{{.Issue}}</a>.</p>{{template "bottom"}}{{end}}
 
@@ -143,7 +196,10 @@ yourself: the model wrote them, and what is shown is exactly what will be filed.
 <dt>Arguments SHA-256</dt><dd>{{.ArgsSHA256}}</dd><dt>Expires</dt><dd>{{.Expires}}</dd></dl>
 {{range .Fields}}<div class="model"><div class="tag">{{.Name}} · written by the model</div><pre>{{visible .Value}}</pre></div>{{end}}
 <h2>Sources</h2>
-{{if .Sources}}<ul>{{range .Sources}}<li>{{.Path}}, chunk {{.ChunkIndex}}, SHA-256 {{.ContentHash}}</li>{{end}}</ul>
+{{if .Sources}}<p class="note">The passages the model had found when it proposed this, read with your role.</p>
+{{if .SourcesError}}<p class="note">Their text could not be loaded.</p>{{end}}
+<ol>{{range .Sources}}<li><span class="note">{{.Path}}, chunk {{.ChunkIndex}}, SHA-256 {{.ContentHash}}{{with .Classification}}, {{.}}{{end}}</span>
+{{if .Found}}<div class="source"><pre>{{visible .Text}}</pre></div>{{else if not $.Proposal.SourcesError}}<p class="note">Not readable with your role, or changed since.</p>{{end}}</li>{{end}}</ol>
 {{else}}<p class="note">The proposal names no sources.</p>{{end}}
 <p class="note">The executor files the ticket in maintenance/tickets as itself, with a first line naming you and this proposal.
 It checks your team in Forgejo again before filing.</p>

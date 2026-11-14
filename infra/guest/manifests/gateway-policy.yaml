@@ -1,5 +1,6 @@
 # What the gateway and the executor need through the default deny, and nothing more. The gateway reaches
-# the gateway database, Forgejo's token endpoint and the executor. The executor reaches the gateway
+# the gateway database, Forgejo's token endpoint, the executor, the chat model and the retrieval
+# service. The executor reaches the gateway
 # database and the Forgejo API. Only the gateway may call the executor, and nothing in the cluster may
 # call the gateway: the browser comes through kubectl port-forward. Calico adds these to the other
 # rules for PostgreSQL and Forgejo. They match the app label, so any pod in the gateway namespace that
@@ -31,6 +32,54 @@ spec:
       destination:
         namespaceSelector: kubernetes.io/metadata.name == "gateway"
         selector: app == "executor"
+        ports: [8080]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "inference"
+        selector: app == "chat"
+        ports: [8080]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+        selector: app == "retrieval"
+        ports: [8080]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: chat-reachable-from-gateway
+spec:
+  selector: app == "chat"
+  namespaceSelector: kubernetes.io/metadata.name == "inference"
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "gateway"
+        selector: app == "gateway"
+      destination:
+        ports: [8080]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: retrieval-reachable-from-gateway
+spec:
+  selector: app == "retrieval"
+  namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "gateway"
+        selector: app == "gateway"
+      destination:
         ports: [8080]
 ---
 apiVersion: crd.projectcalico.org/v1
