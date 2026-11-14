@@ -138,3 +138,23 @@ Each check was broken in turn, and a test failed every time:
 A copy of `chat.go` meant for restoring between mutations first went into an existing directory of the
 same name, so the mutations piled up. They were rerun one at a time from a clean copy, and these are
 those results.
+
+In the VM, on 2026-11-14, the first `make rebuild` with the real model passed every suite before the
+gateway's, and every gateway check before its chat section. Its first turn also passed. The question
+about Secrets and RBAC took 52 s: the model searched, answered, and was shown only public passages. Its
+second turn, asking for a ticket, took 56 s. The model searched twice, then answered with "Would you
+like me to propose a high-priority ticket?" instead of calling `create_ticket`. With one question per
+turn and no history, that cannot be answered, so the five checks that needed the proposal failed.
+The gateway's part held: both searches ran as the technician, all six passages were public, and
+nothing was filed.
+
+The system prompt had said only "To file a maintenance ticket, call create_ticket". It now says that
+when the user asks for a ticket, the model should call it in the same turn without asking first,
+because the confirmation page is where the user decides. Both questions were then replayed by script
+against the same model and retrieval service, with the gateway's tool definitions and the new prompt:
+
+- **The ticket request:** the model searched once, called `create_ticket` with a high-priority ticket
+  about the restarts, and answered citing the passages, in 34 s.
+- **The Secrets question:** the model searched once and answered, without proposing anything, in 33 s.
+
+That is one run of each at temperature 0. It shows the prompt can work, not that it always does.

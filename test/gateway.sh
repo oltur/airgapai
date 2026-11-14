@@ -178,7 +178,7 @@ cp /tmp/gateway-test-alice.html /tmp/gateway-test-question.html
 result "the model searched the manuals" 1 "$(shown alice 'Searched the manuals for')"
 result "and answered, marked as the model's" 1 "$(shown alice 'answer · written by the model')"
 result "a technician was shown no restricted passage" 0 "$(shown alice ', restricted</li>')"
-echo "info passages shown: $(grep -c ', public</li>' /tmp/gateway-test-alice.html) public"
+echo "info passages shown: $(shown alice ', public</li>') public"
 before_chat="$(issues)" proposals_before="$(decisions propose allowed)"
 started=$SECONDS
 result "a request to file a ticket" 200 "$(browse alice chat "The web pods in hall 3 keep restarting after the last deployment. Search the manuals for why a container restarts, then file a high priority ticket about the restarts.")"
