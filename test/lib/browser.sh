@@ -63,5 +63,8 @@ sys.exit(f"unknown command {cmd}")
 PY
 browse() { python3 -I /tmp/gateway-browser.py "$@"; }
 shown() { grep -o -F -- "$2" "/tmp/gateway-test-$1.html" | wc -l; } # occurrences, not lines
-# proposal_link USER: the first proposal linked from the user's last page.
+# proposal_links USER: every distinct proposal linked from the user's last page; proposal_link, the first.
+proposal_links() { grep -o '/proposals/[0-9a-f-]\{36\}' "/tmp/gateway-test-$1.html" | sort -u; }
 proposal_link() { grep -o '/proposals/[0-9a-f-]\{36\}' "/tmp/gateway-test-$1.html" | head -1; }
+# ask USER QUESTION: one chat turn, on a freshly loaded chat page for its CSRF token. Prints the status.
+ask() { browse "$1" get /chat >/dev/null && browse "$1" chat "$2"; }

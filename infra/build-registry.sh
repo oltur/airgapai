@@ -133,7 +133,8 @@ sign probe "$probe" "$keys/cosign.key"
 "$crane" mutate --label airgapai.test=unsigned -t "$local_reg/probe-unsigned:v1" "$local_reg/probe:v1" >/dev/null
 "$crane" mutate --label airgapai.test=other-key -t "$local_reg/probe-other-key:v1" "$local_reg/probe:v1" >/dev/null
 sign probe-other-key "$("$crane" digest "$local_reg/probe-other-key:v1")" "$tmp/other.key"
-# The compromised-model stub, which only test/gateway.sh deploys, and only while it runs. Signed so it can
+# The compromised-model stub, which only test/gateway.sh and test/adversarial.sh deploy, and only while
+# they run. Signed so it can
 # run at all; deploy/ never names it.
 GO_IMAGE_SRC="$here/../test/model-stub" "$here/build-go-image.sh" "$crane" model-stub "$local_reg/model-stub:v1" >/dev/null
 sign model-stub "$("$crane" digest "$local_reg/model-stub:v1")" "$keys/cosign.key"

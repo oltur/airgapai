@@ -28,9 +28,13 @@ lint: ## Check for hidden characters, then run ShellCheck, Ruff, go vet, go test
 	@for tool in shellcheck ruff go govulncheck; do \
 		command -v $$tool >/dev/null || { echo "$$tool not found, see make tools"; exit 1; }; \
 	done
-	@# Characters that hide or reorder text, written by accident or not, must not reach the sources.
-	@! git grep -nP '[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]' -- . || \
-		{ echo "hidden or bidirectional characters found; write them as escapes"; exit 1; }
+	@# Characters that hide or reorder text, written by accident or not, must not reach the sources:
+	@# soft hyphen, Arabic letter mark, Mongolian vowel separator, zero-width and directional marks,
+	@# invisible operators, byte order mark and tag characters. git grep exits 1 for none found and 0
+	@# for a match; anything else, such as a locale where -P cannot read the class, fails the check too.
+	@LC_ALL=C.UTF-8 git grep -nP '[\x{00AD}\x{061C}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{2069}\x{FEFF}\x{E0000}-\x{E007F}]' -- .; \
+		rc=$$?; [ $$rc -eq 1 ] || { [ $$rc -eq 0 ] && echo "hidden or bidirectional characters found; write them as escapes" \
+		|| echo "the hidden-character check could not run"; exit 1; }
 	@shellcheck -x -P SCRIPTDIR -S warning $$(git ls-files '*.sh' '.githooks/*')
 	@ruff check --quiet .
 	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \

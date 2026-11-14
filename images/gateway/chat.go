@@ -196,11 +196,9 @@ type turn struct {
 }
 
 // decodeArgs reads a tool call's arguments into out, refusing unknown fields, so the model cannot
-// add one, such as a role, that a later change might start to honour.
+// add one, such as a role, that a later change might start to honour. runTool has already checked
+// their size.
 func decodeArgs(raw string, out any) error {
-	if len(raw) > maxToolArgs {
-		return errors.New("the arguments are too long")
-	}
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(out); err != nil {
@@ -252,6 +250,9 @@ func (c *chatter) runTool(ctx context.Context, sess session, t *turn, call toolC
 	if t.calls > maxToolCalls {
 		return refuse(fmt.Sprintf("at most %d tool calls in a turn", maxToolCalls))
 	}
+	if len(call.Function.Arguments) > maxToolArgs {
+		return refuse("the arguments are too long")
+	}
 	switch call.Function.Name {
 	case "search_manuals":
 		if t.searches >= maxSearches {
@@ -300,9 +301,6 @@ func (c *chatter) runTool(ctx context.Context, sess session, t *turn, call toolC
 	case "create_ticket":
 		if t.proposals >= maxProposals {
 			return refuse(fmt.Sprintf("at most %d proposal in a turn", maxProposals))
-		}
-		if len(call.Function.Arguments) > maxToolArgs {
-			return refuse("the arguments are too long")
 		}
 		// The proposal's sources are the passages found in this turn, as the gateway recorded them,
 		// not anything the model says about them.

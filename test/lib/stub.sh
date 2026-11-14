@@ -87,8 +87,11 @@ print(json.dumps(d))' | kubectl apply -f - >/dev/null
 
 stop_stub() {
   [[ -z $stub_forward ]] || kill "$stub_forward" 2>/dev/null
-  kubectl -n gateway delete deployment gateway-stub --ignore-not-found --wait=false >/dev/null 2>&1
-  kubectl -n inference delete deployment,service model-stub --ignore-not-found --wait=false >/dev/null 2>&1
+  stub_forward=""
+  # Waited for, so a test started straight after cannot reach this run's pods while they stop.
+  kubectl -n gateway delete deployment gateway-stub --ignore-not-found --timeout=120s >/dev/null 2>&1
+  kubectl -n gateway wait --for=delete pod -l app=gateway,component=stub-test --timeout=120s >/dev/null 2>&1
+  kubectl -n inference delete deployment,service model-stub --ignore-not-found --timeout=120s >/dev/null 2>&1
   kubectl delete globalnetworkpolicy.crd.projectcalico.org test-gateway-egress-to-stub test-stub-reachable-from-gateway \
     --ignore-not-found >/dev/null 2>&1
 }

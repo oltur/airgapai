@@ -34,11 +34,8 @@ result "alice signs in to the stub's gateway" "303 /chat" "$(browse alice@stub s
 
 issues_before="$(issues)" confirms_before="$(decisions confirm allowed)" executions_before="$(decisions execute allowed)"
 proposals_before="$(decisions propose allowed)"
-turn() { # scenario: one turn as alice, against the stub
-  browse alice@stub get /chat >/dev/null
-  browse alice@stub chat "scenario $1"
-}
-links() { grep -o '/proposals/[0-9a-f-]\{36\}' /tmp/gateway-test-alice@stub.html | sort -u | wc -l; }
+turn() { ask alice@stub "scenario $1"; } # one turn as alice, against the stub
+links() { proposal_links alice@stub | wc -l; }
 
 echo "== The model names its own role, then copies what it read into a ticket"
 result "the turn" 200 "$(turn escalate)"

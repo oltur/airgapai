@@ -51,8 +51,7 @@ args() { python3 -c 'import json,sys; print(json.dumps({"title": sys.argv[1], "b
 # shellcheck disable=SC2154 # passwords is set by test/lib/forgejo.sh, sent ahead
 browse alice@stub signin /chat "${passwords[alice]}" >/dev/null
 propose() { # title: proposes as alice through the stub, and prints the proposal's ID
-  browse alice@stub get /chat >/dev/null
-  browse alice@stub chat "scenario propose $(args "$1" "$body")" >/dev/null
+  ask alice@stub "scenario propose $(args "$1" "$body")" >/dev/null
   proposal_link alice@stub | sed 's|/proposals/||'
 }
 proposal="$(propose "Pump 4 leaks")"
@@ -73,12 +72,10 @@ result "carol's page says so" 1 "$(shown carol 'carol (no role)')"
 echo "== Proposing needs a role that may use the tool, read from Forgejo's teams"
 result "alice's proposal through the chat loop (control)" true "$([[ $proposal =~ ^[0-9a-f-]{36}$ ]] && echo true)"
 browse carol@stub signin /chat "${passwords[carol]}" >/dev/null
-browse carol@stub get /chat >/dev/null
-browse carol@stub chat "scenario propose $(args "Carol's ticket" b)" >/dev/null
+ask carol@stub "scenario propose $(args "Carol's ticket" b)" >/dev/null
 result "carol, with no team, cannot propose" 1 "$(shown carol@stub 'A tool call was refused: denied: the user has no role')"
 browse bob@stub signin /chat "${passwords[bob]}" >/dev/null
-browse bob@stub get /chat >/dev/null
-browse bob@stub chat "scenario propose $(args "Bob's ticket" b)" >/dev/null
+ask bob@stub "scenario propose $(args "Bob's ticket" b)" >/dev/null
 result "bob, an engineer with no grant, cannot propose" 1 "$(shown bob@stub 'A tool call was refused: denied: the user&#39;s role may not use this tool')"
 result "neither got a proposal" "" "$(proposal_link carol@stub)$(proposal_link bob@stub)"
 
@@ -120,6 +117,11 @@ result "alice, removed from technicians since signing in, confirms" 403 "$(brows
 result "the executor refused it" 1 "$(shown alice '<h1>Refused at execution</h1>')"
 status PUT "/teams/$technicians/members/alice" >/dev/null
 result "no issue filed" "$((before + 1))" "$(issues)"
+
+# The stub was only for making proposals. Remove it now, so the rest runs against the deployed setup.
+stop_stub
+result "the stub's gateway is gone" NotFound "$(kubectl -n gateway get deployment gateway-stub 2>&1 | grep -o NotFound)"
+result "and both test-only network rules" 0 "$(kubectl get globalnetworkpolicy.crd.projectcalico.org -o name | grep -c '/test-')"
 
 echo "== Audit"
 chain="$(cli verify)"

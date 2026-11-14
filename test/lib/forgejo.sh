@@ -12,8 +12,14 @@ fj() { # method path [json]: prints the body, then the status on its own line
 }
 status() { fj "$@" | tail -1; }
 team() { fj GET /orgs/maintenance/teams | sed '$d' | json "next(t['id'] for t in d if t['name'] == '$1')"; }
-# Only a list is counted: an error answer is an object, whose keys must not pass for issues.
-issues() { fj GET "/repos/maintenance/tickets/issues?state=all&type=issues&limit=50" | sed '$d' | json "len(d) if isinstance(d, list) else 'error'"; }
+# The repository's total, from Forgejo's X-Total-Count, so the count does not stop at one page. Only an
+# answer with that header counts: an error has none, and must not pass for a number of issues.
+issues() {
+  [[ -n $admin_token ]] || fj GET /version >/dev/null
+  kubectl -n forgejo exec deployment/forgejo -- curl -s -o /dev/null -D - -H "Authorization: token $admin_token" \
+    "http://localhost:3000/api/v1/repos/maintenance/tickets/issues?state=all&type=issues&limit=1" 2>/dev/null \
+    | awk 'tolower($1) == "x-total-count:" {gsub("\r", ""); print $2; found=1} END {if (!found) print "error"}'
+}
 
 # test_user NAME [TEAM]: creates the user, or resets the password of one an earlier test made, and puts
 # them in TEAM. The password is kept in passwords[NAME] for tests that sign in.

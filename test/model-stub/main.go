@@ -1,7 +1,7 @@
 // Model-stub plays a fully compromised model: an OpenAI-compatible chat server whose every reply is
 // chosen to attack the gateway. The question picks the scenario, as "scenario NAME [ARGS]", and the
 // conversation so far picks the step, so the server keeps no state. It is a test tool, deployed only
-// while test/gateway.sh runs, and never as the chat model. See ADR 0019.
+// while test/gateway.sh or test/adversarial.sh runs, and never as the chat model. See ADR 0019.
 package main
 
 import (

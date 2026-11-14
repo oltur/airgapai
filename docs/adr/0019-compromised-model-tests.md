@@ -52,14 +52,19 @@ their proposals from the executor's `propose` command, which went around the cha
 - **The executor's `propose` command is removed.** The executor now has only `grant`, `revoke` and
   `verify`. The confirmation page's VM checks make their proposals through the stub's gateway. So do
   the role checks at proposal time: carol, with no team, and bob, an engineer without the grant.
-- **`create_ticket`'s arguments are now held to the same 8 KiB limit as a search's,** before they
-  reach the approval core. Writing the `huge` scenario showed they had none: the approval core refused
-  them only by their fields.
+- **Every tool call's arguments are held to 8 KiB,** in one check before the tool runs. Writing the
+  `huge` scenario showed that `create_ticket`'s had no limit: only searches had one, and the approval
+  core refused a large ticket only by its fields.
 
 - **`make lint` fails on hidden or bidirectional characters in any tracked file.** In Phase 3,
   escapes written as `\u202e` were turned into the characters themselves several times, in test
   scripts, Go tests and the stub. Some were committed before a scan caught them. The check now runs in CI. In
-  a scratch repository with one such file, the same command failed, as it should.
+  a scratch repository the same command failed for a right-to-left override and for a tag character, also
+  with `LC_ALL=C`, passed on a clean repository, and failed when `git grep` could not run. A first
+  version passed silently outside a UTF-8 locale, where `git grep -P` cannot read the class: it now sets
+  its own locale, and treats any exit status other than "none found" as a failure. The class covers
+  soft hyphens, the Arabic letter mark, the Mongolian vowel separator, zero-width and directional
+  marks, invisible operators, the byte order mark, and tag characters.
 
 ## Alternatives
 
@@ -76,8 +81,14 @@ their proposals from the executor's `propose` command, which went around the cha
 - **The copy shares everything with the deployed gateway,** including its database login and its
   rules for the executor. A turn in the copy could make a real proposal, and the copy's page could
   confirm it. The checks show that no turn did.
-- **During a test, the deployed gateway's label can also reach the stub.** Nothing in the deployed
-  gateway calls it.
+- **While the stub runs, the deployed gateway's label can also reach it.** Nothing in the deployed
+  gateway calls it. `make test-gateway` removes the stub as soon as its proposals are made, then
+  checks that the copy and both temporary rules are gone, before its network probes. Removal waits for
+  the copy's pods to go, so the next test cannot reach them.
+- **The proposals that test turns make are real, and stay until they expire.** `make test-adversarial`
+  leaves two, from `escalate` and `flood`, which alice could confirm on the deployed gateway's page for
+  15 minutes. Nothing can withdraw a proposal: the gateway's database login cannot delete one. They are
+  alice's, a test user's, and confirming one would still go through every check.
 
 ### What this does not prove
 
