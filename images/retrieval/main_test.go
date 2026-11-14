@@ -6,6 +6,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -255,5 +257,58 @@ func TestLeftoverRoleIsRefused(t *testing.T) {
 	rs, err := s.search(ctx, r, vec("q"))
 	if err != nil || len(rs) != 0 {
 		t.Fatalf("after the refusal: %d results, %v", len(rs), err)
+	}
+}
+
+// A chunk is returned only to a role that may read it, and only with its recorded hash.
+func TestChunksFollowRoles(t *testing.T) {
+	s, query := database(t)
+	ctx := context.Background()
+	refs := []chunkRef{{"public0", 0, "none"}, {"restricted1", 0, "none"}, {"public2", 0, "changed"}, {"missing", 0, "none"}}
+	for role, want := range map[string]string{
+		"technician": "true,false,false,false",
+		"engineer":   "true,true,false,false",
+		"":           "false,false,false,false",
+	} {
+		got, err := s.chunks(ctx, chunksRequest{Role: role, Chunks: refs})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var found []string
+		for i, c := range got {
+			found = append(found, strconv.FormatBool(c.Found))
+			if c.Found && (c.Content != refs[i].Path || c.Path != refs[i].Path) {
+				t.Errorf("%s: chunk %d came back as %+v", role, i, c)
+			}
+			if !c.Found && c.Content != "" {
+				t.Errorf("%s: an unreadable chunk carried text", role)
+			}
+		}
+		if strings.Join(found, ",") != want {
+			t.Errorf("role %q: found %s, want %s", role, strings.Join(found, ","), want)
+		}
+	}
+	// Search results carry the hash the gateway records as a source.
+	rs, err := s.search(ctx, request{Role: "technician", Scan: "exact", k: 2}, query(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rs) == 0 || rs[0].ContentSHA256 != "none" {
+		t.Errorf("search results lack the content hash: %+v", rs)
+	}
+}
+
+func TestChunksRequestChecks(t *testing.T) {
+	s := &server{}
+	for name, body := range map[string]string{
+		"unknown role":  `{"role":"admin","chunks":[]}`,
+		"unknown field": `{"role":"technician","chunks":[],"sql":"x"}`,
+		"too many":      `{"role":"technician","chunks":[` + strings.Repeat(`{"path":"p","chunk_index":0,"content_sha256":"h"},`, maxChunks) + `{"path":"p","chunk_index":0,"content_sha256":"h"}]}`,
+	} {
+		w := httptest.NewRecorder()
+		s.handleChunks(w, httptest.NewRequest(http.MethodPost, "/chunks", strings.NewReader(body)))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", name, w.Code)
+		}
 	}
 }

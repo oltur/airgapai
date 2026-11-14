@@ -1,9 +1,9 @@
-// Gateway is where a person signs in and confirms what a model proposed. It signs users in through
+// Gateway is where a person signs in, asks the model, and confirms what it proposed. It signs users in through
 // Forgejo, shows a proposal built from its stored canonical arguments rather than from anything a
 // model wrote about it, and on confirmation hands the one-time token straight to the executor. The
 // token is never sent to the browser, and nothing a model can reach ever sees it. See ADR 0017.
 //
-// It serves the pages below, and GET /ready. The browser reaches it through kubectl port-forward;
+// It serves the pages below, and GET /ready. The chat loop is in chat.go. The browser reaches it through kubectl port-forward;
 // nothing in the cluster may call it yet.
 package main
 
@@ -37,6 +37,8 @@ type server struct {
 	auth      *oidc
 	sessions  *sessions
 	executor  *executor
+	model     *model
+	retrieval *retrieval
 	origin    string // the gateway's own origin, as the browser reaches it
 	secure    bool   // whether cookies need HTTPS
 	ticketURL string // Forgejo's issue list, as the browser reaches it
@@ -51,7 +53,7 @@ const (
 )
 
 // nextPath is where a sign-in may return to: the start page or a proposal, never another site.
-var nextPath = regexp.MustCompile(`^/(proposals/[0-9a-f-]{36})?$`)
+var nextPath = regexp.MustCompile(`^/(chat|proposals/[0-9a-f-]{36})?$`)
 
 // headers apply to every answer: no scripts, no framing, forms only to this origin, no referrer,
 // which would carry proposal IDs and sign-in codes to Forgejo, and no caching.
@@ -72,6 +74,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /login", s.handleLogin)
 	mux.HandleFunc("GET /callback", s.handleCallback)
 	mux.HandleFunc("POST /logout", s.handleLogout)
+	mux.HandleFunc("GET /chat", s.handleChatPage)
+	mux.HandleFunc("POST /chat", s.handleChat)
 	mux.HandleFunc("GET /proposals/{id}", s.handleProposal)
 	mux.HandleFunc("POST /proposals/{id}/confirm", s.handleConfirm)
 	mux.HandleFunc("GET /ready", s.handleReady)
@@ -225,6 +229,9 @@ func (s *server) handleProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := s.view(p, sess)
+	if err == nil {
+		s.sourceText(r.Context(), v.Proposal, sess, p.Sources)
+	}
 	if err != nil {
 		log.Printf("rendering proposal %s: %v", p.ID, err)
 		s.render(w, http.StatusInternalServerError, "message", page{Title: "Error", Message: "The proposal could not be shown."})
@@ -274,6 +281,38 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		s.render(w, http.StatusOK, "filed", page{Title: "Ticket filed", Session: &sess,
 			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%d", s.ticketURL, res.issue)})
 	}
+}
+
+func (s *server) handleChatPage(w http.ResponseWriter, r *http.Request) {
+	_, sess, ok := s.current(r)
+	if !ok {
+		http.Redirect(w, r, "/login?next=%2Fchat", http.StatusSeeOther)
+		return
+	}
+	s.render(w, http.StatusOK, "chat", page{Title: "Ask the manuals", Session: &sess})
+}
+
+func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
+	_, sess, ok := s.checkForm(w, r)
+	if !ok {
+		return
+	}
+	question := strings.TrimSpace(r.PostFormValue("question"))
+	if question == "" || len([]rune(question)) > maxQuestion {
+		s.render(w, http.StatusBadRequest, "chat", page{Title: "Ask the manuals", Session: &sess,
+			Message: fmt.Sprintf("A question needs 1 to %d characters.", maxQuestion)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), turnTimeout)
+	defer cancel()
+	t, err := s.chat(ctx, sess, question)
+	if err != nil {
+		log.Printf("chat: %v", err)
+		s.render(w, http.StatusBadGateway, "chat", page{Title: "Ask the manuals", Session: &sess, Turn: &t,
+			Message: "The model did not answer. Any proposal made before that is listed below."})
+		return
+	}
+	s.render(w, http.StatusOK, "chat", page{Title: "Ask the manuals", Session: &sess, Turn: &t})
 }
 
 func (s *server) handleReady(w http.ResponseWriter, r *http.Request) {
@@ -344,7 +383,7 @@ func main() {
 		log.Fatal(err)
 	}
 	srv := &http.Server{Addr: *addr, Handler: s.routes(), ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout: 10 * time.Second, WriteTimeout: confirmTimeout + 10*time.Second}
+		ReadTimeout: 10 * time.Second, WriteTimeout: turnTimeout + 10*time.Second}
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, os.Interrupt)
 	defer stop()
 	go func() {
@@ -362,7 +401,8 @@ func main() {
 // newServer reads its settings from env. Every URL is required, so a missing one fails at start.
 func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time) (*server, error) {
 	need := map[string]string{}
-	for _, k := range []string{"GATEWAY_URL", "FORGEJO_URL", "FORGEJO_BROWSER_URL", "EXECUTOR_URL", "OAUTH_CLIENT_ID", "OAUTH_CLIENT_SECRET"} {
+	for _, k := range []string{"GATEWAY_URL", "FORGEJO_URL", "FORGEJO_BROWSER_URL", "EXECUTOR_URL", "CHAT_URL", "RETRIEVAL_URL",
+		"OAUTH_CLIENT_ID", "OAUTH_CLIENT_SECRET"} {
 		if need[k] = strings.TrimSuffix(env(k), "/"); need[k] == "" {
 			return nil, fmt.Errorf("%s is not set", k)
 		}
@@ -389,6 +429,8 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 			redirectURL: need["GATEWAY_URL"] + "/callback", org: org, client: client, now: now},
 		sessions:  newSessions(now),
 		executor:  &executor{url: need["EXECUTOR_URL"], client: &http.Client{Timeout: confirmTimeout}},
+		model:     &model{url: need["CHAT_URL"], client: &http.Client{}},
+		retrieval: &retrieval{url: need["RETRIEVAL_URL"], client: &http.Client{}},
 		origin:    gw.Scheme + "://" + gw.Host,
 		secure:    gw.Scheme == "https",
 		ticketURL: need["FORGEJO_BROWSER_URL"] + "/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/issues",
