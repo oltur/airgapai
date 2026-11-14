@@ -14,10 +14,21 @@ anything.
 ## Decision
 
 - **The gateway checks every answer's citations before showing it.** An answer is shown only if it
-  cites at least one passage, as `[1]` or `[1, 3]`, and every number it cites is a passage the
-  gateway's own searches returned in that turn. Otherwise the model's reply is withheld entirely, and
-  the gateway says why: the reply cites no passage, or it cites one the turn did not find. The page
-  lists the passages a shown answer cites.
+  cites at least one passage, and every number it cites is a passage the gateway's own searches
+  returned in that turn. Otherwise the model's reply is withheld entirely, and the gateway says why:
+  - the reply cites no passage, so the manuals may not answer the question, or the model answered
+    without them; or
+  - it cites a passage the turn did not find, so it named a source it was not given.
+
+  The page lists the passages a shown answer cites. A withheld reply is logged with its reason, never
+  its text.
+- **What counts as a citation:**
+  - the forms the prompt asks for, `[1]` and `[1, 3]`
+  - forms models also write: ranges, `[1-2]` and `[1–3]`, and `[source 1]` or `[Source: 2]`
+  - only numbers of at most four digits, so no long string of the model's reaches the page in a
+    refusal
+  - not inside code, fenced or inline, and not straight after a name, a dot or another bracket, so
+    `{.items[0]}` and `list[2]` are indexes, not citations
 - **A refusal is the gateway's, not the model's.** A model that says "the manuals do not answer this"
   cites nothing, so its reply is withheld the same way. The gateway's message covers both readings:
   the manuals may not answer the question, or the model answered without them.
@@ -58,6 +69,11 @@ anything.
   the refusal. The prompt asks it to cite, and in the replays below it did.
 - **Answers to questions the manuals do not cover always end as the gateway's refusal,** whatever the
   model writes.
+- **A YAML or JSON list written outside code is read as citations.** `ports: [80, 443]` in plain text
+  cites passages 80 and 443, which do not exist, so a correct answer written that way is withheld. In
+  backticks or a code block, it is not read.
+- **Two citations written together, `[1][2]`, count as one,** because a bracket after a bracket is read
+  as an index.
 
 ### What this does not prove
 
@@ -79,13 +95,21 @@ system prompt and tools at the time:
 
 `make test-db` passed with the new tests:
 
-- These answers were shown: `[1]`, `[2] and [1]`, and `[1,2]`.
-- These were withheld: no citation; a citation of 0, of 4 with 3 passages, or of 1 with none; a
-  real citation alongside a made-up one; and brackets around something that is not a number.
+- These answers were shown: `[1]`, `[2] and [1]`, `[1,2]`, the ranges `[1-3]` and `[2–3]`,
+  `[source 2]` with `[Source: 1]`, and a citation at the very start. So were answers citing `[1]`
+  alongside a jsonpath with `items[0]` in backticks, a YAML block with `[80, 443]`, and the
+  indexes `items[0]` and `list[2][3]` in plain text.
+- These were withheld: no citation; a citation of 0, of 4 with 3 passages, or of 1 with none; a real
+  citation alongside a made-up one; brackets around something that is not a number, or around a
+  five-digit number; a backwards range; a range past the last passage; and `[80, 443]` in plain text.
+- In a turn, the page gave the whole sentence for each reason, and showed none of the withheld text.
 - In a turn, an uncited answer and one citing passage 7 of 2 were withheld, with none of their text
   on the page. A cited answer's citations were listed.
 
 Each rule was broken in turn, and a test failed every time: the range check, the need for at least
-one citation, and withholding an answer that fails.
+one citation, withholding an answer that fails, and after the review, ignoring code, ignoring a
+bracket after a name, the four-digit limit, and the order of a range. The first version wrote the
+reason into the sentence as "the model's reply it cites…". The test had matched only part of it, and
+now matches the whole sentence.
 
 The VM results follow.

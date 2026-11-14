@@ -184,8 +184,10 @@ button{font:inherit;padding:.5rem 1rem;cursor:pointer}.confirm{background:#14532
 {{else}}<p class="note">A tool call was refused: {{.Reason}}</p>{{end}}{{end}}
 {{if .Answer}}<div class="model"><div class="tag">answer · written by the model</div><pre>{{visible .Answer}}</pre></div>
 <p class="note">It cites passages {{range $i, $n := .Cites}}{{if $i}}, {{end}}[{{$n}}]{{end}}, listed below.</p>{{end}}
-{{with .Withheld}}<p><strong>No answer is shown,</strong> because the model's reply {{.}}. Answers here must cite the passages found.
-Either the manuals do not answer this, or the model answered without them.</p>{{end}}
+{{with .Withheld}}{{if .Uncited}}<p><strong>No answer is shown,</strong> because the model's reply cites no passage from the manuals.
+Answers here must cite the passages found. Either the manuals do not answer this, or the model answered without them.</p>
+{{else}}<p><strong>No answer is shown,</strong> because the model's reply cites passage {{.Passage}}, which this turn did not find.
+The model named a source it was not given, so the reply is not shown.</p>{{end}}{{end}}
 {{if .Stopped}}<p><strong>The model kept calling tools without answering, and was stopped.</strong></p>{{end}}
 {{if .Sources}}<h2>Passages found</h2><ol>{{range .Sources}}<li>{{.Path}}, chunk {{.ChunkIndex}}, {{.Classification}}</li>{{end}}</ol>{{end}}
 {{end}}
