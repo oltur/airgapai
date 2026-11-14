@@ -30,4 +30,4 @@ Each figure is rounded on its own, so days may not add up to the phase total. Da
 | 2026-11-08 | 2 | 2.6 |
 | 2026-11-09 | 2 | 0.3 |
 | 2026-11-10 | 2 | 2.9 |
-| 2026-11-14 | 2 | 2.1 |
+| 2026-11-14 | 2 | 2.2 |

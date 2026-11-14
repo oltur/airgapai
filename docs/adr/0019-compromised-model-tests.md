@@ -56,6 +56,11 @@ their proposals from the executor's `propose` command, which went around the cha
   reach the approval core. Writing the `huge` scenario showed they had none: the approval core refused
   them only by their fields.
 
+- **`make lint` fails on hidden or bidirectional characters in any tracked file.** While this was
+  written, escapes such as `\u202e` were turned into the characters themselves three times: in a test
+  script, a test and the stub. One was committed before a scan caught it. The check now runs in CI. In
+  a scratch repository with one such file, the same command failed, as it should.
+
 ## Alternatives
 
 - **The stub as the chat model.** Pointing the deployed gateway at it would leave real users talking to

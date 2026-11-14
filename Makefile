@@ -24,10 +24,13 @@ test-secrets: ## Prove the guard blocks fake secrets in a temporary repo
 tools: ## Install the pinned guard and lint tools into ~/.local/bin
 	@scripts/install-tools.sh
 
-lint: ## Run ShellCheck, Ruff, go vet, go test and govulncheck
+lint: ## Check for hidden characters, then run ShellCheck, Ruff, go vet, go test and govulncheck
 	@for tool in shellcheck ruff go govulncheck; do \
 		command -v $$tool >/dev/null || { echo "$$tool not found, see make tools"; exit 1; }; \
 	done
+	@# Characters that hide or reorder text, written by accident or not, must not reach the sources.
+	@! git grep -nP '[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]' -- . || \
+		{ echo "hidden or bidirectional characters found; write them as escapes"; exit 1; }
 	@shellcheck -x -P SCRIPTDIR -S warning $$(git ls-files '*.sh' '.githooks/*')
 	@ruff check --quiet .
 	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
