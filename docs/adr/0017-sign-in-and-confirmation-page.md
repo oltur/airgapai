@@ -176,3 +176,32 @@ for success, escaping the model's text, and, after the review, the non-graphic a
 variation-selector rules, raw values, the bound on sign-ins, and each entry's own expiry check. The cap and single use of the state first survived: the
 fake ID token expired with the session, and the state's reuse was refused for its missing cookie. Both
 tests were tightened until they failed.
+
+In the VM, on 2026-11-14, `make rebuild` passed every suite before the executor's, then failed two
+checks of `make test-executor`: alice could not propose, and bob was refused for having no role rather
+than for his role. The test helpers, moved to `test/lib/forgejo.sh`, read the Forgejo administrator's
+token as soon as they were loaded, before the test script set `KUBECONFIG`. The token was empty, so no
+test user joined a team. The control meant to catch that passed anyway, because it counted the keys of
+Forgejo's error answer as issues. With the token read on first use and the count accepting only a
+list, `make test-executor` passed on the same cluster. `make test-gateway` then failed two checks that
+counted lines rather than occurrences, and passed once they counted occurrences. Then `make test-egress`
+passed, which the failed rebuild had not reached. That run showed:
+
+| Check | Result |
+|---|---|
+| A visitor opening a proposal | Sent to sign in, with the proposal as the return path |
+| A wrong Forgejo password (control) | No sign-in |
+| Alice signing in through Forgejo | Back at her proposal, as a technician, read from her teams |
+| Carol, with no team | Signed in, with no role |
+| Alice's page | Three fields marked as the model's, `<script>` escaped, U+202E and a tag character shown as code points |
+| Bob, an engineer, opening alice's proposal | 404, with none of its text |
+| A form with no CSRF token, from another origin, and bob confirming alice's proposal | 403, 403, 404; no confirmation and no issue |
+| Alice confirming | 200, one issue with the stored title, naming alice and the proposal, ending with the confirmed body |
+| Confirming again | 403, already confirmed; still one issue |
+| Alice removed from `technicians` after signing in, then confirming | Confirmed with her session's role, refused by the executor, nothing filed |
+| Audit | Chain unbroken; both confirmations, the refused second one, one execution and the refused one logged |
+| Gateway label | Reached PostgreSQL, Forgejo and the executor; timed out to the chat model and the retrieval service |
+| Another label | Timed out to the gateway and the executor |
+
+The executor's run showed that it has no `confirm` command any more, and that a call with no token or a
+forged one got 403 and filed nothing. Its label timed out to the gateway.

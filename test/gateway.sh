@@ -74,7 +74,7 @@ if cmd == "post":  # PATH MODE: genuine, no-csrf or other-origin
 sys.exit(f"unknown command {cmd}")
 PY
 browse() { python3 -I /tmp/gateway-browser.py "$@"; }
-shown() { grep -c -F -- "$2" "/tmp/gateway-test-$1.html"; }
+shown() { grep -o -F -- "$2" "/tmp/gateway-test-$1.html" | wc -l; } # occurrences, not lines
 
 test_user alice technicians
 test_user bob engineers
@@ -153,7 +153,7 @@ technicians="$(team technicians)"
 status DELETE "/teams/$technicians/members/alice" >/dev/null
 browse alice get "/proposals/$second" >/dev/null
 result "alice, removed from technicians since signing in, confirms" 403 "$(browse alice post "/proposals/$second/confirm" genuine)"
-result "the executor refused it" 1 "$(shown alice 'Refused at execution')"
+result "the executor refused it" 1 "$(shown alice '<h1>Refused at execution</h1>')"
 status PUT "/teams/$technicians/members/alice" >/dev/null
 result "no issue filed" "$((before + 1))" "$(issues)"
 

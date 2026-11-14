@@ -3,14 +3,17 @@
 # users and their teams, and audit counts. Sent ahead of each test script, like probe.sh.
 
 json() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
-admin_token="$(kubectl -n forgejo get secret forgejo-admin -o jsonpath='{.data.token}' | base64 -d)"
+# Read on first use: this file is sent ahead of the test script, before it sets KUBECONFIG and PATH.
+admin_token=""
 fj() { # method path [json]: prints the body, then the status on its own line
+  [[ -n $admin_token ]] || admin_token="$(kubectl -n forgejo get secret forgejo-admin -o jsonpath='{.data.token}' | base64 -d)"
   kubectl -n forgejo exec deployment/forgejo -- curl -s -w '\n%{http_code}' -X "$1" -H "Authorization: token $admin_token" \
     -H 'Content-Type: application/json' ${3:+-d "$3"} "http://localhost:3000/api/v1$2" 2>/dev/null
 }
 status() { fj "$@" | tail -1; }
 team() { fj GET /orgs/maintenance/teams | sed '$d' | json "next(t['id'] for t in d if t['name'] == '$1')"; }
-issues() { fj GET "/repos/maintenance/tickets/issues?state=all&type=issues&limit=50" | sed '$d' | json "len(d)"; }
+# Only a list is counted: an error answer is an object, whose keys must not pass for issues.
+issues() { fj GET "/repos/maintenance/tickets/issues?state=all&type=issues&limit=50" | sed '$d' | json "len(d) if isinstance(d, list) else 'error'"; }
 
 # test_user NAME [TEAM]: creates the user, or resets the password of one an earlier test made, and puts
 # them in TEAM. The password is kept in passwords[NAME] for tests that sign in.
