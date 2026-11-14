@@ -166,7 +166,7 @@ infra/vm-ssh.sh "$k8s -n gateway exec deploy/executor -- /executor grant technic
 ```
 
 Then open <http://127.0.0.1:18092/chat>, sign in as that user, and ask the manuals a question, or
-describe a fault and ask for a ticket. A turn can take a few minutes on CPU. A proposed ticket is linked
+describe a fault and ask for a ticket. The page waits while the model answers, on CPU. A proposed ticket is linked
 from the page. To make a proposal without the model, as the tests do:
 
 ```sh

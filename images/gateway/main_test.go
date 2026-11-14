@@ -252,6 +252,7 @@ type harness struct {
 	executor *fakeExecutor
 	clock    *clock
 	store    *approval.Store
+	server   *server
 }
 
 func newHarness(t *testing.T, pool *pgxpool.Pool) *harness {
@@ -278,8 +279,13 @@ func newHarness(t *testing.T, pool *pgxpool.Pool) *harness {
 		t.Fatal(err)
 	}
 	h.store = s.store
+	h.server = s
 	return h
 }
+
+// chatBusy and chatFree hold and release the one-turn slot, as a running turn would.
+func (h *harness) chatBusy() { h.server.chat.busy <- struct{}{} }
+func (h *harness) chatFree() { <-h.server.chat.busy }
 
 // browser is one user's browser: its own cookies, and redirects shown rather than followed.
 type browser struct {

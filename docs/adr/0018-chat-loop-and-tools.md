@@ -24,14 +24,18 @@ generated tokens per second in the VM.
 - **`search_manuals` searches with the signed-in user's role from the session.** The model can only
   send a query of up to 500 characters. Arguments are decoded with unknown fields refused, so a
   `"role": "engineer"` the model adds is an error, not an escalation. Each search returns 3 passages, to
-  fit the context. They are numbered across the turn, so the answer can cite them as [1], [2].
+  fit the context. They are numbered across the turn, so the answer can cite them as [1], [2]. A
+  passage found again keeps its number and is recorded once. A passage counts as found only if the
+  search's result reached the model.
 - **`create_ticket` only calls `Propose`.** The proposal's sources are the passages the gateway's own
   searches found in that turn, recorded with their path, chunk index and hash. They are never anything
   the model says about its sources. The model is told the proposal's ID and that it waits for the
   user's confirmation and is not filed. A refusal, such as a role without the grant or an argument the
   tool does not take, goes back to the model as an error.
-- **The loop has no path to a confirmation.** `chat.go` holds no call to `Confirm`, `Execute` or the
-  executor, and a test checks the source for those names. The only way to confirm is the user's click on
+- **The loop has no path to a confirmation.** It runs on a `chatter` that holds only the model, the
+  retrieval service and a function that proposes. It has no approval store, nothing that runs a call,
+  and no sessions, so the compiler keeps it from confirming. A test also checks `chat.go` for
+  `Confirm`, `Execute` and the executor. The only way to confirm is the user's click on
   the proposal page, a POST with the session's CSRF token. The token is made there and goes straight to
   the executor.
 - **The chat page renders the model's answer as text.** It is escaped, marked as written by the model,
@@ -43,9 +47,16 @@ generated tokens per second in the VM.
   transaction as a search. A chunk the role cannot read, or whose text has changed since, comes back
   without text, and the page says so. Search results now also carry each chunk's hash.
 - **Limits:**
+  - in a turn: 6 tool calls across all replies, 2 searches, so 6 passages, which fit the context with
+    the prompt, the tools and an answer, and 1 proposal; a call over a limit is refused and reported
+    to the model
+  - the last of the four model calls: its tool calls do not run, since their results could never be
+    sent back
+  - one turn at a time: a second is refused with 503 rather than queued, since the model serves one
+    request at a time and a queued call would spend its own time limit waiting
   - each model call: 3 minutes and 512 generated tokens
   - a whole turn: 6 minutes
-  - a question: 2,000 characters
+  - a question: 2,000 characters, in any script; its form may be about 25 KB
   - a tool's arguments: 8 KiB
   - a tool result sent to the model: 16 KiB
 - **Network:** the gateway reaches the chat model and the retrieval service. Nothing else gets new paths.
@@ -62,13 +73,13 @@ generated tokens per second in the VM.
 - **Chunk text stored with the proposal.** It would put restricted text into the gateway database and
   make it visible to whoever reads proposals. Reading it again with the viewer's role keeps row-level
   security as the only gate.
-- **Streaming or a page that polls.** A turn takes tens of seconds on CPU. A plain form post that waits
-  needs no script, which the Content Security Policy forbids.
+- **Streaming or a page that polls.** A turn takes as long as the model on CPU; see Measurements. A
+  plain form post that waits needs no script, which the Content Security Policy forbids.
 
 ## Consequences
 
-- **A turn is slow,** and the page waits for it. Only one turn runs at a time, because llama.cpp serves
-  one request at a time, and other users' turns queue behind it.
+- **A turn is slow,** and the page waits for it. Only one turn runs at a time, and another user asking
+  meanwhile is told to try again.
 - **Three passages per search.** More would not fit the context with the system prompt, the tools and an
   answer. Recall at k=3 was not measured; ADR 0014 measured k of 5 and more.
 - **The answer is not checked.** Whether it cites its passages, or refuses when they do not answer, is
@@ -99,7 +110,12 @@ they passed:
 - The answer's `<script>` was escaped. The turn reached the executor zero times.
 - The proposal page showed the sources' text, escaped, read as the technician. A restricted source and
   one with a stale hash were listed without text.
-- A model that only called tools was stopped after four calls. An unknown tool and an argument
+- A model that only called tools was stopped after four calls. Its third search was refused as over
+  the limit, and the proposal it asked for in its last call was never made. One reply with eight
+  `create_ticket` calls made one proposal: the next five were refused as over the proposal limit, and
+  the last two as over the tool-call limit. The same passages found by two searches kept their
+  numbers, and the proposal had them once. A question of 2,000 Cyrillic letters was accepted, and a
+  turn while another ran got 503. An unknown tool and an argument
   `create_ticket` does not take were refused, with no proposal. A model server error gave 502. A form
   without the CSRF token gave 403, and a question over 2,000 characters gave 400.
 - Bob, an engineer without the grant, searched as an engineer, and his proposal was refused.
@@ -116,6 +132,8 @@ Each check was broken in turn, and a test failed every time:
 - reading source text with another role
 - showing text for a source that did not match
 - the question's length limit
+- after the review: the tool-call, search and proposal limits, keeping a passage's number, not running
+  the last call's tools, the one-turn slot, and the form size
 
 A copy of `chat.go` meant for restoring between mutations first went into an existing directory of the
 same name, so the mutations piled up. They were rerun one at a time from a clean copy, and these are

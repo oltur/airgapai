@@ -140,12 +140,60 @@ func TestChatTurn(t *testing.T) {
 		t.Errorf("a chat turn reached the executor %d times", n)
 	}
 
-	// The model is stopped after maxSteps calls that only call tools.
+	// The model is stopped after maxSteps calls that only call tools. The third search is over the
+	// limit, and the last call's proposal never runs, since its result could not be answered.
+	asked := len(h.search.asked())
 	h.model.script(call("search_manuals", `{"query":"a"}`), call("search_manuals", `{"query":"b"}`),
-		call("search_manuals", `{"query":"c"}`), call("search_manuals", `{"query":"d"}`), reply("never reached"))
-	if got := ask(alice, "Loop.", csrfToken); !strings.Contains(got.body, "was stopped") || len(h.model.seen()) != maxSteps {
+		call("search_manuals", `{"query":"c"}`), call("create_ticket", `{"title":"t","body":"b","priority":"low"}`), reply("never reached"))
+	got = ask(alice, "Loop.", csrfToken)
+	if !strings.Contains(got.body, "was stopped") || len(h.model.seen()) != maxSteps {
 		t.Errorf("the step limit: %d model calls", len(h.model.seen()))
 	}
+	if n := len(h.search.asked()) - asked; n != maxSearches || !strings.Contains(got.body, "at most 2 searches in a turn") || proposalLink.MatchString(got.body) {
+		t.Errorf("the search limit and the last step: %d searches, %s", n, got.body)
+	}
+
+	// One reply with many calls is bounded too: one proposal, then refusals.
+	many := map[string]any{"role": "assistant", "content": ""}
+	var calls []map[string]any
+	for i := range 8 {
+		calls = append(calls, map[string]any{"id": "c" + string(rune('0'+i)), "type": "function",
+			"function": map[string]string{"name": "create_ticket", "arguments": `{"title":"t","body":"b","priority":"low"}`}})
+	}
+	many["tool_calls"] = calls
+	raw, _ := json.Marshal(many)
+	h.model.script(string(raw), reply("done"))
+	got = ask(alice, "Many.", csrfToken)
+	if n := len(proposalLink.FindAllString(got.body, -1)); n != maxProposals ||
+		!strings.Contains(got.body, "at most 1 proposal in a turn") || !strings.Contains(got.body, "at most 6 tool calls in a turn") {
+		t.Errorf("many calls in one reply: %d proposals", n)
+	}
+
+	// The same passages found twice keep their numbers, and are recorded once.
+	h.model.script(call("search_manuals", `{"query":"seal"}`), call("search_manuals", `{"query":"seal again"}`),
+		call("create_ticket", `{"title":"Twice","body":"b","priority":"low"}`), reply("ok"))
+	got = ask(alice, "Twice.", csrfToken)
+	if m := proposalLink.FindStringSubmatch(got.body); m == nil {
+		t.Error("no proposal for the repeated search")
+	} else if p, err := h.store.Proposal(ctx, "alice", uuid.MustParse(m[1])); err != nil || len(p.Sources) != 2 {
+		t.Errorf("repeated passages as sources: %+v, %v", p.Sources, err)
+	}
+	if last := h.model.seen()[2]; !strings.Contains(mustJSON(last), `\"source\":2`) || strings.Contains(mustJSON(last), `\"source\":3`) {
+		t.Error("a passage found again got a new number")
+	}
+
+	// A question of the longest length in a script of two-byte letters fits the form.
+	h.model.script(reply("ok"))
+	if got := ask(alice, strings.Repeat("ж", maxQuestion), csrfToken); got.status != http.StatusOK {
+		t.Errorf("a long Cyrillic question: %d", got.status)
+	}
+
+	// While a turn runs, another is refused rather than queued behind it.
+	h.chatBusy()
+	if got := ask(alice, "Busy?", csrfToken); got.status != http.StatusServiceUnavailable {
+		t.Errorf("a second turn: %d", got.status)
+	}
+	h.chatFree()
 	// An unknown tool, and an argument the tool does not take, are refused and reported to the model.
 	h.model.script(call("delete_repository", `{"name":"tickets"}`), call("create_ticket", `{"title":"t","body":"b","priority":"high","assignee":"root"}`), reply("done"))
 	got = ask(alice, "Clean up.", csrfToken)
@@ -204,4 +252,9 @@ func TestSourceTextFollowsTheViewersRole(t *testing.T) {
 	if roles := h.search.asked(); len(roles) != 1 || roles[0] != "technician" {
 		t.Errorf("the source text was read with roles %v", roles)
 	}
+}
+
+func mustJSON(v any) string {
+	raw, _ := json.Marshal(v)
+	return string(raw)
 }

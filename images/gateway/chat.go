@@ -191,6 +191,8 @@ type turn struct {
 	Steps    []step
 	Sources  []passage // numbered from 1, as the model saw them
 	Stopped  bool      // the step limit was reached before an answer
+
+	calls, searches, proposals int // tool calls run so far, for the limits
 }
 
 // decodeArgs reads a tool call's arguments into out, refusing unknown fields, so the model cannot
@@ -216,14 +218,45 @@ func toolResult(v any) string {
 	return string(raw)
 }
 
+// proposeFunc records a proposal for the signed-in user. It is all the loop gets of the approval core.
+type proposeFunc func(ctx context.Context, sess session, args []byte, sources []approval.Source) (approval.Proposal, error)
+
+// chatter runs turns. It holds the model, the retrieval service and a way to propose, and nothing
+// else: not the approval store, not what runs a confirmed call, and not the sessions, so the compiler,
+// not only a test, keeps the loop from confirming or running anything.
+type chatter struct {
+	model     *model
+	retrieval *retrieval
+	propose   proposeFunc
+	busy      chan struct{} // one turn at a time, as the model serves one request at a time
+}
+
+// errBusy is a turn refused because another is running.
+var errBusy = errors.New("another turn is running")
+
+// The limits on what one turn's tool calls may do, so a model cannot make a turn run long, overflow its
+// context or flood the confirmation queue. Calls over a limit are refused and reported to the model.
+const (
+	maxToolCalls = 6 // in a turn, across all replies
+	maxSearches  = 2 // 2 searches of 3 passages, with the prompt, tools and answer, fit 4,096 tokens
+	maxProposals = 1
+)
+
 // runTool runs one tool call for the signed-in user and returns what the model is told.
-func (s *server) runTool(ctx context.Context, sess session, t *turn, call toolCall) string {
+func (c *chatter) runTool(ctx context.Context, sess session, t *turn, call toolCall) string {
 	refuse := func(reason string) string {
 		t.Steps = append(t.Steps, step{Kind: "refused", Reason: reason})
 		return toolResult(map[string]string{"error": reason})
 	}
+	t.calls++
+	if t.calls > maxToolCalls {
+		return refuse(fmt.Sprintf("at most %d tool calls in a turn", maxToolCalls))
+	}
 	switch call.Function.Name {
 	case "search_manuals":
+		if t.searches >= maxSearches {
+			return refuse(fmt.Sprintf("at most %d searches in a turn", maxSearches))
+		}
 		var args struct {
 			Query string `json:"query"`
 		}
@@ -234,31 +267,47 @@ func (s *server) runTool(ctx context.Context, sess session, t *turn, call toolCa
 		if args.Query == "" || len([]rune(args.Query)) > maxSearchChar {
 			return refuse(fmt.Sprintf("the query must have 1 to %d characters", maxSearchChar))
 		}
-		found, err := s.retrieval.search(ctx, sess.role, args.Query)
+		t.searches++
+		found, err := c.retrieval.search(ctx, sess.role, args.Query)
 		if err != nil {
 			log.Printf("search: %v", err)
 			return refuse("the search failed")
 		}
-		t.Steps = append(t.Steps, step{Kind: "search", Query: args.Query, Found: len(found)})
 		type numbered struct {
 			Source int    `json:"source"`
 			Path   string `json:"path"`
 			Text   string `json:"text"`
 		}
+		// A passage found again keeps its number. New ones are numbered after the others, and are
+		// recorded as sources only once the result is known to reach the model.
 		out := []numbered{}
+		var added []passage
 		for _, p := range found {
-			t.Sources = append(t.Sources, p)
-			out = append(out, numbered{len(t.Sources), p.Path, p.Content})
+			n := t.number(p)
+			if n == 0 {
+				added = append(added, p)
+				n = len(t.Sources) + len(added)
+			}
+			out = append(out, numbered{n, p.Path, p.Content})
 		}
-		return toolResult(map[string]any{"passages": out})
+		raw, err := json.Marshal(map[string]any{"passages": out})
+		if err != nil || len(raw) > maxToolOutput {
+			return refuse("the search result was too long")
+		}
+		t.Sources = append(t.Sources, added...)
+		t.Steps = append(t.Steps, step{Kind: "search", Query: args.Query, Found: len(found)})
+		return string(raw)
 	case "create_ticket":
+		if t.proposals >= maxProposals {
+			return refuse(fmt.Sprintf("at most %d proposal in a turn", maxProposals))
+		}
 		// The proposal's sources are the passages found in this turn, as the gateway recorded them,
 		// not anything the model says about them.
 		sources := make([]approval.Source, 0, len(t.Sources))
 		for _, p := range t.Sources {
 			sources = append(sources, approval.Source{Path: p.Path, ChunkIndex: p.ChunkIndex, ContentHash: p.ContentSHA256})
 		}
-		p, err := s.store.Propose(withSession(ctx, sess), sess.user, "create_ticket", []byte(call.Function.Arguments), sources)
+		p, err := c.propose(ctx, sess, []byte(call.Function.Arguments), sources)
 		var denied *approval.Denied
 		switch {
 		case errors.As(err, &denied):
@@ -267,6 +316,7 @@ func (s *server) runTool(ctx context.Context, sess session, t *turn, call toolCa
 			log.Printf("propose: %v", err)
 			return refuse("the proposal could not be recorded")
 		}
+		t.proposals++
 		t.Steps = append(t.Steps, step{Kind: "proposal", Proposal: p.ID.String()})
 		return toolResult(map[string]string{"proposal": p.ID.String(),
 			"status": "proposed, waiting for the user to confirm it on the confirmation page; it is not filed"})
@@ -274,12 +324,28 @@ func (s *server) runTool(ctx context.Context, sess session, t *turn, call toolCa
 	return refuse("unknown tool")
 }
 
-// chat runs one turn for the signed-in user.
-func (s *server) chat(ctx context.Context, sess session, question string) (turn, error) {
+// number is a passage's number in this turn, or 0 if it has none yet.
+func (t *turn) number(p passage) int {
+	for i, s := range t.Sources {
+		if s.Path == p.Path && s.ChunkIndex == p.ChunkIndex && s.ContentSHA256 == p.ContentSHA256 {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// chat runs one turn for the signed-in user, or refuses with errBusy if one is already running.
+func (c *chatter) chat(ctx context.Context, sess session, question string) (turn, error) {
 	t := turn{Question: question}
+	select {
+	case c.busy <- struct{}{}:
+		defer func() { <-c.busy }()
+	default:
+		return t, errBusy
+	}
 	msgs := []message{{Role: "system", Content: systemPrompt}, {Role: "user", Content: question}}
-	for range maxSteps {
-		reply, err := s.model.complete(ctx, msgs)
+	for i := range maxSteps {
+		reply, err := c.model.complete(ctx, msgs)
 		if err != nil {
 			return t, err
 		}
@@ -287,9 +353,13 @@ func (s *server) chat(ctx context.Context, sess session, question string) (turn,
 			t.Answer = reply.Content
 			return t, nil
 		}
+		// The last call's tools would never be answered, so they do not run.
+		if i == maxSteps-1 {
+			break
+		}
 		msgs = append(msgs, message{Role: "assistant", Content: reply.Content, ToolCalls: reply.ToolCalls})
 		for _, call := range reply.ToolCalls {
-			msgs = append(msgs, message{Role: "tool", ToolCallID: call.ID, Content: s.runTool(ctx, sess, &t, call)})
+			msgs = append(msgs, message{Role: "tool", ToolCallID: call.ID, Content: c.runTool(ctx, sess, &t, call)})
 		}
 	}
 	t.Stopped = true

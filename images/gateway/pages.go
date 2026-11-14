@@ -102,7 +102,10 @@ func (s *server) sourceText(ctx context.Context, v *proposalView, sess session, 
 		return
 	}
 	found, err := s.retrieval.chunks(ctx, sess.role, sources)
-	if err != nil || len(found) != len(sources) {
+	if err == nil && len(found) != len(sources) {
+		err = fmt.Errorf("asked for %d sources, got %d", len(sources), len(found))
+	}
+	if err != nil {
 		log.Printf("source text: %v", err)
 		v.SourcesError = true
 		return
@@ -181,7 +184,7 @@ button{font:inherit;padding:.5rem 1rem;cursor:pointer}.confirm{background:#14532
 {{end}}
 {{with .Session}}<form method="post" action="/chat"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <p><textarea name="question" rows="4" cols="60" required maxlength="2000" placeholder="Ask about the manuals, or describe a fault to file a ticket"></textarea></p>
-<p><button class="confirm">Ask</button> <span class="note">A turn can take a few minutes on this CPU.</span></p></form>{{end}}
+<p><button class="confirm">Ask</button> <span class="note">The page waits while the model, on CPU, answers.</span></p></form>{{end}}
 {{template "bottom"}}{{end}}
 
 {{define "filed"}}{{template "top" .}}<p>The executor filed it as <a href="{{.IssueURL}}">ticket #{{.Issue}}</a>.</p>{{template "bottom"}}{{end}}
