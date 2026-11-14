@@ -171,7 +171,17 @@ func (r *retrieval) chunks(ctx context.Context, role string, sources []approval.
 	var out struct {
 		Chunks []passage `json:"chunks"`
 	}
-	err := r.post(ctx, "/chunks", map[string]any{"role": role, "chunks": sources}, &out)
+	// Identity and hash only: the label is the gateway's record, and retrieval reads its own.
+	type chunkRef struct {
+		Path        string `json:"path"`
+		ChunkIndex  int    `json:"chunk_index"`
+		ContentHash string `json:"content_sha256"`
+	}
+	refs := make([]chunkRef, 0, len(sources))
+	for _, s := range sources {
+		refs = append(refs, chunkRef{s.Path, s.ChunkIndex, s.ContentHash})
+	}
+	err := r.post(ctx, "/chunks", map[string]any{"role": role, "chunks": refs}, &out)
 	return out.Chunks, err
 }
 
@@ -306,7 +316,8 @@ func (c *chatter) runTool(ctx context.Context, sess session, t *turn, call toolC
 		// not anything the model says about them.
 		sources := make([]approval.Source, 0, len(t.Sources))
 		for _, p := range t.Sources {
-			sources = append(sources, approval.Source{Path: p.Path, ChunkIndex: p.ChunkIndex, ContentHash: p.ContentSHA256})
+			sources = append(sources, approval.Source{Path: p.Path, ChunkIndex: p.ChunkIndex, ContentHash: p.ContentSHA256,
+				Classification: p.Classification})
 		}
 		p, err := c.propose(ctx, sess, []byte(call.Function.Arguments), sources)
 		var denied *approval.Denied

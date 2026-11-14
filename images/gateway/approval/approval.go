@@ -51,11 +51,35 @@ type Tool struct {
 	Validate func(args map[string]any) error
 }
 
-// Source is a chunk the proposal drew on: its identity and hash, never its text.
+// Source is a chunk the proposal drew on: its identity, hash and label, never its text. The label
+// decides the proposal's visibility, so it must come from the caller's own retrieval, not a model.
 type Source struct {
-	Path        string `json:"path"`
-	ChunkIndex  int    `json:"chunk_index"`
-	ContentHash string `json:"content_sha256"`
+	Path           string `json:"path"`
+	ChunkIndex     int    `json:"chunk_index"`
+	ContentHash    string `json:"content_sha256"`
+	Classification string `json:"classification"`
+}
+
+// Visibilities: who can read a ticket. A proposal is restricted if any of its sources is, so text
+// from a restricted chunk, copied or reworded, is filed only where restricted readers are. See ADR 0021.
+const (
+	Public     = "public"
+	Restricted = "restricted"
+)
+
+// visibility is the visibility a set of sources gives, or an error for a label it does not know.
+func visibility(sources []Source) (string, error) {
+	v := Public
+	for _, s := range sources {
+		switch s.Classification {
+		case Public:
+		case Restricted:
+			v = Restricted
+		default:
+			return "", &Denied{Reason: "a source has an unknown label"}
+		}
+	}
+	return v, nil
 }
 
 // Proposal is what a model asked for. It carries no token.
@@ -66,6 +90,7 @@ type Proposal struct {
 	Args       string // canonical JSON
 	ArgsSHA256 string
 	Sources    []Source
+	Visibility string // Public or Restricted, from the sources
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
 }
@@ -76,6 +101,7 @@ type Execution struct {
 	User       string
 	Tool       string
 	Args       string
+	Visibility string // where the result may be readable: Public or Restricted
 }
 
 type Store struct {
@@ -247,12 +273,15 @@ func (s *Store) Propose(ctx context.Context, user, tool string, rawArgs []byte, 
 		if err != nil {
 			return err
 		}
+		if p.Visibility, err = visibility(sources); err != nil {
+			return err
+		}
 		p.Args, p.ArgsSHA256 = args, Hash(args)
 		p.CreatedAt = s.now().UTC().Truncate(time.Microsecond)
 		p.ExpiresAt = p.CreatedAt.Add(s.ProposalTTL)
-		detail["args_sha256"], detail["sources"] = p.ArgsSHA256, len(sources)
-		_, err = tx.Exec(ctx, `INSERT INTO gateway.proposals (id, user_id, tool, args, args_sha256, sources, created_at, expires_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, p.ID, user, tool, args, p.ArgsSHA256, src, p.CreatedAt, p.ExpiresAt)
+		detail["args_sha256"], detail["sources"], detail["visibility"] = p.ArgsSHA256, len(sources), p.Visibility
+		_, err = tx.Exec(ctx, `INSERT INTO gateway.proposals (id, user_id, tool, args, args_sha256, sources, visibility, created_at, expires_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, p.ID, user, tool, args, p.ArgsSHA256, src, p.Visibility, p.CreatedAt, p.ExpiresAt)
 		return err
 	})
 	return p, err
@@ -263,8 +292,8 @@ func (s *Store) Propose(ctx context.Context, user, tool string, rawArgs []byte, 
 func (s *Store) Proposal(ctx context.Context, user string, id uuid.UUID) (Proposal, error) {
 	p := Proposal{ID: id}
 	var src string
-	err := s.pool.QueryRow(ctx, `SELECT user_id, tool, args, args_sha256, sources, created_at, expires_at
-		FROM gateway.proposals WHERE id = $1 AND user_id = $2`, id, user).Scan(&p.User, &p.Tool, &p.Args, &p.ArgsSHA256, &src, &p.CreatedAt, &p.ExpiresAt)
+	err := s.pool.QueryRow(ctx, `SELECT user_id, tool, args, args_sha256, sources, visibility, created_at, expires_at
+		FROM gateway.proposals WHERE id = $1 AND user_id = $2`, id, user).Scan(&p.User, &p.Tool, &p.Args, &p.ArgsSHA256, &src, &p.Visibility, &p.CreatedAt, &p.ExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Proposal{}, &Denied{Reason: "unknown proposal"}
 	}
@@ -343,15 +372,15 @@ func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs [
 			return err
 		}
 		detail["args_sha256"] = Hash(args)
-		var owner, ptool, phash string
+		var owner, ptool, phash, visible string
 		var proposal uuid.UUID
 		var expires time.Time
 		var consumed *time.Time
 		// The decision lock already serialises executions; the row lock keeps a token single-use even
 		// if that lock is ever narrowed.
-		err = tx.QueryRow(ctx, `SELECT c.user_id, c.expires_at, c.consumed_at, p.id, p.tool, p.args_sha256
+		err = tx.QueryRow(ctx, `SELECT c.user_id, c.expires_at, c.consumed_at, p.id, p.tool, p.args_sha256, p.visibility
 			FROM gateway.confirmations c JOIN gateway.proposals p ON p.id = c.proposal_id
-			WHERE c.token_sha256 = $1 FOR UPDATE OF c`, tokenHash).Scan(&owner, &expires, &consumed, &proposal, &ptool, &phash)
+			WHERE c.token_sha256 = $1 FOR UPDATE OF c`, tokenHash).Scan(&owner, &expires, &consumed, &proposal, &ptool, &phash, &visible)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return &Denied{Reason: "unknown confirmation"}
 		}
@@ -370,6 +399,9 @@ func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs [
 			return &Denied{Reason: "the confirmation is for another tool"}
 		case phash != Hash(args):
 			return &Denied{Reason: "the arguments differ from the confirmed proposal"}
+		case visible != Public && visible != Restricted:
+			// The schema allows only these. Checked here too, before the token is used up.
+			return &Denied{Reason: "the proposal has an unknown visibility"}
 		}
 		if err := s.permitted(ctx, tx, who, tool); err != nil {
 			return err
@@ -378,7 +410,8 @@ func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs [
 			s.now().UTC(), tokenHash); err != nil {
 			return err
 		}
-		ex = Execution{ProposalID: proposal, User: user, Tool: tool, Args: args}
+		ex = Execution{ProposalID: proposal, User: user, Tool: tool, Args: args, Visibility: visible}
+		detail["visibility"] = visible
 		return nil
 	})
 	if err != nil {

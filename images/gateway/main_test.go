@@ -256,7 +256,7 @@ type harness struct {
 }
 
 func newHarness(t *testing.T, pool *pgxpool.Pool) *harness {
-	h := &harness{t: t, forgejo: &fakeForgejo{codes: map[string]grant{}}, executor: &fakeExecutor{status: 200, answer: `{"issue":7}`},
+	h := &harness{t: t, forgejo: &fakeForgejo{codes: map[string]grant{}}, executor: &fakeExecutor{status: 200, answer: `{"issue":7,"repo":"maintenance/tickets"}`},
 		clock: &clock{}, model: &fakeModel{}, search: &fakeRetrieval{}}
 	msrv := httptest.NewServer(h.model)
 	t.Cleanup(msrv.Close)
@@ -558,7 +558,7 @@ func TestConfirmationPage(t *testing.T) {
 		t.Helper()
 		pctx := withSession(ctx, session{identity: identity{user: user, role: "technician"}})
 		p, err := h.store.Propose(pctx, user, "create_ticket", []byte(args),
-			[]approval.Source{{Path: "content/en/docs/concepts/overview.md", ChunkIndex: 3, ContentHash: strings.Repeat("ab", 32)}})
+			[]approval.Source{{Path: "content/en/docs/concepts/overview.md", ChunkIndex: 3, ContentHash: strings.Repeat("ab", 32), Classification: "public"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -624,7 +624,7 @@ func TestConfirmationPage(t *testing.T) {
 	// The genuine confirmation: the executor gets a token and exactly the stored arguments, and the
 	// browser never sees the token.
 	done := alice.post(path+"/confirm", url.Values{"csrf": {token}}, nil)
-	if done.status != http.StatusOK || !strings.Contains(done.body, "ticket #7") {
+	if done.status != http.StatusOK || !strings.Contains(done.body, "ticket #7") || !strings.Contains(done.body, "/maintenance/tickets/issues/7\"") {
 		t.Fatalf("confirming: %d %s", done.status, done.body)
 	}
 	calls := h.executor.calls()
@@ -660,6 +660,14 @@ func TestConfirmationPage(t *testing.T) {
 	if refused.status != http.StatusForbidden || !strings.Contains(refused.body, "Refused at execution") {
 		t.Errorf("an executor refusal: %d", refused.status)
 	}
+	// Nor is one that does not say where it filed, or names something that is not a repository.
+	for _, a := range []string{`{"issue":8}`, `{"issue":8,"repo":"../../evil"}`} {
+		h.executor.set(http.StatusOK, a)
+		pn := propose("alice", `{"title":"Where","body":"b","priority":"low"}`)
+		if got := alice.post("/proposals/"+pn.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil); got.status != http.StatusBadGateway {
+			t.Errorf("executor answer %s: %d", a, got.status)
+		}
+	}
 	// An executor that gives no result is not reported as success.
 	h.executor.set(http.StatusInternalServerError, `{"error":"execution failed"}`)
 	p3 := propose("alice", `{"title":"Third","body":"b","priority":"low"}`)
@@ -684,7 +692,7 @@ func TestConfirmationPage(t *testing.T) {
 	if got := alice.get(path); got.status != http.StatusSeeOther {
 		t.Error("the session outlived sign-out")
 	}
-	if n := len(h.executor.calls()); n != 3 {
-		t.Errorf("executor calls: %d, want 3", n)
+	if n := len(h.executor.calls()); n != 5 { // the genuine call, two with bad answers, a refusal, a failure
+		t.Errorf("executor calls: %d, want 5", n)
 	}
 }

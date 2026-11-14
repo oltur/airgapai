@@ -2,7 +2,11 @@
 // directory: which user names are accepted, and which teams are which reader roles.
 package directory
 
-import "regexp"
+import (
+	"regexp"
+
+	"airgapai/gateway/approval"
+)
 
 // UserName accepts lower-case names only. Forgejo matches names without regard to case, but the
 // approval core binds the exact string, so "Alice" and "alice" would be one Forgejo user and two
@@ -27,3 +31,9 @@ func RoleFromGroups(org string, groups []string) string {
 	}
 	return ""
 }
+
+// TicketRepos is where a ticket of each visibility is filed, in the tickets organisation: the
+// repository the teams of every reader role can read, and the one only restricted readers can. Both
+// the gateway and the executor use this one map, and nothing overrides it, so the page cannot name one
+// repository while the executor files in another, and the two can never be the same. See ADR 0021.
+var TicketRepos = map[string]string{approval.Public: "tickets", approval.Restricted: "tickets-restricted"}

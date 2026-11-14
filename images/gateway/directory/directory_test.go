@@ -19,6 +19,12 @@ func TestRoleFromGroups(t *testing.T) {
 	}
 }
 
+func TestTicketReposAreDistinct(t *testing.T) {
+	if len(TicketRepos) != 2 || TicketRepos["public"] == TicketRepos["restricted"] || TicketRepos["public"] == "" || TicketRepos["restricted"] == "" {
+		t.Errorf("ticket repositories: %v", TicketRepos)
+	}
+}
+
 func TestUserName(t *testing.T) {
 	for name, want := range map[string]bool{"alice": true, "a.b-c_9": true, "Alice": false, "": false,
 		"-alice": false, "alice/../x": false, "alice\n": false} {

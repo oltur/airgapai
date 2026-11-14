@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,12 +17,14 @@ import (
 // forgejo is the executor's view of Forgejo: who is in which team, and filing issues. Its token is
 // an owner's of the tickets organisation only, scoped to issues and to reading the organisation.
 type forgejo struct {
-	base, token, org, repo string
-	client                 *http.Client
+	base, token, org string
+	client           *http.Client
 }
 
-func newForgejo(base, token, org, repo string) *forgejo {
-	return &forgejo{base: base, token: token, org: org, repo: repo, client: &http.Client{Timeout: 15 * time.Second}}
+// newForgejo files public tickets where every team reads them, and restricted ones where only the
+// teams of restricted readers do, by directory.TicketRepos. See ADR 0021.
+func newForgejo(base, token, org string) *forgejo {
+	return &forgejo{base: base, token: token, org: org, client: &http.Client{Timeout: 15 * time.Second}}
 }
 
 // refusedError is Forgejo answering and refusing, as opposed to no answer: then the issue does not exist.
@@ -96,19 +99,27 @@ func (f *forgejo) Role(ctx context.Context, user string) (string, error) {
 	return "", nil
 }
 
-// createIssue files the ticket and returns its number.
-func (f *forgejo) createIssue(ctx context.Context, title, body string) (int64, error) {
+// errVisibility is an execution whose visibility has no repository: nothing is filed.
+var errVisibility = errors.New("no repository for this visibility")
+
+// createIssue files the ticket in the repository for its visibility, and returns its number and the
+// repository, as org/repo.
+func (f *forgejo) createIssue(ctx context.Context, visibility, title, body string) (int64, string, error) {
+	repo, ok := directory.TicketRepos[visibility]
+	if !ok {
+		return 0, "", errVisibility
+	}
 	status, raw, err := f.do(ctx, http.MethodPost,
-		"/repos/"+url.PathEscape(f.org)+"/"+url.PathEscape(f.repo)+"/issues", map[string]string{"title": title, "body": body})
+		"/repos/"+url.PathEscape(f.org)+"/"+url.PathEscape(repo)+"/issues", map[string]string{"title": title, "body": body})
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if status != http.StatusCreated {
-		return 0, &refusedError{status}
+		return 0, "", &refusedError{status}
 	}
 	var issue struct {
 		Number int64 `json:"number"`
 	}
 	err = json.Unmarshal(raw, &issue)
-	return issue.Number, err
+	return issue.Number, f.org + "/" + repo, err
 }

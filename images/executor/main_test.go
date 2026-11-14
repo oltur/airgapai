@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -47,7 +48,11 @@ func (f *fakeForgejo) handler(t *testing.T) http.Handler {
 		}
 		http.NotFound(w, r)
 	})
-	mux.HandleFunc("POST /api/v1/repos/maintenance/tickets/issues", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v1/repos/maintenance/{repo}/issues", func(w http.ResponseWriter, r *http.Request) {
+		if repo := r.PathValue("repo"); repo != "tickets" && repo != "tickets-restricted" {
+			http.NotFound(w, r)
+			return
+		}
 		f.mu.Lock()
 		hook := f.onIssue
 		f.mu.Unlock()
@@ -64,6 +69,7 @@ func (f *fakeForgejo) handler(t *testing.T) http.Handler {
 		if err := json.NewDecoder(r.Body).Decode(&issue); err != nil {
 			t.Error(err)
 		}
+		issue["repo"] = r.PathValue("repo")
 		f.issues = append(f.issues, issue)
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]int{"number": len(f.issues)})
@@ -95,18 +101,41 @@ func (f *fakeForgejo) filed() int {
 	return len(f.issues)
 }
 
+// A visibility with no repository files nothing, before any request reaches Forgejo.
+func TestUnknownVisibilityFilesNothing(t *testing.T) {
+	fake := &fakeForgejo{members: map[string]string{}}
+	srv := httptest.NewServer(fake.handler(t))
+	defer srv.Close()
+	fj := newForgejo(srv.URL, "test-token", "maintenance")
+	for _, v := range []string{"", "secret", "Restricted"} {
+		if _, _, err := fj.createIssue(context.Background(), v, "t", "b"); !errors.Is(err, errVisibility) {
+			t.Errorf("visibility %q: %v", v, err)
+		}
+	}
+	if n := fake.filed(); n != 0 {
+		t.Errorf("%d issues filed", n)
+	}
+	// The known ones file where directory.TicketRepos says.
+	for v, want := range map[string]string{approval.Public: "tickets", approval.Restricted: "tickets-restricted"} {
+		_, repo, err := fj.createIssue(context.Background(), v, "t", "b")
+		if err != nil || repo != "maintenance/"+want || fake.issue(fake.filed() - 1)["repo"] != want {
+			t.Errorf("visibility %q: filed in %q, %v", v, repo, err)
+		}
+	}
+}
+
 func TestRoleFromTeams(t *testing.T) {
 	fake := &fakeForgejo{members: map[string]string{"alice": "technicians", "bob": "engineers"}}
 	srv := httptest.NewServer(fake.handler(t))
 	defer srv.Close()
-	fj := newForgejo(srv.URL, "test-token", "maintenance", "tickets")
+	fj := newForgejo(srv.URL, "test-token", "maintenance")
 	for user, want := range map[string]string{"alice": "technician", "bob": "engineer", "carol": "", "../admin": "", "a b": "", "Alice": ""} {
 		if got, err := fj.Role(context.Background(), user); err != nil || got != want {
 			t.Errorf("%q: got %q, %v; want %q", user, got, err, want)
 		}
 	}
 	// A Forgejo that refuses the token is an error, not "no role".
-	bad := newForgejo(srv.URL, "wrong", "maintenance", "tickets")
+	bad := newForgejo(srv.URL, "wrong", "maintenance")
 	if _, err := bad.Role(context.Background(), "alice"); err == nil {
 		t.Error("a refused token gave a role answer")
 	}
@@ -136,15 +165,15 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	fake := &fakeForgejo{members: map[string]string{"alice": "technicians", "bob": "technicians"}}
 	fsrv := httptest.NewServer(fake.handler(t))
 	defer fsrv.Close()
-	fj := newForgejo(fsrv.URL, "test-token", "maintenance", "tickets")
+	fj := newForgejo(fsrv.URL, "test-token", "maintenance")
 	store := approval.New(pool, fj, []approval.Tool{approval.CreateTicket}, time.Now)
 	if err := store.Grant(ctx, "cluster-admin", "technician", "create_ticket"); err != nil {
 		t.Fatal(err)
 	}
 	s := &server{store: store, forgejo: fj}
 	const args = `{"title":"Pump 3 leaks","body":"Seen at the seal.","priority":"high"}`
-	confirm := func() string {
-		p, err := store.Propose(ctx, "alice", "create_ticket", []byte(args), nil)
+	confirmFrom := func(sources []approval.Source) string {
+		p, err := store.Propose(ctx, "alice", "create_ticket", []byte(args), sources)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,6 +183,7 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 		}
 		return token
 	}
+	confirm := func() string { return confirmFrom(nil) }
 	post := func(token, user, tool, a string) int {
 		body, _ := json.Marshal(map[string]any{"token": token, "user": user, "tool": tool, "args": json.RawMessage(a)})
 		w := httptest.NewRecorder()
@@ -186,6 +216,9 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 		t.Fatalf("%d issues filed, want 1", n)
 	}
 	issue := fake.issue(0)
+	if issue["repo"] != "tickets" {
+		t.Errorf("a proposal with no restricted source was filed in %q", issue["repo"])
+	}
 	if issue["title"] != "Pump 3 leaks" || !strings.HasPrefix(issue["body"], "Filed for alice after their confirmation of proposal ") ||
 		!strings.HasSuffix(issue["body"], ". Priority: high.\n\n---\n\nSeen at the seal.") {
 		t.Fatalf("the issue: %v", issue)
@@ -217,16 +250,26 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	fake.mu.Lock()
 	fake.onIssue = cancelReq
 	fake.mu.Unlock()
-	number, err := s.run(reqCtx, executeRequest{Token: token, User: "alice", Tool: "create_ticket", Args: json.RawMessage(args)})
+	number, repo, err := s.run(reqCtx, executeRequest{Token: token, User: "alice", Tool: "create_ticket", Args: json.RawMessage(args)})
 	fake.mu.Lock()
 	fake.onIssue = nil
 	fake.mu.Unlock()
-	if err != nil || number != 2 || reqCtx.Err() == nil {
+	if err != nil || number != 2 || repo != "maintenance/tickets" || reqCtx.Err() == nil {
 		t.Fatalf("with the caller gone: issue %d, %v, context %v", number, err, reqCtx.Err())
 	}
 
+	// A proposal drawn on a restricted source is filed where only restricted readers are.
+	token = confirmFrom([]approval.Source{{Path: "a.md", ContentHash: "h", Classification: approval.Public},
+		{Path: "s.md", ContentHash: "h", Classification: approval.Restricted}})
+	if code := post(token, "alice", "create_ticket", args); code != http.StatusOK {
+		t.Fatalf("the restricted call: %d", code)
+	}
+	if repo := fake.issue(fake.filed() - 1)["repo"]; repo != "tickets-restricted" {
+		t.Errorf("a restricted proposal was filed in %q", repo)
+	}
+
 	var outcomes string
-	if err := admin.QueryRow(ctx, "SELECT string_agg(decision, ',' ORDER BY seq) FROM gateway.audit WHERE action = 'result'").Scan(&outcomes); err != nil || outcomes != "succeeded,failed,succeeded" {
+	if err := admin.QueryRow(ctx, "SELECT string_agg(decision, ',' ORDER BY seq) FROM gateway.audit WHERE action = 'result'").Scan(&outcomes); err != nil || outcomes != "succeeded,failed,succeeded,succeeded" {
 		t.Fatalf("result entries: %q, %v", outcomes, err)
 	}
 	if bad, _, err := store.VerifyAudit(ctx); err != nil || bad != 0 {

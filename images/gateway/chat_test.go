@@ -125,7 +125,7 @@ func TestChatTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []approval.Source{{Path: "pumps.md", ChunkIndex: 0, ContentHash: "h0"}, {Path: "pumps.md", ChunkIndex: 1, ContentHash: "h1"}}
+	want := []approval.Source{{Path: "pumps.md", ChunkIndex: 0, ContentHash: "h0", Classification: "public"}, {Path: "pumps.md", ChunkIndex: 1, ContentHash: "h1", Classification: "public"}}
 	if len(p.Sources) != 2 || p.Sources[0] != want[0] || p.Sources[1] != want[1] {
 		t.Errorf("the proposal's sources: %+v", p.Sources)
 	}
@@ -242,8 +242,8 @@ func TestSourceTextFollowsTheViewersRole(t *testing.T) {
 	}
 	pctx := withSession(ctx, session{identity: identity{user: "alice", role: "technician"}})
 	p, err := h.store.Propose(pctx, "alice", "create_ticket", []byte(`{"title":"t","body":"b","priority":"low"}`),
-		[]approval.Source{{Path: "pumps.md", ChunkIndex: 0, ContentHash: "h0"}, {Path: "secrets.md", ChunkIndex: 0, ContentHash: "h2"},
-			{Path: "pumps.md", ChunkIndex: 1, ContentHash: "stale"}})
+		[]approval.Source{{Path: "pumps.md", ChunkIndex: 0, ContentHash: "h0", Classification: "public"}, {Path: "secrets.md", ChunkIndex: 0, ContentHash: "h2", Classification: "restricted"},
+			{Path: "pumps.md", ChunkIndex: 1, ContentHash: "stale", Classification: "public"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,6 +256,25 @@ func TestSourceTextFollowsTheViewersRole(t *testing.T) {
 	}
 	if roles := h.search.asked(); len(roles) != 1 || roles[0] != "technician" {
 		t.Errorf("the source text was read with roles %v", roles)
+	}
+	// A restricted source makes the ticket restricted, and the page says who will read it.
+	if !strings.Contains(pg.body, "Readable by engineers only.") || !strings.Contains(pg.body, "maintenance/tickets-restricted") {
+		t.Error("the page does not say the ticket is for engineers only")
+	}
+	// Confirmed, the link goes to the repository the executor says it filed in.
+	h.executor.set(http.StatusOK, `{"issue":7,"repo":"maintenance/tickets-restricted"}`)
+	done := alice.post("/proposals/"+p.ID.String()+"/confirm", url.Values{"csrf": {csrf(t, pg.body)}}, nil)
+	if !strings.Contains(done.body, "/maintenance/tickets-restricted/issues/7\"") {
+		t.Errorf("the filed page links elsewhere: %s", done.body)
+	}
+	// A proposal from public sources only says both teams will read it.
+	q, err := h.store.Propose(pctx, "alice", "create_ticket", []byte(`{"title":"t","body":"b","priority":"low"}`),
+		[]approval.Source{{Path: "pumps.md", ChunkIndex: 0, ContentHash: "h0", Classification: "public"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pg := alice.get("/proposals/" + q.ID.String()); !strings.Contains(pg.body, "Readable by technicians and engineers") {
+		t.Error("the page does not say both teams will read a public ticket")
 	}
 }
 
