@@ -20,8 +20,8 @@ slice of the Kubernetes documentation (CC BY 4.0) is ingested into a row-level s
 retrieval service returns the chunks a named role may see. Of the gateway, its approval core, an
 executor that files a Forgejo issue only for a confirmed call, a confirmation page that users sign in
 to through Forgejo, and a chat page where the model searches the manuals with the user's role and can
-propose, but not file, a ticket exist. The adversarial tests, with a compromised model and poisoned
-documents, are not built yet. The write-up is
+propose, but not file, a ticket exist. The deployed gateway is tested against a stub that acts as a
+fully compromised model. Tests with poisoned documents are not built yet. The write-up is
 [A blocked connection proves nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
 
 | Phase | What it should demonstrate |
@@ -44,6 +44,7 @@ documents, are not built yet. The write-up is
 | In the gateway's approval core, a tool call runs only with an unused, unexpired confirmation issued to the same user for the same tool and canonical arguments, with a role that still permits it. Replay, altered arguments, another user's token, expiry, a revoked role and 20 concurrent uses are refused but one. Every decision, including failures, is logged in a hash chain whose existing rows the gateway's login cannot change or delete, and a failed audit write stops the call | `make test-db`, also in CI | That the user is authenticated, that the token stays out of the model's context, or that a misled user does not confirm a harmful request: those come with later slices, or stay residual risks. The gateway can still append false entries that verify, until the chain's last hash is kept off the VM. See [ADR 0015](docs/adr/0015-approval-core.md) |
 | Users sign in through Forgejo, and the role comes from their teams. A user sees only their own proposals, rendered from the stored arguments with the model's text marked, escaped, and with invisible and default-ignorable characters shown as code points. A confirmation needs the session's CSRF token and this origin, files exactly one ticket through the executor, and its token never reaches the browser. A team change after sign-in is refused at execution | `make test-gateway`, part of `make rebuild`, and `make test-db` | That a misled user does not confirm a harmful request, which stays a residual risk, or that the identity holds against tampering with traffic inside the cluster, which has no TLS yet. Replay and altered arguments cannot be tried through the page, so they are tested in `make test-db`. See [ADR 0017](docs/adr/0017-sign-in-and-confirmation-page.md) |
 | In a chat turn, the model's searches use the signed-in user's role, never one it names; a ticket it asks for is only a proposal, whose sources are the passages the gateway's own searches found; nothing in the loop can confirm; and the confirmation page shows those passages' text read with the viewer's role | `make test-db`, and `make test-gateway` with the real model in the VM | That the model follows its instructions, or that answers are correct or cite their sources: the compromised-model and poisoned-document tests and the eval gate come later. See [ADR 0018](docs/adr/0018-chat-loop-and-tools.md) |
+| Against a stub acting as a fully compromised model, through the deployed gateway's image, secrets and network rules, no turn files, confirms or executes anything: a search with the model's own role, copying passages into a ticket, ten proposals in one reply, tools that do not exist, `user` and `token` fields, oversized arguments, an endless loop and an answer built to look like the confirmation page are refused, bounded or shown as text | `make test-adversarial`, part of `make rebuild` | That no other output gets through: the scenarios are those written. Or that a convinced user does not confirm a real proposal. See [ADR 0019](docs/adr/0019-compromised-model-tests.md) |
 | In a single-node lab, pods reach a canary outside the cluster only with both the network policy and the VM path removed | `make test-egress`, part of `make rebuild` | That no other path exists. The canary is on the host, public targets have no open-path control, and only TCP and DNS were tested. See [ADR 0008](docs/adr/0008-egress-test-and-layer-matrix.md) |
 
 ## What Phase 1 contains
@@ -81,6 +82,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0016](docs/adr/0016-executor.md) | The executor, and Forgejo as the directory and ticket system |
 | [0017](docs/adr/0017-sign-in-and-confirmation-page.md) | Sign-in through Forgejo, and the confirmation page |
 | [0018](docs/adr/0018-chat-loop-and-tools.md) | The chat loop and its two tools |
+| [0019](docs/adr/0019-compromised-model-tests.md) | Testing the gateway against a fully compromised model |
 
 ## Requirements
 
@@ -125,7 +127,8 @@ make test-rls     # test row-level security on the chunks table, with controls
 make test-ingest  # test ingestion, a second run, the labels and the Job's network paths, with controls
 make test-retrieval  # test retrieval by role, a leak test and the service's network paths, with controls
 make test-executor   # test that the executor refuses unconfirmed calls, with audit and network checks
-make test-gateway    # test sign-in through Forgejo and the confirmation page, with audit and network checks
+make test-gateway    # test sign-in, the confirmation page and the real model, with audit and network checks
+make test-adversarial  # test the deployed gateway against a stub that acts as a fully compromised model
 make measure-retrieval  # measure recall per role against an exact scan, in the VM
 make test-egress  # test every egress path and the layer matrix from the host, with controls
 make rebuild      # destroy everything, rebuild from the bundle and run all of the above
@@ -167,13 +170,7 @@ infra/vm-ssh.sh "$k8s -n gateway exec deploy/executor -- /executor grant technic
 
 Then open <http://127.0.0.1:18092/chat>, sign in as that user, and ask the manuals a question, or
 describe a fault and ask for a ticket. The page waits while the model answers, on CPU. A proposed ticket is linked
-from the page. To make a proposal without the model, as the tests do:
-
-```sh
-infra/vm-ssh.sh "$k8s -n gateway exec deploy/executor -- /executor propose alice create_ticket \
-  '{\"title\":\"Valve 7 sticks\",\"body\":\"Typed by hand.\",\"priority\":\"low\"}'"
-# open http://127.0.0.1:18092/proposals/<proposal> and sign in as that user
-```
+from the page.
 
 Confirming files the ticket in `maintenance/tickets`, which you can open from the result page.
 

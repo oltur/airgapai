@@ -3,9 +3,9 @@
 // canonical arguments that were confirmed. See ADR 0016.
 //
 // It serves POST /execute and GET /ready. Its subcommands are for an administrator using kubectl
-// exec, which already implies control of the cluster: grant, revoke and verify, plus propose, which
-// stands in for the model's tool call until the chat loop exists. There is no confirm command: a
-// confirmation is made only on the gateway's page, by a signed-in user, and its token stays there.
+// exec, which already implies control of the cluster: grant, revoke and verify. It cannot propose or
+// confirm: a proposal comes only from the gateway's chat loop, and a confirmation only from the
+// gateway's page, by a signed-in user, whose token stays there.
 package main
 
 import (
@@ -195,17 +195,8 @@ func admin(ctx context.Context, store *approval.Store, args []string) error {
 			return fmt.Errorf("the audit chain breaks at row %d", bad)
 		}
 		return nil
-	case "propose": // stands in for the model until the chat loop exists
-		if err := need(4, "propose USER TOOL ARGS-JSON"); err != nil {
-			return err
-		}
-		p, err := store.Propose(ctx, args[1], args[2], []byte(args[3]), nil)
-		if err != nil {
-			return err
-		}
-		return out.Encode(map[string]string{"proposal": p.ID.String(), "args": p.Args, "args_sha256": p.ArgsSHA256})
 	}
-	return errors.New("commands: serve, grant, revoke, verify, propose")
+	return errors.New("commands: serve, grant, revoke, verify")
 }
 
 func getenv(key, fallback string) string {

@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway measure-inference measure-retrieval rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial measure-inference measure-retrieval rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -24,10 +24,17 @@ test-secrets: ## Prove the guard blocks fake secrets in a temporary repo
 tools: ## Install the pinned guard and lint tools into ~/.local/bin
 	@scripts/install-tools.sh
 
-lint: ## Run ShellCheck, Ruff, go vet, go test and govulncheck
+lint: ## Check for hidden characters, then run ShellCheck, Ruff, go vet, go test and govulncheck
 	@for tool in shellcheck ruff go govulncheck; do \
 		command -v $$tool >/dev/null || { echo "$$tool not found, see make tools"; exit 1; }; \
 	done
+	@# Characters that hide or reorder text, written by accident or not, must not reach the sources:
+	@# soft hyphen, Arabic letter mark, Mongolian vowel separator, zero-width and directional marks,
+	@# invisible operators, byte order mark and tag characters. git grep exits 1 for none found and 0
+	@# for a match; anything else, such as a locale where -P cannot read the class, fails the check too.
+	@LC_ALL=C.UTF-8 git grep -nP '[\x{00AD}\x{061C}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{2069}\x{FEFF}\x{E0000}-\x{E007F}]' -- .; \
+		rc=$$?; [ $$rc -eq 1 ] || { [ $$rc -eq 0 ] && echo "hidden or bidirectional characters found; write them as escapes" \
+		|| echo "the hidden-character check could not run"; exit 1; }
 	@shellcheck -x -P SCRIPTDIR -S warning $$(git ls-files '*.sh' '.githooks/*')
 	@ruff check --quiet .
 	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
@@ -77,8 +84,11 @@ test-retrieval: ## Test the retrieval service's roles, a leak test and its netwo
 test-executor: ## Test that the executor refuses unconfirmed calls, with audit and network checks
 	@cat test/lib/probe.sh test/lib/forgejo.sh test/executor.sh | infra/vm-ssh.sh sudo bash -s
 
-test-gateway: ## Test sign-in through Forgejo and the confirmation page, with audit and network checks
-	@cat test/lib/probe.sh test/lib/forgejo.sh test/gateway.sh | infra/vm-ssh.sh sudo bash -s
+test-gateway: ## Test sign-in through Forgejo, the confirmation page and the real model, with audit and network checks
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/lib/stub.sh test/gateway.sh | infra/vm-ssh.sh sudo bash -s
+
+test-adversarial: ## Test the deployed gateway against a stub that acts as a fully compromised model
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/lib/stub.sh test/adversarial.sh | infra/vm-ssh.sh sudo bash -s
 
 test-egress: ## Test every egress path and the layer matrix from outside the cluster, with controls
 	@go -C test/egress run . -root "$(CURDIR)"
@@ -103,5 +113,6 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	$(MAKE) --no-print-directory test-retrieval && \
 	$(MAKE) --no-print-directory test-executor && \
 	$(MAKE) --no-print-directory test-gateway && \
+	$(MAKE) --no-print-directory test-adversarial && \
 	$(MAKE) --no-print-directory test-egress && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"

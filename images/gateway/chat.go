@@ -196,11 +196,9 @@ type turn struct {
 }
 
 // decodeArgs reads a tool call's arguments into out, refusing unknown fields, so the model cannot
-// add one, such as a role, that a later change might start to honour.
+// add one, such as a role, that a later change might start to honour. runTool has already checked
+// their size.
 func decodeArgs(raw string, out any) error {
-	if len(raw) > maxToolArgs {
-		return errors.New("the arguments are too long")
-	}
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(out); err != nil {
@@ -251,6 +249,9 @@ func (c *chatter) runTool(ctx context.Context, sess session, t *turn, call toolC
 	t.calls++
 	if t.calls > maxToolCalls {
 		return refuse(fmt.Sprintf("at most %d tool calls in a turn", maxToolCalls))
+	}
+	if len(call.Function.Arguments) > maxToolArgs {
+		return refuse("the arguments are too long")
 	}
 	switch call.Function.Name {
 	case "search_manuals":
