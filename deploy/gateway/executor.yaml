@@ -1,7 +1,7 @@
 # The executor: the only workload that holds the ticket credential. It runs a call only by consuming
 # the user's one-time confirmation in the gateway database, then files exactly the confirmed
 # arguments as a Forgejo issue. See ADR 0016. It reaches PostgreSQL and Forgejo by the rules in
-# infra/guest/manifests/gateway-policy.yaml. Nothing can call it yet: the gateway gets its own rule.
+# infra/guest/manifests/gateway-policy.yaml. Only the gateway can call it.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -36,7 +36,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: executor
-          image: 10.43.0.50:5000/airgapai/executor@sha256:8e1aa7175c8e3a4f6359db9ea271a1f1dddcb83dad254a718dfeb1f0272f671a
+          image: 10.43.0.50:5000/airgapai/executor@sha256:5a322d5185358ed879232ba19e0577e58cac7dfc8fc9c8edec211a445fcdd7ec
           args: [serve, -listen=:8080]
           env:
             - name: PGHOST

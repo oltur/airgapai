@@ -8,8 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"time"
+
+	"airgapai/gateway/directory"
 )
 
 // forgejo is the executor's view of Forgejo: who is in which team, and filing issues. Its token is
@@ -22,11 +23,6 @@ type forgejo struct {
 func newForgejo(base, token, org, repo string) *forgejo {
 	return &forgejo{base: base, token: token, org: org, repo: repo, client: &http.Client{Timeout: 15 * time.Second}}
 }
-
-// User names, in lower case only. Forgejo matches names without regard to case, but the approval core
-// binds the exact string, so "Alice" and "alice" would be one Forgejo user and two identities. Only the
-// lower-case form gets a role. Anything else is refused before it reaches a URL.
-var userName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,39}$`)
 
 // refusedError is Forgejo answering and refusing, as opposed to no answer: then the issue does not exist.
 type refusedError struct{ status int }
@@ -57,12 +53,9 @@ func (f *forgejo) do(ctx context.Context, method, path string, body any) (int, [
 	return resp.StatusCode, raw, err
 }
 
-// Teams map Forgejo teams to reader roles, the higher first.
-var teamRoles = []struct{ team, role string }{{"engineers", "engineer"}, {"technicians", "technician"}}
-
 // Role asks Forgejo now, every time, so a change of team takes effect on the next decision.
 func (f *forgejo) Role(ctx context.Context, user string) (string, error) {
-	if !userName.MatchString(user) {
+	if !directory.UserName.MatchString(user) {
 		return "", nil
 	}
 	status, raw, err := f.do(ctx, http.MethodGet, "/orgs/"+url.PathEscape(f.org)+"/teams", nil)
@@ -83,8 +76,8 @@ func (f *forgejo) Role(ctx context.Context, user string) (string, error) {
 	for _, t := range teams {
 		ids[t.Name] = t.ID
 	}
-	for _, tr := range teamRoles {
-		id, ok := ids[tr.team]
+	for _, tr := range directory.TeamRoles {
+		id, ok := ids[tr.Team]
 		if !ok {
 			continue
 		}
@@ -94,10 +87,10 @@ func (f *forgejo) Role(ctx context.Context, user string) (string, error) {
 		}
 		switch status {
 		case http.StatusOK:
-			return tr.role, nil
+			return tr.Role, nil
 		case http.StatusNotFound:
 		default:
-			return "", fmt.Errorf("checking %s membership: %d", tr.team, status)
+			return "", fmt.Errorf("checking %s membership: %d", tr.Team, status)
 		}
 	}
 	return "", nil
