@@ -95,10 +95,17 @@ team_id() { # name
     | python3 -c "import json,sys; print(next(t['id'] for t in json.load(sys.stdin) if t['name'] == sys.argv[1]))" "$1"
 }
 api POST /orgs '{"username":"maintenance","visibility":"private"}'
-api POST /orgs/maintenance/repos '{"name":"tickets","private":true,"default_branch":"main"}'
-for team in technicians engineers; do
-  api POST /orgs/maintenance/teams "{\"name\":\"$team\",\"permission\":\"read\",\"units\":[\"repo.issues\"],\"includes_all_repositories\":true}"
+# Tickets drawn on a restricted source go to tickets-restricted, which only engineers can read (ADR
+# 0021). Each team lists its repositories rather than including all, so a new one is in neither.
+for repo in tickets tickets-restricted; do
+  api POST /orgs/maintenance/repos "{\"name\":\"$repo\",\"private\":true,\"default_branch\":\"main\"}"
 done
+for team in technicians engineers; do
+  api POST /orgs/maintenance/teams "{\"name\":\"$team\",\"permission\":\"read\",\"units\":[\"repo.issues\"],\"includes_all_repositories\":false}"
+done
+api PUT "/teams/$(team_id technicians)/repos/maintenance/tickets"
+api PUT "/teams/$(team_id engineers)/repos/maintenance/tickets"
+api PUT "/teams/$(team_id engineers)/repos/maintenance/tickets-restricted"
 "${forgejo[@]}" forgejo admin user create --username executor --password "$(openssl rand -hex 24)" \
   --email executor@airgapai.local --must-change-password=false >/dev/null
 api PUT "/teams/$(team_id Owners)/members/executor"

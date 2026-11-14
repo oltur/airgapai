@@ -128,7 +128,9 @@ data:
       tool text NOT NULL,
       args text NOT NULL,          -- canonical JSON
       args_sha256 text NOT NULL,
-      sources text NOT NULL,       -- canonical JSON of chunk ids and hashes, never chunk text
+      sources text NOT NULL,       -- canonical JSON of chunk ids, hashes and labels, never chunk text
+      -- restricted if any source is: where the ticket is filed, and so who can read it (ADR 0021)
+      visibility text NOT NULL CHECK (visibility IN ('public', 'restricted')),
       created_at timestamptz NOT NULL,
       expires_at timestamptz NOT NULL
     );

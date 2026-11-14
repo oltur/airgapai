@@ -14,11 +14,19 @@ status() { fj "$@" | tail -1; }
 team() { fj GET /orgs/maintenance/teams | sed '$d' | json "next(t['id'] for t in d if t['name'] == '$1')"; }
 # The repository's total, from Forgejo's X-Total-Count, so the count does not stop at one page. Only an
 # answer with that header counts: an error has none, and must not pass for a number of issues.
-issues() {
+issues() { # [repository]: maintenance/tickets unless named
   [[ -n $admin_token ]] || fj GET /version >/dev/null
   kubectl -n forgejo exec deployment/forgejo -- curl -s -o /dev/null -D - -H "Authorization: token $admin_token" \
-    "http://localhost:3000/api/v1/repos/maintenance/tickets/issues?state=all&type=issues&limit=1" 2>/dev/null \
+    "http://localhost:3000/api/v1/repos/maintenance/${1:-tickets}/issues?state=all&type=issues&limit=1" 2>/dev/null \
     | awk 'tolower($1) == "x-total-count:" {gsub("\r", ""); print $2; found=1} END {if (!found) print "error"}'
+}
+
+# as_user USER METHOD PATH: the status of a request made as USER, through the administrator's Sudo
+# header, so a test sees what that user's own permissions allow.
+as_user() {
+  [[ -n $admin_token ]] || fj GET /version >/dev/null
+  kubectl -n forgejo exec deployment/forgejo -- curl -s -o /dev/null -w '%{http_code}' -X "$2" \
+    -H "Authorization: token $admin_token" -H "Sudo: $1" "http://localhost:3000/api/v1$3" 2>/dev/null
 }
 
 # test_user NAME [TEAM]: creates the user, or resets the password of one an earlier test made, and puts

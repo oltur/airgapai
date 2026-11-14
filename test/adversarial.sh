@@ -17,6 +17,7 @@ kubectl -n gateway rollout status deployment/gateway --timeout=300s >/dev/null |
 cli() { kubectl -n gateway exec deployment/executor -- /executor "$@" 2>&1; }
 
 test_user alice technicians
+test_user bob engineers
 cli grant technician create_ticket >/dev/null
 rm -f /tmp/gateway-test-*
 kubectl -n forgejo port-forward svc/forgejo 13000:3000 >/dev/null 2>&1 &
@@ -47,6 +48,7 @@ result "its ticket is a proposal, not filed" 1 "$(shown alice@stub 'A ticket was
 escalated="$(proposal_link alice@stub)"
 result "the proposal's page names its sources" 200 "$(browse alice@stub get "${escalated:-/proposals/none}")"
 result "each readable with alice's role" 0 "$(shown alice@stub 'Not readable with your role')"
+result "and, with no restricted source, readable by both teams" 1 "$(shown alice@stub 'Readable by technicians and engineers')"
 
 echo "== Many proposals and searches in one reply"
 result "the turn" 200 "$(turn flood)"
@@ -88,6 +90,27 @@ result "nothing executed" "$executions_before" "$(decisions execute allowed)"
 result "two proposals, from the first two turns, logged" "$((proposals_before + 2))" "$(decisions propose allowed)"
 chain="$(cli verify)"
 result "audit chain unbroken" 0 "$(json "d['first_bad_row']" <<<"$chain")"
+
+echo "== An engineer's turn copies restricted text into a ticket"
+# Bob is an engineer, so his searches find restricted passages, and the stub copies them into a ticket.
+# He then confirms it, as a person would: the check is where it goes, and who can read it there.
+cli grant engineer create_ticket >/dev/null
+restricted_before="$(issues tickets-restricted)" public_before="$(issues)"
+result "bob signs in to the stub's gateway" "303 /chat" "$(browse bob@stub signin /chat "${passwords[bob]}")"
+result "the turn" 200 "$(ask bob@stub "scenario escalate Secrets encryption at rest and access control")"
+result "his search found restricted passages" true "$( (( $(shown bob@stub ', restricted</li>') > 0 )) && echo true)"
+copied="$(proposal_link bob@stub)"
+result "the copied ticket is a proposal" 200 "$(browse bob@stub get "${copied:-/proposals/none}")"
+result "whose page says engineers only" 1 "$(shown bob@stub 'Readable by engineers only.')"
+result "bob confirms it" 200 "$(browse bob@stub post "$copied/confirm" genuine)"
+number="$(grep -o 'ticket #[0-9]*' /tmp/gateway-test-bob@stub.html | tr -dc 0-9)"
+result "it was filed in tickets-restricted" 1 "$(shown bob@stub "/maintenance/tickets-restricted/issues/$number\"")"
+result "one more ticket there" "$((restricted_before + 1))" "$(issues tickets-restricted)"
+result "and none in the tickets technicians read" "$public_before" "$(issues)"
+result "bob can read it" 200 "$(as_user bob GET "/repos/maintenance/tickets-restricted/issues/${number:-0}")"
+result "alice cannot" 404 "$(as_user alice GET "/repos/maintenance/tickets-restricted/issues/${number:-0}")"
+result "alice still reads the public tickets (control)" 200 "$(as_user alice GET /repos/maintenance/tickets/issues)"
+cli revoke engineer create_ticket >/dev/null
 
 if (( failed )); then echo "adversarial checks failed"; exit 1; fi
 echo "all adversarial checks passed"

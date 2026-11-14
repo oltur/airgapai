@@ -101,7 +101,7 @@ func setup(t *testing.T) fixture {
 func (f fixture) confirmed(t *testing.T) (Proposal, string) {
 	t.Helper()
 	ctx := context.Background()
-	p, err := f.s.Propose(ctx, "alice", "create_ticket", []byte(args), []Source{{"content/en/docs/a.md", 0, "abc"}})
+	p, err := f.s.Propose(ctx, "alice", "create_ticket", []byte(args), []Source{{"content/en/docs/a.md", 0, "abc", Public}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +410,7 @@ func TestModelTextStaysOutOfTheLog(t *testing.T) {
 func TestProposalIsReadableOnlyByItsOwner(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
-	p, err := f.s.Propose(ctx, "alice", "create_ticket", []byte(args), []Source{{"content/en/docs/a.md", 3, "abc"}})
+	p, err := f.s.Propose(ctx, "alice", "create_ticket", []byte(args), []Source{{"content/en/docs/a.md", 3, "abc", Public}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,5 +483,47 @@ func TestRevocationDuringExecutionIsSeen(t *testing.T) {
 		denied(t, err, "may not use")
 	case <-time.After(5 * time.Second):
 		t.Fatal("the execution did not finish")
+	}
+}
+
+// A proposal is restricted if any of its sources is, and execution says so, so the executor files it
+// where only restricted readers are.
+func TestVisibilityFollowsSources(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	const args = `{"title":"t","body":"b","priority":"low"}`
+	for name, c := range map[string]struct {
+		sources []Source
+		want    string
+	}{
+		"no sources":      {nil, Public},
+		"public only":     {[]Source{{"a.md", 0, "h", Public}, {"b.md", 1, "h", Public}}, Public},
+		"one restricted":  {[]Source{{"a.md", 0, "h", Public}, {"s.md", 0, "h", Restricted}}, Restricted},
+		"restricted only": {[]Source{{"s.md", 0, "h", Restricted}}, Restricted},
+	} {
+		p, err := f.s.Propose(ctx, "alice", "create_ticket", []byte(args), c.sources)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if p.Visibility != c.want {
+			t.Errorf("%s: proposed as %q, want %q", name, p.Visibility, c.want)
+		}
+		stored, err := f.s.Proposal(ctx, "alice", p.ID)
+		if err != nil || stored.Visibility != c.want {
+			t.Errorf("%s: stored as %q, %v", name, stored.Visibility, err)
+		}
+		token, err := f.s.Confirm(ctx, "alice", p.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ex, err := f.s.Execute(ctx, token, "alice", "create_ticket", []byte(args))
+		if err != nil || ex.Visibility != c.want {
+			t.Errorf("%s: executed as %q, %v", name, ex.Visibility, err)
+		}
+	}
+	// A label the core does not know is refused, not taken as public.
+	for _, label := range []string{"", "secret", "Public"} {
+		_, err := f.s.Propose(ctx, "alice", "create_ticket", []byte(args), []Source{{"a.md", 0, "h", label}})
+		denied(t, err, "a source has an unknown label")
 	}
 }

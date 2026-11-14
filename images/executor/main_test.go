@@ -47,7 +47,11 @@ func (f *fakeForgejo) handler(t *testing.T) http.Handler {
 		}
 		http.NotFound(w, r)
 	})
-	mux.HandleFunc("POST /api/v1/repos/maintenance/tickets/issues", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/v1/repos/maintenance/{repo}/issues", func(w http.ResponseWriter, r *http.Request) {
+		if repo := r.PathValue("repo"); repo != "tickets" && repo != "tickets-restricted" {
+			http.NotFound(w, r)
+			return
+		}
 		f.mu.Lock()
 		hook := f.onIssue
 		f.mu.Unlock()
@@ -64,6 +68,7 @@ func (f *fakeForgejo) handler(t *testing.T) http.Handler {
 		if err := json.NewDecoder(r.Body).Decode(&issue); err != nil {
 			t.Error(err)
 		}
+		issue["repo"] = r.PathValue("repo")
 		f.issues = append(f.issues, issue)
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]int{"number": len(f.issues)})
@@ -99,14 +104,14 @@ func TestRoleFromTeams(t *testing.T) {
 	fake := &fakeForgejo{members: map[string]string{"alice": "technicians", "bob": "engineers"}}
 	srv := httptest.NewServer(fake.handler(t))
 	defer srv.Close()
-	fj := newForgejo(srv.URL, "test-token", "maintenance", "tickets")
+	fj := newForgejo(srv.URL, "test-token", "maintenance", "tickets", "tickets-restricted")
 	for user, want := range map[string]string{"alice": "technician", "bob": "engineer", "carol": "", "../admin": "", "a b": "", "Alice": ""} {
 		if got, err := fj.Role(context.Background(), user); err != nil || got != want {
 			t.Errorf("%q: got %q, %v; want %q", user, got, err, want)
 		}
 	}
 	// A Forgejo that refuses the token is an error, not "no role".
-	bad := newForgejo(srv.URL, "wrong", "maintenance", "tickets")
+	bad := newForgejo(srv.URL, "wrong", "maintenance", "tickets", "tickets-restricted")
 	if _, err := bad.Role(context.Background(), "alice"); err == nil {
 		t.Error("a refused token gave a role answer")
 	}
@@ -136,15 +141,15 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	fake := &fakeForgejo{members: map[string]string{"alice": "technicians", "bob": "technicians"}}
 	fsrv := httptest.NewServer(fake.handler(t))
 	defer fsrv.Close()
-	fj := newForgejo(fsrv.URL, "test-token", "maintenance", "tickets")
+	fj := newForgejo(fsrv.URL, "test-token", "maintenance", "tickets", "tickets-restricted")
 	store := approval.New(pool, fj, []approval.Tool{approval.CreateTicket}, time.Now)
 	if err := store.Grant(ctx, "cluster-admin", "technician", "create_ticket"); err != nil {
 		t.Fatal(err)
 	}
 	s := &server{store: store, forgejo: fj}
 	const args = `{"title":"Pump 3 leaks","body":"Seen at the seal.","priority":"high"}`
-	confirm := func() string {
-		p, err := store.Propose(ctx, "alice", "create_ticket", []byte(args), nil)
+	confirmFrom := func(sources []approval.Source) string {
+		p, err := store.Propose(ctx, "alice", "create_ticket", []byte(args), sources)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,6 +159,7 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 		}
 		return token
 	}
+	confirm := func() string { return confirmFrom(nil) }
 	post := func(token, user, tool, a string) int {
 		body, _ := json.Marshal(map[string]any{"token": token, "user": user, "tool": tool, "args": json.RawMessage(a)})
 		w := httptest.NewRecorder()
@@ -186,6 +192,9 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 		t.Fatalf("%d issues filed, want 1", n)
 	}
 	issue := fake.issue(0)
+	if issue["repo"] != "tickets" {
+		t.Errorf("a proposal with no restricted source was filed in %q", issue["repo"])
+	}
 	if issue["title"] != "Pump 3 leaks" || !strings.HasPrefix(issue["body"], "Filed for alice after their confirmation of proposal ") ||
 		!strings.HasSuffix(issue["body"], ". Priority: high.\n\n---\n\nSeen at the seal.") {
 		t.Fatalf("the issue: %v", issue)
@@ -225,8 +234,18 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 		t.Fatalf("with the caller gone: issue %d, %v, context %v", number, err, reqCtx.Err())
 	}
 
+	// A proposal drawn on a restricted source is filed where only restricted readers are.
+	token = confirmFrom([]approval.Source{{Path: "a.md", ContentHash: "h", Classification: approval.Public},
+		{Path: "s.md", ContentHash: "h", Classification: approval.Restricted}})
+	if code := post(token, "alice", "create_ticket", args); code != http.StatusOK {
+		t.Fatalf("the restricted call: %d", code)
+	}
+	if repo := fake.issue(fake.filed() - 1)["repo"]; repo != "tickets-restricted" {
+		t.Errorf("a restricted proposal was filed in %q", repo)
+	}
+
 	var outcomes string
-	if err := admin.QueryRow(ctx, "SELECT string_agg(decision, ',' ORDER BY seq) FROM gateway.audit WHERE action = 'result'").Scan(&outcomes); err != nil || outcomes != "succeeded,failed,succeeded" {
+	if err := admin.QueryRow(ctx, "SELECT string_agg(decision, ',' ORDER BY seq) FROM gateway.audit WHERE action = 'result'").Scan(&outcomes); err != nil || outcomes != "succeeded,failed,succeeded,succeeded" {
 		t.Fatalf("result entries: %q, %v", outcomes, err)
 	}
 	if bad, _, err := store.VerifyAudit(ctx); err != nil || bad != 0 {

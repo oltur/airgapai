@@ -37,6 +37,8 @@ type field struct{ Name, Value string }
 // proposalView is the proposal as the page shows it, built only from what the database holds.
 type proposalView struct {
 	ID, Tool, ArgsSHA256 string
+	Restricted           bool    // a source is restricted, so only restricted readers will see the ticket
+	Repository           string  // where the executor will file it
 	Fields               []field // written by the model
 	Sources              []sourceView
 	SourcesError         bool
@@ -71,6 +73,7 @@ func (s *server) view(p approval.Proposal, sess session) (page, error) {
 		return ia - ib
 	})
 	v := &proposalView{ID: p.ID.String(), Tool: p.Tool, ArgsSHA256: p.ArgsSHA256,
+		Restricted: p.Visibility == approval.Restricted, Repository: s.tickets[p.Visibility],
 		Expires: p.ExpiresAt.UTC().Format(time.RFC3339), Expired: !s.now().Before(p.ExpiresAt)}
 	for _, k := range names {
 		value := string(args[k])
@@ -201,7 +204,9 @@ yourself: the model wrote them, and what is shown is exactly what will be filed.
 <ol>{{range .Sources}}<li><span class="note">{{.Path}}, chunk {{.ChunkIndex}}, SHA-256 {{.ContentHash}}{{with .Classification}}, {{.}}{{end}}</span>
 {{if .Found}}<div class="source"><pre>{{visible .Text}}</pre></div>{{else if not $.Proposal.SourcesError}}<p class="note">Not readable with your role, or changed since.</p>{{end}}</li>{{end}}</ol>
 {{else}}<p class="note">The proposal names no sources.</p>{{end}}
-<p class="note">The executor files the ticket in maintenance/tickets as itself, with a first line naming you and this proposal.
+{{if .Restricted}}<p><strong>Readable by engineers only.</strong> A source is restricted, so the ticket goes to {{.Repository}}, which technicians cannot read.</p>
+{{else}}<p>Readable by technicians and engineers: the ticket goes to {{.Repository}}.</p>{{end}}
+<p class="note">The executor files the ticket as itself, with a first line naming you and this proposal.
 It checks your team in Forgejo again before filing.</p>
 {{if .Expired}}<p><strong>This proposal has expired and can no longer be confirmed.</strong></p>
 {{else}}<form method="post" action="/proposals/{{.ID}}/confirm"><input type="hidden" name="csrf" value="{{$.Session.CSRF}}">

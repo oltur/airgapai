@@ -70,9 +70,12 @@ func (s *server) run(ctx context.Context, r executeRequest) (int64, error) {
 		record("failed", map[string]any{"stage": "arguments"})
 		return 0, err
 	}
-	number, err := s.forgejo.createIssue(ctx, args["title"], ticketBody(ex, args))
+	number, err := s.forgejo.createIssue(ctx, ex.Visibility, args["title"], ticketBody(ex, args))
 	var refused *refusedError
 	switch {
+	case errors.Is(err, errVisibility):
+		record("failed", map[string]any{"stage": "visibility"})
+		return 0, err
 	case errors.As(err, &refused):
 		record("failed", map[string]any{"stage": "forgejo", "status": refused.status})
 		return 0, err
@@ -81,7 +84,7 @@ func (s *server) run(ctx context.Context, r executeRequest) (int64, error) {
 		record("unknown", map[string]any{"stage": "forgejo"})
 		return 0, err
 	}
-	record("succeeded", map[string]any{"issue": number})
+	record("succeeded", map[string]any{"issue": number, "visibility": ex.Visibility})
 	return number, nil
 }
 
@@ -130,7 +133,7 @@ func main() {
 	}
 	defer pool.Close()
 	fj := newForgejo(getenv("FORGEJO_URL", "http://forgejo.forgejo.svc:3000"), os.Getenv("FORGEJO_TOKEN"),
-		getenv("TICKETS_ORG", "maintenance"), getenv("TICKETS_REPO", "tickets"))
+		getenv("TICKETS_ORG", "maintenance"), getenv("TICKETS_REPO", "tickets"), getenv("RESTRICTED_TICKETS_REPO", "tickets-restricted"))
 	store := approval.New(pool, fj, []approval.Tool{approval.CreateTicket}, time.Now)
 	if len(os.Args) > 1 && os.Args[1] != "serve" {
 		if err := admin(ctx, store, os.Args[1:]); err != nil {

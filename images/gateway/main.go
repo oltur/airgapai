@@ -38,10 +38,11 @@ type server struct {
 	sessions  *sessions
 	executor  *executor
 	chat      *chatter
-	retrieval *retrieval // for the confirmation page's source text
-	origin    string     // the gateway's own origin, as the browser reaches it
-	secure    bool       // whether cookies need HTTPS
-	ticketURL string     // Forgejo's issue list, as the browser reaches it
+	retrieval *retrieval        // for the confirmation page's source text
+	origin    string            // the gateway's own origin, as the browser reaches it
+	secure    bool              // whether cookies need HTTPS
+	tickets   map[string]string // repository by visibility, as org/repo
+	ticketURL string            // Forgejo, as the browser reaches it
 	now       func() time.Time
 }
 
@@ -284,7 +285,7 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 			Message: res.denied + ". Nothing was filed. This proposal cannot be confirmed again: once the reason is resolved, it has to be proposed anew."})
 	default:
 		s.render(w, http.StatusOK, "filed", page{Title: "Ticket filed", Session: &sess,
-			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%d", s.ticketURL, res.issue)})
+			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%s/issues/%d", s.ticketURL, s.tickets[p.Visibility], res.issue)})
 	}
 }
 
@@ -430,6 +431,10 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 	if repo == "" {
 		repo = "tickets"
 	}
+	restricted := env("RESTRICTED_TICKETS_REPO")
+	if restricted == "" {
+		restricted = "tickets-restricted"
+	}
 	client := &http.Client{Timeout: 15 * time.Second,
 		// Forgejo's token endpoint and the executor answer directly; a redirect would be unexpected.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -449,7 +454,9 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 		retrieval: rv,
 		origin:    gw.Scheme + "://" + gw.Host,
 		secure:    gw.Scheme == "https",
-		ticketURL: need["FORGEJO_BROWSER_URL"] + "/" + url.PathEscape(org) + "/" + url.PathEscape(repo) + "/issues",
-		now:       now,
+		ticketURL: need["FORGEJO_BROWSER_URL"],
+		tickets: map[string]string{approval.Public: url.PathEscape(org) + "/" + url.PathEscape(repo),
+			approval.Restricted: url.PathEscape(org) + "/" + url.PathEscape(restricted)},
+		now: now,
 	}, nil
 }

@@ -558,7 +558,7 @@ func TestConfirmationPage(t *testing.T) {
 		t.Helper()
 		pctx := withSession(ctx, session{identity: identity{user: user, role: "technician"}})
 		p, err := h.store.Propose(pctx, user, "create_ticket", []byte(args),
-			[]approval.Source{{Path: "content/en/docs/concepts/overview.md", ChunkIndex: 3, ContentHash: strings.Repeat("ab", 32)}})
+			[]approval.Source{{Path: "content/en/docs/concepts/overview.md", ChunkIndex: 3, ContentHash: strings.Repeat("ab", 32), Classification: "public"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -624,7 +624,7 @@ func TestConfirmationPage(t *testing.T) {
 	// The genuine confirmation: the executor gets a token and exactly the stored arguments, and the
 	// browser never sees the token.
 	done := alice.post(path+"/confirm", url.Values{"csrf": {token}}, nil)
-	if done.status != http.StatusOK || !strings.Contains(done.body, "ticket #7") {
+	if done.status != http.StatusOK || !strings.Contains(done.body, "ticket #7") || !strings.Contains(done.body, "/maintenance/tickets/issues/7\"") {
 		t.Fatalf("confirming: %d %s", done.status, done.body)
 	}
 	calls := h.executor.calls()
