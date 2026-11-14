@@ -10,7 +10,7 @@ those tools, and it counts time when Claude was working unattended.
 | 0: repo basics | 5 | 0.5 |
 | 1: the air gap | 60 | 7.4 |
 | 2: light retrieval | 30 | 7.5 |
-| 3: agent gateway | 55 | 5.1 |
+| 3: agent gateway | 55 | 5.2 |
 | 4: evals and write-up | 30 |  |
 
 ## By day

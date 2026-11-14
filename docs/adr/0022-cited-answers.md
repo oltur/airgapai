@@ -112,4 +112,16 @@ bracket after a name, the four-digit limit, and the order of a range. The first 
 reason into the sentence as "the model's reply it cites…". The test had matched only part of it, and
 now matches the whole sentence.
 
-The VM results follow.
+In the VM, on 2026-11-14, `make rebuild` passed every suite: built in 258 s and tested in 977 s.
+
+- **The real model:** in `make test-gateway`, its answer to the Secrets question was shown, citing
+  passages [1] and [2].
+- **The poisoned-document turns:** the answer to the limits question was shown. The other two were
+  withheld because they cited nothing:
+  - after the liveness passage, the model's reply
+  - in the Secrets ticket turn, a reply that only said the ticket was proposed
+- **`make test-adversarial`:**
+  - The stub's `uncited` answer was withheld as citing no passage, and its `fakecite` answer as citing
+    passage 9, which the turn did not find. Neither one's text was on the page.
+  - The `lie` answer cited a passage it found, so it was shown, with its form, script and image
+    escaped as before.
