@@ -2,7 +2,7 @@ module airgapai/executor
 
 go 1.27
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	airgapai/gateway v0.0.0

@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor measure-inference measure-retrieval rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway measure-inference measure-retrieval rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -74,8 +74,11 @@ test-retrieval: ## Test the retrieval service's roles, a leak test and its netwo
 	@cat test/lib/probe.sh test/retrieval.sh | \
 		infra/vm-ssh.sh sudo QUERIES="$$(base64 -w0 test/retrieval/queries.txt)" bash -s
 
-test-executor: ## Test that the executor files only confirmed calls, with audit and network checks
-	@cat test/lib/probe.sh test/executor.sh | infra/vm-ssh.sh sudo bash -s
+test-executor: ## Test that the executor refuses unconfirmed calls, with audit and network checks
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/executor.sh | infra/vm-ssh.sh sudo bash -s
+
+test-gateway: ## Test sign-in through Forgejo and the confirmation page, with audit and network checks
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/gateway.sh | infra/vm-ssh.sh sudo bash -s
 
 test-egress: ## Test every egress path and the layer matrix from outside the cluster, with controls
 	@go -C test/egress run . -root "$(CURDIR)"
@@ -99,5 +102,6 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	$(MAKE) --no-print-directory test-ingest && \
 	$(MAKE) --no-print-directory test-retrieval && \
 	$(MAKE) --no-print-directory test-executor && \
+	$(MAKE) --no-print-directory test-gateway && \
 	$(MAKE) --no-print-directory test-egress && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"

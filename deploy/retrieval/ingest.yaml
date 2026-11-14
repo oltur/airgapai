@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ingest
-          image: 10.43.0.50:5000/airgapai/ingest@sha256:4e3a1b4697d222903f85a3e4a42fde4791b8bf9f721e0e57d48cf7324b9c5bb0
+          image: 10.43.0.50:5000/airgapai/ingest@sha256:fb70d8a918f1176c6aa8fc2d65ef3dee79f617ca0b445967e321ebedb449ab92
           args:
             - -corpus=/corpus
             - -source=kubernetes-docs

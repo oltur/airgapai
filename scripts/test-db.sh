@@ -62,11 +62,12 @@ done
 (( ready )) || { tail -20 "$tmp/postgres.log"; echo "PostgreSQL did not initialise"; exit 1; }
 dsn() { echo "postgres://$1:test-$1@127.0.0.1:$port/$2?sslmode=disable"; }
 
+# Packages one at a time (-p 1): the gateway module has two packages that empty the same tables.
 run() { # module, then environment assignments
   local module=$1 status=0 toolchain
   shift
   toolchain="$(awk '$1 == "toolchain" {print $2}' "$root/images/$module/go.mod")"
-  (cd "$root/images/$module" && env "$@" GOTOOLCHAIN="$toolchain" go test -count=1 -v ./... >"$tmp/$module.out" 2>&1) || status=$?
+  (cd "$root/images/$module" && env "$@" GOTOOLCHAIN="$toolchain" go test -p 1 -count=1 -v ./... >"$tmp/$module.out" 2>&1) || status=$?
   echo "== $module"
   grep -E '^\s*--- |_test.go:' "$tmp/$module.out" || true
   (( status == 0 )) || { tail -20 "$tmp/$module.out"; echo "$module database tests failed"; exit 1; }

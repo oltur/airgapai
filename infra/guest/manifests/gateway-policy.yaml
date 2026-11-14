@@ -1,7 +1,38 @@
-# What the executor needs through the default deny, and nothing more: it reaches the gateway database
-# on PostgreSQL and the Forgejo API, and nothing may call it yet. Calico adds these to the other
+# What the gateway and the executor need through the default deny, and nothing more. The gateway reaches
+# the gateway database, Forgejo's token endpoint and the executor. The executor reaches the gateway
+# database and the Forgejo API. Only the gateway may call the executor, and nothing in the cluster may
+# call the gateway: the browser comes through kubectl port-forward. Calico adds these to the other
 # rules for PostgreSQL and Forgejo. They match the app label, so any pod in the gateway namespace that
-# carries app=executor gets the same paths.
+# carries app=gateway or app=executor gets that label's paths.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: gateway-egress
+spec:
+  selector: app == "gateway"
+  namespaceSelector: kubernetes.io/metadata.name == "gateway"
+  types:
+    - Egress
+  egress:
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "retrieval"
+        selector: app == "postgres"
+        ports: [5432]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "forgejo"
+        selector: app == "forgejo"
+        ports: [3000]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == "gateway"
+        selector: app == "executor"
+        ports: [8080]
+---
 apiVersion: crd.projectcalico.org/v1
 kind: GlobalNetworkPolicy
 metadata:
@@ -28,7 +59,25 @@ spec:
 apiVersion: crd.projectcalico.org/v1
 kind: GlobalNetworkPolicy
 metadata:
-  name: postgres-reachable-from-executor
+  name: executor-reachable-from-gateway
+spec:
+  selector: app == "executor"
+  namespaceSelector: kubernetes.io/metadata.name == "gateway"
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == "gateway"
+        selector: app == "gateway"
+      destination:
+        ports: [8080]
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: postgres-reachable-from-gateway-apps
 spec:
   selector: app == "postgres"
   namespaceSelector: kubernetes.io/metadata.name == "retrieval"
@@ -39,14 +88,14 @@ spec:
       protocol: TCP
       source:
         namespaceSelector: kubernetes.io/metadata.name == "gateway"
-        selector: app == "executor"
+        selector: app in {"gateway", "executor"}
       destination:
         ports: [5432]
 ---
 apiVersion: crd.projectcalico.org/v1
 kind: GlobalNetworkPolicy
 metadata:
-  name: forgejo-reachable-from-executor
+  name: forgejo-reachable-from-gateway-apps
 spec:
   selector: app == "forgejo"
   namespaceSelector: kubernetes.io/metadata.name == "forgejo"
@@ -57,6 +106,6 @@ spec:
       protocol: TCP
       source:
         namespaceSelector: kubernetes.io/metadata.name == "gateway"
-        selector: app == "executor"
+        selector: app in {"gateway", "executor"}
       destination:
         ports: [3000]

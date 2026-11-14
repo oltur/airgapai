@@ -107,4 +107,16 @@ executor_token="$("${forgejo[@]}" forgejo admin user generate-access-token --use
 "${kubectl[@]}" create namespace gateway --dry-run=client -o yaml | "${kubectl[@]}" apply -f -
 "${kubectl[@]}" -n gateway create secret generic executor --from-literal=forgejo-token="$executor_token" \
   --from-literal=database="$("${kubectl[@]}" -n retrieval get secret postgres -o jsonpath='{.data.gateway}' | base64 -d)" >/dev/null
+# The gateway signs users in through Forgejo as a confidential OAuth client that may return only to
+# the gateway's address as the browser reaches it, through kubectl port-forward. Its credentials go
+# straight into a Secret and are never printed. See ADR 0017.
+client="$("${forgejo[@]}" curl -fsS -X POST -H "Authorization: token $token" -H 'Content-Type: application/json' \
+  -d '{"name":"gateway","redirect_uris":["http://127.0.0.1:18092/callback"],"confidential_client":true}' \
+  http://localhost:3000/api/v1/user/applications/oauth2)"
+{ read -r client_id; read -r client_secret; } < <(python3 -c \
+  "import json,sys; c=json.load(sys.stdin); print(c['client_id']); print(c['client_secret'])" <<<"$client")
+"${kubectl[@]}" -n gateway create secret generic gateway --from-literal=oauth-client-id="$client_id" \
+  --from-literal=oauth-client-secret="$client_secret" \
+  --from-literal=database="$("${kubectl[@]}" -n retrieval get secret postgres -o jsonpath='{.data.gateway}' | base64 -d)" >/dev/null
+unset client client_secret
 "${kubectl[@]}" apply -f "$bootstrap/root-app.yaml"

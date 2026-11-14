@@ -1,0 +1,99 @@
+# The gateway: where a person signs in through Forgejo and confirms what a model proposed. On
+# confirmation it hands the one-time token straight to the executor, and the browser never sees it.
+# See ADR 0017. The browser reaches it through kubectl port-forward on 127.0.0.1:18092, the address
+# its OAuth client may return to, and reaches Forgejo the same way on forgejo.forgejo.svc:13000. It
+# reaches PostgreSQL, Forgejo and the executor by the rules in infra/guest/manifests/gateway-policy.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: gateway
+spec:
+  # Sessions are held in memory, so one replica: a second would not know the first one's sessions.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+      component: server
+  template:
+    metadata:
+      labels:
+        # As for the executor, the network rules match app and the Service matches component too.
+        app: gateway
+        component: server
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: 10.43.0.50:5000/airgapai/gateway@sha256:4f3dfd81e6c1a147691fcab64f1df80bc52836fae3e874f3a0b61573f507c67a
+          args: [-listen=:8080]
+          env:
+            - name: PGHOST
+              value: postgres.retrieval.svc
+            - name: PGUSER
+              value: gateway_app
+            - name: PGDATABASE
+              value: gateway
+            - name: PGSSLMODE
+              value: disable
+            - name: PGCONNECT_TIMEOUT
+              value: "10"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: {name: gateway, key: database}
+            - name: GATEWAY_URL
+              value: http://127.0.0.1:18092
+            # The code is exchanged inside the cluster, at Forgejo's ROOT_URL, which is also the ID
+            # token's issuer. The browser signs in at the second address, through its tunnel.
+            - name: FORGEJO_URL
+              value: http://forgejo.forgejo.svc:3000
+            - name: FORGEJO_BROWSER_URL
+              value: http://forgejo.forgejo.svc:13000
+            - name: EXECUTOR_URL
+              value: http://executor.gateway.svc:8080
+            - name: OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef: {name: gateway, key: oauth-client-id}
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: gateway, key: oauth-client-secret}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: gateway
+spec:
+  selector:
+    app: gateway
+    component: server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

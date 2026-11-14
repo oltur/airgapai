@@ -2,8 +2,8 @@
 # where row-level security decides what each reader sees (ADR 0012), and gateway, the approval core's
 # state and audit log (ADRs 0015 and 0016). The passwords come from the postgres Secret, which
 # bootstrap creates in the cluster, so none is stored here. Only the ingestion Job, the retrieval
-# service and the executor can reach the server, by the rules in infra/guest/manifests; the default
-# deny stops the rest.
+# service, the gateway and the executor can reach the server, by the rules in infra/guest/manifests;
+# the default deny stops the rest.
 apiVersion: v1
 kind: Namespace
 metadata:
