@@ -200,6 +200,11 @@ func TestChatTurn(t *testing.T) {
 	if strings.Count(got.body, "A tool call was refused") != 2 || proposalLink.MatchString(got.body) {
 		t.Errorf("unknown tool and extra argument: %s", got.body)
 	}
+	// Arguments over the limit are refused before they reach the approval core.
+	h.model.script(call("create_ticket", `{"title":"t","priority":"low","body":"`+strings.Repeat("A", maxToolArgs)+`"}`), reply("done"))
+	if got := ask(alice, "Huge.", csrfToken); !strings.Contains(got.body, "the arguments are too long") || proposalLink.MatchString(got.body) {
+		t.Error("huge create_ticket arguments were not refused as too long")
+	}
 	// A model that does not answer is reported as such.
 	h.model.script()
 	if got := ask(alice, "Anyone there?", csrfToken); got.status != http.StatusBadGateway {

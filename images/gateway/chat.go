@@ -301,6 +301,9 @@ func (c *chatter) runTool(ctx context.Context, sess session, t *turn, call toolC
 		if t.proposals >= maxProposals {
 			return refuse(fmt.Sprintf("at most %d proposal in a turn", maxProposals))
 		}
+		if len(call.Function.Arguments) > maxToolArgs {
+			return refuse("the arguments are too long")
+		}
 		// The proposal's sources are the passages found in this turn, as the gateway recorded them,
 		// not anything the model says about them.
 		sources := make([]approval.Source, 0, len(t.Sources))

@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Runs inside the VM as root. Tests that the executor refuses a call without a confirmation, that a
-# user's Forgejo team decides whether they may propose, that every decision is in an unbroken audit
-# chain, and that its network paths reach PostgreSQL and Forgejo only, with only the gateway able to
-# call it, with controls. test/lib/probe.sh and test/lib/forgejo.sh are sent ahead of it.
+# Runs inside the VM as root. Tests that the executor refuses a call without a confirmation, that it
+# has no command to propose or confirm, that every decision is in an unbroken audit chain, and that its
+# network paths reach PostgreSQL and Forgejo only, with only the gateway able to call it, with
+# controls. test/lib/probe.sh and test/lib/forgejo.sh are sent ahead of it.
 #
 # A confirmation is made only on the gateway's page, and its token never leaves the gateway, so the
 # confirmed call is tested through that page, in test/gateway.sh. The bindings a stolen token would
 # meet, such as another user, altered arguments or a replay, are tested against the same schema in
-# make test-db. Proposals are made with the executor's propose command, through kubectl exec, which
-# stands in for the model until the chat loop exists. Requests go through kubectl port-forward, which
-# does not pass through the network policy.
+# make test-db. Requests go through kubectl port-forward, which does not pass through the network
+# policy.
 set -uo pipefail
 
 export KUBECONFIG=/etc/rancher/rke2/rke2.yaml PATH=/var/lib/rancher/rke2/bin:$PATH
@@ -31,16 +30,12 @@ echo "== Setup"
 before="$(issues)"
 result "tickets repository reachable as admin (control)" true "$([[ $before =~ ^[0-9]+$ ]] && echo true)"
 result "grant technician create_ticket" "" "$(cli grant technician create_ticket)"
-no_confirm="$(cli confirm alice 00000000-0000-0000-0000-000000000000)"
-result "there is no confirm command" "commands: serve, grant, revoke, verify, propose" "$(head -1 <<<"$no_confirm")"
+# Captured first: a refused command exits non-zero, which under pipefail would fail a pipe into head.
+for command in confirm propose; do
+  out="$(cli "$command" alice create_ticket '{}')"
+  result "there is no $command command" "commands: serve, grant, revoke, verify" "$(head -1 <<<"$out")"
+done
 args='{"title":"Pump 3 leaks","body":"Seen at the seal during the morning round.","priority":"high"}'
-propose() { cli propose "$1" create_ticket "$2"; }
-proposal="$(propose alice "$args" | json "d['proposal']")"
-result "alice, a technician, can propose (control)" true "$([[ $proposal =~ ^[0-9a-f-]{36}$ ]] && echo true)"
-# Captured first: a refused command exits non-zero, which under pipefail would fail a pipe into grep.
-carol="$(propose carol "$args")" bob="$(propose bob "$args")"
-result "carol, with no team, cannot propose" "denied: the user has no role" "$(head -1 <<<"$carol")"
-result "bob, an engineer with no grant, cannot propose" "denied: the user's role may not use this tool" "$(head -1 <<<"$bob")"
 
 kubectl -n gateway port-forward svc/executor "$port:8080" >/dev/null 2>&1 &
 forward=$!

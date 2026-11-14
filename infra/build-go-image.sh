@@ -4,11 +4,12 @@
 # go.mod names, and owners, modes and times are fixed, so the digest depends only on the inputs and
 # Git can name it. Runs as user 65534. Prints the digest.
 # Usage: build-go-image.sh crane NAME registry/repository:tag [data-layer.tar]
+# The source is images/NAME, or GO_IMAGE_SRC, for a test tool kept elsewhere.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 crane="$1" name="$2" ref="$3" data="${4:-}"
-src="$here/../images/$name"
+src="${GO_IMAGE_SRC:-$here/../images/$name}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
