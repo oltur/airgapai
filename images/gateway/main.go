@@ -38,11 +38,11 @@ type server struct {
 	sessions  *sessions
 	executor  *executor
 	chat      *chatter
-	retrieval *retrieval        // for the confirmation page's source text
-	origin    string            // the gateway's own origin, as the browser reaches it
-	secure    bool              // whether cookies need HTTPS
-	tickets   map[string]string // repository by visibility, as org/repo
-	ticketURL string            // Forgejo, as the browser reaches it
+	retrieval *retrieval // for the confirmation page's source text
+	origin    string     // the gateway's own origin, as the browser reaches it
+	secure    bool       // whether cookies need HTTPS
+	org       string     // the tickets organisation, whose repositories directory.TicketRepos names
+	ticketURL string     // Forgejo, as the browser reaches it
 	now       func() time.Time
 }
 
@@ -52,6 +52,9 @@ const (
 	sessionCookie = "airgapai_gateway_session"
 	loginCookie   = "airgapai_gateway_login"
 )
+
+// ticketRepo is an org/repo as the executor reports it, checked before it goes into a link.
+var ticketRepo = regexp.MustCompile(`^[a-z0-9-]+/[a-z0-9-]+$`)
 
 // nextPath is where a sign-in may return to: the start page or a proposal, never another site.
 var nextPath = regexp.MustCompile(`^/(chat|proposals/[0-9a-f-]{36})?$`)
@@ -285,7 +288,7 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 			Message: res.denied + ". Nothing was filed. This proposal cannot be confirmed again: once the reason is resolved, it has to be proposed anew."})
 	default:
 		s.render(w, http.StatusOK, "filed", page{Title: "Ticket filed", Session: &sess,
-			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%s/issues/%d", s.ticketURL, s.tickets[p.Visibility], res.issue)})
+			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%s/issues/%d", s.ticketURL, res.repo, res.issue)})
 	}
 }
 
@@ -345,6 +348,7 @@ type executor struct {
 
 type outcome struct {
 	issue  int64
+	repo   string // where the executor filed it, as org/repo
 	denied string
 	err    error
 }
@@ -366,14 +370,15 @@ func (e *executor) execute(ctx context.Context, token, user, tool, args string) 
 	defer resp.Body.Close()
 	var answer struct {
 		Issue  int64  `json:"issue"`
+		Repo   string `json:"repo"`
 		Denied string `json:"denied"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&answer); err != nil {
 		return outcome{err: fmt.Errorf("executor answered %d: %w", resp.StatusCode, err)}
 	}
 	switch {
-	case resp.StatusCode == http.StatusOK && answer.Issue > 0:
-		return outcome{issue: answer.Issue}
+	case resp.StatusCode == http.StatusOK && answer.Issue > 0 && ticketRepo.MatchString(answer.Repo):
+		return outcome{issue: answer.Issue, repo: answer.Repo}
 	case resp.StatusCode == http.StatusForbidden && answer.Denied != "":
 		return outcome{denied: answer.Denied}
 	}
@@ -427,14 +432,7 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 	if org == "" {
 		org = "maintenance"
 	}
-	repo := env("TICKETS_REPO")
-	if repo == "" {
-		repo = "tickets"
-	}
-	restricted := env("RESTRICTED_TICKETS_REPO")
-	if restricted == "" {
-		restricted = "tickets-restricted"
-	}
+
 	client := &http.Client{Timeout: 15 * time.Second,
 		// Forgejo's token endpoint and the executor answer directly; a redirect would be unexpected.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -455,8 +453,7 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 		origin:    gw.Scheme + "://" + gw.Host,
 		secure:    gw.Scheme == "https",
 		ticketURL: need["FORGEJO_BROWSER_URL"],
-		tickets: map[string]string{approval.Public: url.PathEscape(org) + "/" + url.PathEscape(repo),
-			approval.Restricted: url.PathEscape(org) + "/" + url.PathEscape(restricted)},
-		now: now,
+		org:       org,
+		now:       now,
 	}, nil
 }

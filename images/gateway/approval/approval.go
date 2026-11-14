@@ -399,6 +399,9 @@ func (s *Store) Execute(ctx context.Context, token, user, tool string, rawArgs [
 			return &Denied{Reason: "the confirmation is for another tool"}
 		case phash != Hash(args):
 			return &Denied{Reason: "the arguments differ from the confirmed proposal"}
+		case visible != Public && visible != Restricted:
+			// The schema allows only these. Checked here too, before the token is used up.
+			return &Denied{Reason: "the proposal has an unknown visibility"}
 		}
 		if err := s.permitted(ctx, tx, who, tool); err != nil {
 			return err

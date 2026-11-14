@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,18 +101,41 @@ func (f *fakeForgejo) filed() int {
 	return len(f.issues)
 }
 
+// A visibility with no repository files nothing, before any request reaches Forgejo.
+func TestUnknownVisibilityFilesNothing(t *testing.T) {
+	fake := &fakeForgejo{members: map[string]string{}}
+	srv := httptest.NewServer(fake.handler(t))
+	defer srv.Close()
+	fj := newForgejo(srv.URL, "test-token", "maintenance")
+	for _, v := range []string{"", "secret", "Restricted"} {
+		if _, _, err := fj.createIssue(context.Background(), v, "t", "b"); !errors.Is(err, errVisibility) {
+			t.Errorf("visibility %q: %v", v, err)
+		}
+	}
+	if n := fake.filed(); n != 0 {
+		t.Errorf("%d issues filed", n)
+	}
+	// The known ones file where directory.TicketRepos says.
+	for v, want := range map[string]string{approval.Public: "tickets", approval.Restricted: "tickets-restricted"} {
+		_, repo, err := fj.createIssue(context.Background(), v, "t", "b")
+		if err != nil || repo != "maintenance/"+want || fake.issue(fake.filed() - 1)["repo"] != want {
+			t.Errorf("visibility %q: filed in %q, %v", v, repo, err)
+		}
+	}
+}
+
 func TestRoleFromTeams(t *testing.T) {
 	fake := &fakeForgejo{members: map[string]string{"alice": "technicians", "bob": "engineers"}}
 	srv := httptest.NewServer(fake.handler(t))
 	defer srv.Close()
-	fj := newForgejo(srv.URL, "test-token", "maintenance", "tickets", "tickets-restricted")
+	fj := newForgejo(srv.URL, "test-token", "maintenance")
 	for user, want := range map[string]string{"alice": "technician", "bob": "engineer", "carol": "", "../admin": "", "a b": "", "Alice": ""} {
 		if got, err := fj.Role(context.Background(), user); err != nil || got != want {
 			t.Errorf("%q: got %q, %v; want %q", user, got, err, want)
 		}
 	}
 	// A Forgejo that refuses the token is an error, not "no role".
-	bad := newForgejo(srv.URL, "wrong", "maintenance", "tickets", "tickets-restricted")
+	bad := newForgejo(srv.URL, "wrong", "maintenance")
 	if _, err := bad.Role(context.Background(), "alice"); err == nil {
 		t.Error("a refused token gave a role answer")
 	}
@@ -141,7 +165,7 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	fake := &fakeForgejo{members: map[string]string{"alice": "technicians", "bob": "technicians"}}
 	fsrv := httptest.NewServer(fake.handler(t))
 	defer fsrv.Close()
-	fj := newForgejo(fsrv.URL, "test-token", "maintenance", "tickets", "tickets-restricted")
+	fj := newForgejo(fsrv.URL, "test-token", "maintenance")
 	store := approval.New(pool, fj, []approval.Tool{approval.CreateTicket}, time.Now)
 	if err := store.Grant(ctx, "cluster-admin", "technician", "create_ticket"); err != nil {
 		t.Fatal(err)
@@ -226,11 +250,11 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	fake.mu.Lock()
 	fake.onIssue = cancelReq
 	fake.mu.Unlock()
-	number, err := s.run(reqCtx, executeRequest{Token: token, User: "alice", Tool: "create_ticket", Args: json.RawMessage(args)})
+	number, repo, err := s.run(reqCtx, executeRequest{Token: token, User: "alice", Tool: "create_ticket", Args: json.RawMessage(args)})
 	fake.mu.Lock()
 	fake.onIssue = nil
 	fake.mu.Unlock()
-	if err != nil || number != 2 || reqCtx.Err() == nil {
+	if err != nil || number != 2 || repo != "maintenance/tickets" || reqCtx.Err() == nil {
 		t.Fatalf("with the caller gone: issue %d, %v, context %v", number, err, reqCtx.Err())
 	}
 

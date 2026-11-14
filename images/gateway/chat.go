@@ -172,9 +172,14 @@ func (r *retrieval) chunks(ctx context.Context, role string, sources []approval.
 		Chunks []passage `json:"chunks"`
 	}
 	// Identity and hash only: the label is the gateway's record, and retrieval reads its own.
-	refs := make([]map[string]any, 0, len(sources))
+	type chunkRef struct {
+		Path        string `json:"path"`
+		ChunkIndex  int    `json:"chunk_index"`
+		ContentHash string `json:"content_sha256"`
+	}
+	refs := make([]chunkRef, 0, len(sources))
 	for _, s := range sources {
-		refs = append(refs, map[string]any{"path": s.Path, "chunk_index": s.ChunkIndex, "content_sha256": s.ContentHash})
+		refs = append(refs, chunkRef{s.Path, s.ChunkIndex, s.ContentHash})
 	}
 	err := r.post(ctx, "/chunks", map[string]any{"role": role, "chunks": refs}, &out)
 	return out.Chunks, err

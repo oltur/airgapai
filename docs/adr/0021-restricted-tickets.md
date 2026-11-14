@@ -21,9 +21,14 @@ reworded, and technicians would read it once it was filed. ADR 0019's stub showe
   source with any label other than `public` or `restricted` is refused, rather than taken as public.
   The visibility is part of the proposal row that the confirmation binds, and it is logged with the
   proposal and with the execution.
-- **The executor files by visibility.** Public tickets go to `maintenance/tickets`, and restricted ones
-  to `maintenance/tickets-restricted`. An execution with any other visibility files nothing, and its
-  failure is logged.
+- **The executor files by visibility, from one map.** Public tickets go to `maintenance/tickets`, and
+  restricted ones to `maintenance/tickets-restricted`. Both are in `directory.TicketRepos`, which the
+  gateway and the executor share and no setting overrides, so the two names cannot become one, and the
+  page cannot name one repository while the executor files in the other. An execution with any other
+  visibility files nothing. Its failure is logged, and the user is told that nothing was filed.
+  `Execute` also refuses such a proposal before it uses up the token, although the schema already
+  allows only the two values.
+- **The executor reports where it filed,** and the gateway's link after confirming goes there.
 - **Forgejo enforces who reads where.** Bootstrap creates both repositories. Each team lists its
   repositories instead of including all of them: technicians get `tickets`, and engineers get both. A
   repository added later is in neither team until it is listed.
@@ -52,7 +57,10 @@ reworded, and technicians would read it once it was filed. ADR 0019's stub showe
 - **A schema change.** `gateway.proposals` gets a `visibility` column. As ADR 0012 says of any schema
   change on a kept volume, an existing database needs a migration. A rebuild starts without one.
 - **The Forgejo setup is what makes the routing hold.** If someone adds technicians to
-  `tickets-restricted`, the gateway cannot tell. The test checks the setup as bootstrap leaves it.
+  `tickets-restricted`, the gateway cannot tell. `make test-adversarial` checks the teams' repository
+  lists before it tests the routing. A lab kept from before this change has teams that include every
+  repository: bootstrap runs once on a fresh VM, as ADR 0016 says, and does not fix them, but that
+  check fails on them.
 
 ### What this does not prove
 
@@ -79,7 +87,10 @@ On 2026-11-14, on the lab's Forgejo 17.0.1, with test users:
   restricted, when proposed, when read back, and when executed. The labels `""`, `secret` and `Public`
   were refused.
 - The executor filed a public execution in `tickets`, and one with a restricted source in
-  `tickets-restricted`.
+  `tickets-restricted`, and reported each repository. For the visibilities `""`, `secret` and
+  `Restricted` it filed nothing, and no request reached Forgejo.
+- An executor answer that named no repository, or something that is not one, was not taken for
+  success.
 - The gateway's page said "engineers only" for a proposal with a restricted source, and "technicians
   and engineers" for one with only public sources. After confirming, the link pointed to the
   restricted repository.

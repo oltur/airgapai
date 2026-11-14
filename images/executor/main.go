@@ -51,10 +51,11 @@ const finishTimeout = 30 * time.Second
 
 // run executes one confirmed call. A refusal is returned as such; the token is consumed only if the
 // call is allowed, and the outcome is logged either way.
-func (s *server) run(ctx context.Context, r executeRequest) (int64, error) {
+// It returns the issue's number and the repository it was filed in, as org/repo.
+func (s *server) run(ctx context.Context, r executeRequest) (int64, string, error) {
 	ex, err := s.store.Execute(ctx, r.Token, r.User, r.Tool, r.Args)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	// The token is used up now, so finish even if the caller goes away: a cancelled request must not
 	// leave a consumed confirmation with no attempt and no result.
@@ -68,24 +69,25 @@ func (s *server) run(ctx context.Context, r executeRequest) (int64, error) {
 	var args map[string]string
 	if err := json.Unmarshal([]byte(ex.Args), &args); err != nil {
 		record("failed", map[string]any{"stage": "arguments"})
-		return 0, err
+		return 0, "", err
 	}
-	number, err := s.forgejo.createIssue(ctx, ex.Visibility, args["title"], ticketBody(ex, args))
+	number, repo, err := s.forgejo.createIssue(ctx, ex.Visibility, args["title"], ticketBody(ex, args))
 	var refused *refusedError
 	switch {
 	case errors.Is(err, errVisibility):
+		// Known before anything reached Forgejo, so the caller can be told for certain.
 		record("failed", map[string]any{"stage": "visibility"})
-		return 0, err
+		return 0, "", &approval.Denied{Reason: "there is no repository for this visibility, so nothing was filed"}
 	case errors.As(err, &refused):
 		record("failed", map[string]any{"stage": "forgejo", "status": refused.status})
-		return 0, err
+		return 0, "", err
 	case err != nil:
 		// The request may have reached Forgejo and created the issue before the answer was lost.
 		record("unknown", map[string]any{"stage": "forgejo"})
-		return 0, err
+		return 0, "", err
 	}
-	record("succeeded", map[string]any{"issue": number, "visibility": ex.Visibility})
-	return number, nil
+	record("succeeded", map[string]any{"issue": number, "repo": repo, "visibility": ex.Visibility})
+	return number, repo, nil
 }
 
 func (s *server) handleExecute(w http.ResponseWriter, req *http.Request) {
@@ -100,7 +102,7 @@ func (s *server) handleExecute(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	number, err := s.run(req.Context(), r)
+	number, repo, err := s.run(req.Context(), r)
 	w.Header().Set("Content-Type", "application/json")
 	switch {
 	case approval.IsDenied(err):
@@ -111,7 +113,7 @@ func (s *server) handleExecute(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "execution failed"})
 	default:
-		_ = json.NewEncoder(w).Encode(map[string]int64{"issue": number})
+		_ = json.NewEncoder(w).Encode(map[string]any{"issue": number, "repo": repo})
 	}
 }
 
@@ -133,7 +135,7 @@ func main() {
 	}
 	defer pool.Close()
 	fj := newForgejo(getenv("FORGEJO_URL", "http://forgejo.forgejo.svc:3000"), os.Getenv("FORGEJO_TOKEN"),
-		getenv("TICKETS_ORG", "maintenance"), getenv("TICKETS_REPO", "tickets"), getenv("RESTRICTED_TICKETS_REPO", "tickets-restricted"))
+		getenv("TICKETS_ORG", "maintenance"))
 	store := approval.New(pool, fj, []approval.Tool{approval.CreateTicket}, time.Now)
 	if len(os.Args) > 1 && os.Args[1] != "serve" {
 		if err := admin(ctx, store, os.Args[1:]); err != nil {

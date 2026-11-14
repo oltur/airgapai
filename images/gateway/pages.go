@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"airgapai/gateway/approval"
+	"airgapai/gateway/directory"
 )
 
 // page is what every template gets. Only the fields a template uses are set.
@@ -73,7 +74,7 @@ func (s *server) view(p approval.Proposal, sess session) (page, error) {
 		return ia - ib
 	})
 	v := &proposalView{ID: p.ID.String(), Tool: p.Tool, ArgsSHA256: p.ArgsSHA256,
-		Restricted: p.Visibility == approval.Restricted, Repository: s.tickets[p.Visibility],
+		Restricted: p.Visibility == approval.Restricted, Repository: s.org + "/" + directory.TicketRepos[p.Visibility],
 		Expires: p.ExpiresAt.UTC().Format(time.RFC3339), Expired: !s.now().Before(p.ExpiresAt)}
 	for _, k := range names {
 		value := string(args[k])

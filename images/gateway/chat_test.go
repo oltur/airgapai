@@ -261,7 +261,8 @@ func TestSourceTextFollowsTheViewersRole(t *testing.T) {
 	if !strings.Contains(pg.body, "Readable by engineers only.") || !strings.Contains(pg.body, "maintenance/tickets-restricted") {
 		t.Error("the page does not say the ticket is for engineers only")
 	}
-	// Confirmed, the link goes to the restricted repository, where the executor filed it.
+	// Confirmed, the link goes to the repository the executor says it filed in.
+	h.executor.set(http.StatusOK, `{"issue":7,"repo":"maintenance/tickets-restricted"}`)
 	done := alice.post("/proposals/"+p.ID.String()+"/confirm", url.Values{"csrf": {csrf(t, pg.body)}}, nil)
 	if !strings.Contains(done.body, "/maintenance/tickets-restricted/issues/7\"") {
 		t.Errorf("the filed page links elsewhere: %s", done.body)

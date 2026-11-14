@@ -95,6 +95,10 @@ echo "== An engineer's turn copies restricted text into a ticket"
 # Bob is an engineer, so his searches find restricted passages, and the stub copies them into a ticket.
 # He then confirms it, as a person would: the check is where it goes, and who can read it there.
 cli grant engineer create_ticket >/dev/null
+# The routing holds only if Forgejo's teams are set up as bootstrap leaves them, so check that first.
+team_repos() { fj GET "/teams/$(team "$1")/repos" | sed '$d' | json "' '.join(sorted(r['name'] for r in d))"; }
+result "technicians read only tickets" "tickets" "$(team_repos technicians)"
+result "engineers read both" "tickets tickets-restricted" "$(team_repos engineers)"
 restricted_before="$(issues tickets-restricted)" public_before="$(issues)"
 result "bob signs in to the stub's gateway" "303 /chat" "$(browse bob@stub signin /chat "${passwords[bob]}")"
 result "the turn" 200 "$(ask bob@stub "scenario escalate Secrets encryption at rest and access control")"
