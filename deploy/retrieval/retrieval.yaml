@@ -31,7 +31,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: retrieval
-          image: 10.43.0.50:5000/airgapai/retrieval@sha256:645ac0f43edfaf2648974639590f56fa823b9aaa115ea547807bb97e10915e16
+          image: 10.43.0.50:5000/airgapai/retrieval@sha256:0e2d748c014a19cd40636f9141bc0124e99ac33231330e37d37a3a184e641902
           args:
             - -listen=:8080
             - -embed-url=http://embed.inference.svc:8080

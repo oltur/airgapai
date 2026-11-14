@@ -2,7 +2,8 @@
 # confirmation it hands the one-time token straight to the executor, and the browser never sees it.
 # See ADR 0017. The browser reaches it through kubectl port-forward on 127.0.0.1:18092, the address
 # its OAuth client may return to, and reaches Forgejo the same way on forgejo.forgejo.svc:13000. It
-# reaches PostgreSQL, Forgejo and the executor by the rules in infra/guest/manifests/gateway-policy.yaml.
+# reaches PostgreSQL, Forgejo, the executor, the chat model and the retrieval service by the rules in
+# infra/guest/manifests/gateway-policy.yaml. See ADR 0018 for the chat loop.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gateway
-          image: 10.43.0.50:5000/airgapai/gateway@sha256:4f3dfd81e6c1a147691fcab64f1df80bc52836fae3e874f3a0b61573f507c67a
+          image: 10.43.0.50:5000/airgapai/gateway@sha256:3bd72ae1ff26fc18ab5ec8d54d65d2e38abd83190d70b221a689122f1d95a0d0
           args: [-listen=:8080]
           env:
             - name: PGHOST
@@ -58,6 +59,10 @@ spec:
               value: http://forgejo.forgejo.svc:13000
             - name: EXECUTOR_URL
               value: http://executor.gateway.svc:8080
+            - name: CHAT_URL
+              value: http://chat.inference.svc:8080
+            - name: RETRIEVAL_URL
+              value: http://retrieval.retrieval.svc:8080
             - name: OAUTH_CLIENT_ID
               valueFrom:
                 secretKeyRef: {name: gateway, key: oauth-client-id}

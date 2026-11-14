@@ -37,11 +37,11 @@ class Stay(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a):
         return None
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar), Stay)
-def go(url, form=None, headers=None):
+def go(url, form=None, headers=None, timeout=60):
     req = urllib.request.Request(url, data=urllib.parse.urlencode(form).encode() if form is not None else None,
                                  headers=headers or {})
     try:
-        r = opener.open(req, timeout=60)
+        r = opener.open(req, timeout=timeout)
     except urllib.error.HTTPError as e:
         r = e
     return r.getcode(), r.headers.get("Location") or "", r.read().decode()
@@ -71,6 +71,8 @@ if cmd == "post":  # PATH MODE: genuine, no-csrf or other-origin
     form = {} if args[1] == "no-csrf" else {"csrf": page_csrf()}
     origin = "http://evil.example" if args[1] == "other-origin" else GW
     done(*go(GW + args[0], form, {"Origin": origin}))
+if cmd == "chat":  # QUESTION: a turn with the model, which can take minutes on CPU
+    done(*go(GW + "/chat", {"csrf": page_csrf(), "question": args[0]}, {"Origin": GW}, timeout=420))
 sys.exit(f"unknown command {cmd}")
 PY
 browse() { python3 -I /tmp/gateway-browser.py "$@"; }
@@ -166,13 +168,43 @@ result "the second confirmation's refusal logged" "$((refused_before + 1))" "$(d
 result "one execution allowed" "$((executed_before + 1))" "$(decisions execute allowed)"
 result "the execution after the team change refused and logged" "$((exec_refused_before + 1))" "$(decisions execute denied)"
 
+echo "== Chat with the model"
+# The model's choices decide some of this: the checks are on what the gateway does with them.
+browse alice get /chat >/dev/null
+started=$SECONDS
+result "a question about the manuals" 200 "$(browse alice chat "How do Kubernetes Secrets and RBAC control who can read a Secret?")"
+echo "info the turn took $((SECONDS - started)) s"
+cp /tmp/gateway-test-alice.html /tmp/gateway-test-question.html
+result "the model searched the manuals" 1 "$(shown alice 'Searched the manuals for')"
+result "and answered, marked as the model's" 1 "$(shown alice 'answer · written by the model')"
+result "a technician was shown no restricted passage" 0 "$(shown alice ', restricted</li>')"
+echo "info passages shown: $(grep -c ', public</li>' /tmp/gateway-test-alice.html) public"
+before_chat="$(issues)" proposals_before="$(decisions propose allowed)"
+started=$SECONDS
+result "a request to file a ticket" 200 "$(browse alice chat "The web pods in hall 3 keep restarting after the last deployment. Search the manuals for why a container restarts, then file a high priority ticket about the restarts.")"
+echo "info the turn took $((SECONDS - started)) s"
+result "the model proposed a ticket, not filed" 1 "$(shown alice 'A ticket was proposed, not filed')"
+result "and nothing was filed by the turn" "$before_chat" "$(issues)"
+result "the proposal is logged as alice's" "$((proposals_before + 1))" "$(decisions propose allowed)"
+chat_proposal="$(grep -o '/proposals/[0-9a-f-]\{36\}' /tmp/gateway-test-alice.html | head -1)"
+result "alice opens it" 200 "$(browse alice get "${chat_proposal:-/proposals/none}")"
+echo "info sources shown with text: $(shown alice 'class="source"')"
+result "its sources are those the turn found, readable by her" 0 "$(shown alice 'Not readable with your role')"
+result "alice confirms it" 200 "$(browse alice post "$chat_proposal/confirm" genuine)"
+result "one ticket filed" "$((before_chat + 1))" "$(issues)"
+chain="$(cli verify)"
+result "audit chain still unbroken" 0 "$(json "d['first_bad_row']" <<<"$chain")"
+
 echo "== Network paths"
 start_probes gateway probe-gateway=gateway probe-gateway-other=other || exit 1
 result "gateway label reaches PostgreSQL" reached "$(probe gateway probe-gateway postgres.retrieval.svc:5432)"
 result "gateway label reaches Forgejo" reached "$(probe gateway probe-gateway forgejo.forgejo.svc:3000)"
 result "gateway label reaches the executor" reached "$(probe gateway probe-gateway executor.gateway.svc:8080)"
-result "gateway label cannot reach the chat model" timeout "$(probe gateway probe-gateway chat.inference.svc:8080)"
-result "gateway label cannot reach the retrieval service" timeout "$(probe gateway probe-gateway retrieval.retrieval.svc:8080)"
+result "gateway label reaches the chat model" reached "$(probe gateway probe-gateway chat.inference.svc:8080)"
+result "gateway label reaches the retrieval service" reached "$(probe gateway probe-gateway retrieval.retrieval.svc:8080)"
+result "gateway label cannot reach the embedding server" timeout "$(probe gateway probe-gateway embed.inference.svc:8080)"
+result "another label cannot reach the chat model" timeout "$(probe gateway probe-gateway-other chat.inference.svc:8080)"
+result "another label cannot reach the retrieval service" timeout "$(probe gateway probe-gateway-other retrieval.retrieval.svc:8080)"
 result "another label cannot call the gateway" timeout "$(probe gateway probe-gateway-other gateway.gateway.svc:8080)"
 result "another label cannot reach the executor" timeout "$(probe gateway probe-gateway-other executor.gateway.svc:8080)"
 
