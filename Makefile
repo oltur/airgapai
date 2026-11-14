@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial measure-inference measure-retrieval rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned measure-inference measure-retrieval rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -90,6 +90,10 @@ test-gateway: ## Test sign-in through Forgejo, the confirmation page and the rea
 test-adversarial: ## Test the deployed gateway against a stub that acts as a fully compromised model
 	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/lib/stub.sh test/adversarial.sh | infra/vm-ssh.sh sudo bash -s
 
+test-poisoned: ## Test the deployed gateway and the real model against planted prompt-injection passages
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/poisoned.sh | \
+		infra/vm-ssh.sh sudo DOCS="$$(base64 -w0 test/poisoned/documents.json)" bash -s
+
 test-egress: ## Test every egress path and the layer matrix from outside the cluster, with controls
 	@go -C test/egress run . -root "$(CURDIR)"
 
@@ -114,5 +118,6 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	$(MAKE) --no-print-directory test-executor && \
 	$(MAKE) --no-print-directory test-gateway && \
 	$(MAKE) --no-print-directory test-adversarial && \
+	$(MAKE) --no-print-directory test-poisoned && \
 	$(MAKE) --no-print-directory test-egress && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"
