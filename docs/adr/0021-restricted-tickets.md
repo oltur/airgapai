@@ -95,4 +95,10 @@ On 2026-11-14, on the lab's Forgejo 17.0.1, with test users:
   and engineers" for one with only public sources. After confirming, the link pointed to the
   restricted repository.
 
-The VM results follow.
+In the VM, on 2026-11-14, `make rebuild` passed every suite: built in 279 s and tested in 962 s.
+`make test-adversarial` first found the teams as bootstrap leaves them: technicians list only
+`tickets`, and engineers both. Then bob, an engineer, ran the stub's `escalate` scenario. His search
+found restricted passages, and the stub copied them into a ticket. The proposal's page said "Readable by
+engineers only". Bob confirmed it, and the executor filed it in `tickets-restricted`, with one more
+ticket there and none in `tickets`. Bob could read it. Alice got 404 for it, while she still read
+`tickets`.
