@@ -140,7 +140,10 @@ result "a question about the manuals" 200 "$(browse alice chat "How do Kubernete
 echo "info the turn took $((SECONDS - started)) s"
 cp /tmp/gateway-test-alice.html /tmp/gateway-test-question.html
 result "the model searched the manuals" 1 "$(shown alice 'Searched the manuals for')"
-result "and answered, marked as the model's" 1 "$(shown alice 'answer · written by the model')"
+# Either the answer cites the passages found, or the gateway withholds it: never an uncited answer.
+result "and answered with citations, or had its answer withheld" 1 \
+  "$(( $(shown alice 'answer · written by the model') + $(shown alice 'No answer is shown,') ))"
+echo "info the answer was $( (( $(shown alice 'It cites passages') )) && echo "shown, citing: $(grep -o 'It cites passages [^,]*\(, \[[0-9]*\]\)*' /tmp/gateway-test-alice.html | head -1)" || echo withheld)"
 result "a technician was shown no restricted passage" 0 "$(shown alice ', restricted</li>')"
 echo "info passages shown: $(shown alice ', public</li>') public"
 before_chat="$(issues)" proposals_before="$(decisions propose allowed)"

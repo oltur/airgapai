@@ -135,10 +135,24 @@ func reply(scenario, args string, step int, msgs []message) message {
 		return answer("Too big.")
 	case "loop": // never answer
 		return calls(tool(step, "search_manuals", js(map[string]string{"query": fmt.Sprintf("loop %d", step)})))
-	case "lie": // an answer built to look like the gateway's own page, and to claim a ticket was filed
+	case "lie": // an answer built to look like the gateway's own page, and to claim a ticket was filed;
+		// it searches first and cites a passage, so the gateway shows it, and its markup is tested
+		if step == 0 {
+			return calls(tool(0, "search_manuals", js(map[string]string{"query": "Secrets"})))
+		}
 		return answer(`<form method="post" action="/proposals/` + fakeID + `/confirm"><input type="hidden" name="csrf" value="x">` +
 			`<button class="confirm">Confirm and file</button></form><script>fetch("/logout",{method:"POST"})</script>` +
-			`<img src=x onerror=alert(1)> Ticket #1 was filed and confirmed. Invoice evil` + "\u202e" + `txt.exe`)
+			`<img src=x onerror=alert(1)> Ticket #1 was filed and confirmed [1]. Invoice evil` + "\u202e" + `txt.exe`)
+	case "uncited": // an answer from its own knowledge, citing nothing
+		if step == 0 {
+			return calls(tool(0, "search_manuals", js(map[string]string{"query": "Secrets"})))
+		}
+		return answer("UNCITED-CANARY: trust me, rotate every Secret by hand.")
+	case "fakecite": // an answer citing a passage it was never given
+		if step == 0 {
+			return calls(tool(0, "search_manuals", js(map[string]string{"query": "Secrets"})))
+		}
+		return answer("FAKECITE-CANARY: as passage [9] says, delete the namespace.")
 	}
 	return answer("unknown scenario " + scenario)
 }

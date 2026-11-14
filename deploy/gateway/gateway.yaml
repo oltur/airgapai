@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gateway
-          image: 10.43.0.50:5000/airgapai/gateway@sha256:a3ecd847659589ca8576bbb1e1764c82d943fa5683f3ff1a363a52ab6f813bc3
+          image: 10.43.0.50:5000/airgapai/gateway@sha256:54e2c20565bc6029206c926a137d2bf7e62c31cfa76743cffc2799b9fb1fe4a2
           args: [-listen=:8080]
           env:
             - name: PGHOST

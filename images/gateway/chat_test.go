@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -54,6 +55,44 @@ func chatDatabase(t *testing.T) *pgxpool.Pool {
 }
 
 var proposalLink = regexp.MustCompile(`/proposals/([0-9a-f-]{36})`)
+
+func TestCited(t *testing.T) {
+	uncited := &withheld{Uncited: true}
+	unknown := func(n int) *withheld { return &withheld{Passage: n} }
+	for _, c := range []struct {
+		answer   string
+		passages int
+		cites    []int
+		withheld *withheld
+	}{
+		{"The seal leaks [1].", 2, []int{1}, nil},
+		{"See [2] and [1], and [1, 2] again.", 2, []int{1, 2}, nil},
+		{"Both say so [1,2].", 3, []int{1, 2}, nil},
+		{"A range [1-3], and another [2–3].", 3, []int{1, 2, 3}, nil},
+		{"As [source 2] and [Source: 1] say.", 2, []int{1, 2}, nil},
+		{"[1] at the start.", 1, []int{1}, nil},
+		// Brackets in code, or after a name, are not citations.
+		{"Run `kubectl get pods -o jsonpath='{.items[0].metadata.name}'` [1].", 1, []int{1}, nil},
+		{"Use this [1]:\n```yaml\nports: [80, 443]\nargs: [\"--v=2\"]\n```", 1, []int{1}, nil},
+		{"Take items[0] and list[2][3] as shown [1].", 1, []int{1}, nil},
+		{"It is Paris.", 3, nil, uncited},
+		{"The manuals do not answer this.", 0, nil, uncited},
+		{"Not a citation: [a], [], [1.5], [99999].", 3, nil, uncited},
+		{"As [4] says.", 3, nil, unknown(4)},
+		{"As [0] says.", 3, nil, unknown(0)},
+		{"Real [1] and made up [1, 9].", 3, nil, unknown(9)},
+		{"Made up [1] with nothing found.", 0, nil, unknown(1)},
+		{"A backwards range [3-1].", 3, nil, unknown(1)},
+		{"A range past the end [2-5].", 3, nil, unknown(4)},
+		// A flow list outside code is still read as citations: see ADR 0022.
+		{"Set ports: [80, 443] as in [1].", 1, nil, unknown(80)},
+	} {
+		cites, why := cited(c.answer, c.passages)
+		if !slices.Equal(cites, c.cites) || (why == nil) != (c.withheld == nil) || (why != nil && *why != *c.withheld) {
+			t.Errorf("%q with %d passages: %v, %+v; want %v, %+v", c.answer, c.passages, cites, why, c.cites, c.withheld)
+		}
+	}
+}
 
 // A whole turn against the test database, a scripted model and a fake retrieval service.
 func TestChatTurn(t *testing.T) {
@@ -138,6 +177,23 @@ func TestChatTurn(t *testing.T) {
 	}
 	if n := len(h.executor.calls()); n != 0 {
 		t.Errorf("a chat turn reached the executor %d times", n)
+	}
+
+	// The answer cited passage 1, so the page lists what it cites.
+	if !strings.Contains(got.body, "It cites passages [1], listed below.") {
+		t.Error("the page does not list the answer's citations")
+	}
+	// An answer that cites nothing, or a passage the turn did not find, is withheld, not shown.
+	for _, c := range []struct{ answer, why string }{
+		{"Paris, from what I know. <b>trust me</b>", "No answer is shown,</strong> because the model's reply cites no passage from the manuals."},
+		{"As passage [7] says.", "No answer is shown,</strong> because the model's reply cites passage 7, which this turn did not find."},
+	} {
+		h.model.script(call("search_manuals", `{"query":"seal"}`), reply(c.answer))
+		got := ask(alice, "Uncited.", csrfToken)
+		if !strings.Contains(got.body, c.why) ||
+			strings.Contains(got.body, "trust me") || strings.Contains(got.body, "As passage") {
+			t.Errorf("the page lacks %q, or shows the answer: %s", c.why, got.body)
+		}
 	}
 
 	// The model is stopped after maxSteps calls that only call tools. The third search is over the
