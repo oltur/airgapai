@@ -29,6 +29,15 @@ func rowHash(prev string, seq int64, at time.Time, e Entry, detail string) strin
 	return Hash(prev + "\n" + string(fields))
 }
 
+// RowHash is a row's hash as Verify checks it, for a copy of the log kept off the VM to check rows
+// with exactly this code. See ADR 0024.
+func RowHash(prev string, seq int64, at time.Time, actor, action, decision, detail string) string {
+	return rowHash(prev, seq, at, Entry{Actor: actor, Action: action, Decision: decision}, detail)
+}
+
+// Genesis is the previous hash of the first row.
+const Genesis = genesis
+
 // appendAudit adds an entry in the caller's transaction. If it fails, the transaction must fail too.
 func appendAudit(ctx context.Context, tx pgx.Tx, at time.Time, e Entry) error {
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", auditLock); err != nil {

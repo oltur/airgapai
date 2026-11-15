@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned measure-inference measure-retrieval rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -94,6 +94,12 @@ test-poisoned: ## Test the deployed gateway and the real model against planted p
 	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/poisoned.sh | \
 		infra/vm-ssh.sh sudo DOCS="$$(base64 -w0 test/poisoned/documents.json)" bash -s
 
+audit-copy: ## Copy new gateway audit rows off the VM, after checking the copied ones are unchanged there
+	@. infra/versions.env && go -C infra/auditcopy run . -root "$(CURDIR)" -dir "$$DATA_DIR/audit"
+
+test-audit-copy: ## Test that the off-VM audit copy catches a row rewritten with its chain recomputed
+	@test/audit-copy.sh
+
 test-egress: ## Test every egress path and the layer matrix from outside the cluster, with controls
 	@go -C test/egress run . -root "$(CURDIR)"
 
@@ -119,5 +125,7 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	$(MAKE) --no-print-directory test-gateway && \
 	$(MAKE) --no-print-directory test-adversarial && \
 	$(MAKE) --no-print-directory test-poisoned && \
+	$(MAKE) --no-print-directory test-audit-copy && \
 	$(MAKE) --no-print-directory test-egress && \
+	$(MAKE) --no-print-directory audit-copy && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"
