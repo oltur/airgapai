@@ -115,3 +115,12 @@ After the review, with the copier split from `forge`, `make test-audit-copy` on 
 - found the VM's chain verified, and the copy took that row as its one new row
 
 The copier's tests also loaded a 3 MiB row.
+
+The first `make rebuild` with the copy, on 2026-11-15, passed every suite: built in 266 s and tested in
+966 s. In it, `make test-audit-copy` behaved as above:
+- the first copy took 34 rows, then two honest new rows, then none
+- it caught row 2 rewritten with its chain recomputed
+- after restoring, the copy took the row added meanwhile as its one new row
+
+At the end of the run, `make audit-copy` copied the new database's 37 rows to the lab's own copy,
+under `DATA_DIR/audit`.
