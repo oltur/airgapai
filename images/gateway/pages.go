@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -110,7 +109,7 @@ func (s *server) sourceText(ctx context.Context, v *proposalView, sess session, 
 		err = fmt.Errorf("asked for %d sources, got %d", len(sources), len(found))
 	}
 	if err != nil {
-		log.Printf("source text: %v", err)
+		logf("source text: %v", err)
 		v.SourcesError = true
 		return
 	}
@@ -179,6 +178,8 @@ button{font:inherit;padding:.5rem 1rem;cursor:pointer}.confirm{background:#14532
 {{define "chat"}}{{template "top" .}}
 {{with .Message}}<p><strong>{{.}}</strong></p>{{end}}
 {{with .Turn}}<h2>Question</h2><pre>{{visible .Question}}</pre>
+{{with .Removed}}<p class="note">Removed from your question before the model saw it:{{range $kind, $n := .}} {{$n}} × {{$kind}};{{end}}
+so it reaches no model, ticket or log.</p>{{end}}
 {{range .Steps}}{{if eq .Kind "search"}}<p class="note">Searched the manuals for “{{visible .Query}}”: {{.Found}} passages.</p>
 {{else if eq .Kind "proposal"}}<p><strong>A ticket was proposed, not filed.</strong> <a href="/proposals/{{.Proposal}}">Review and confirm it</a>.</p>
 {{else}}<p class="note">A tool call was refused: {{.Reason}}</p>{{end}}{{end}}
@@ -223,7 +224,7 @@ It checks your team in Forgejo again before filing.</p>
 func (s *server) render(w http.ResponseWriter, status int, name string, p page) {
 	var buf bytes.Buffer
 	if err := templates.ExecuteTemplate(&buf, name, p); err != nil {
-		log.Printf("template %s: %v", name, err)
+		logf("template %s: %v", name, err)
 		http.Error(w, "page error", http.StatusInternalServerError)
 		return
 	}

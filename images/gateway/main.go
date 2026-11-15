@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"airgapai/gateway/approval"
+	"airgapai/gateway/redact"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -159,7 +160,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	fail := func(status int, reason string) {
-		log.Printf("sign-in refused: %s", reason)
+		logf("sign-in refused: %s", reason)
 		s.render(w, status, "message", page{Title: "Sign-in failed", Message: reason})
 	}
 	http.SetCookie(w, s.cookie(loginCookie, "", "/callback", -1))
@@ -185,7 +186,7 @@ func (s *server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		fail(http.StatusForbidden, refused.reason)
 		return
 	case err != nil:
-		log.Printf("sign-in: %v", err)
+		logf("sign-in: %v", err)
 		fail(http.StatusBadGateway, "Forgejo could not be reached")
 		return
 	}
@@ -220,7 +221,7 @@ func (s *server) proposal(w http.ResponseWriter, r *http.Request, sess session) 
 		notFound()
 		return approval.Proposal{}, false
 	case err != nil:
-		log.Printf("loading a proposal: %v", err)
+		logf("loading a proposal: %v", err)
 		s.render(w, http.StatusInternalServerError, "message", page{Title: "Error", Session: &sess, Message: "The proposal could not be loaded."})
 		return approval.Proposal{}, false
 	}
@@ -242,7 +243,7 @@ func (s *server) handleProposal(w http.ResponseWriter, r *http.Request) {
 		s.sourceText(r.Context(), v.Proposal, sess, p.Sources)
 	}
 	if err != nil {
-		log.Printf("rendering proposal %s: %v", p.ID, err)
+		logf("rendering proposal %s: %v", p.ID, err)
 		s.render(w, http.StatusInternalServerError, "message", page{Title: "Error", Message: "The proposal could not be shown."})
 		return
 	}
@@ -271,14 +272,14 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("confirming %s: %v", p.ID, err)
+		logf("confirming %s: %v", p.ID, err)
 		s.render(w, http.StatusInternalServerError, "message", page{Title: "Error", Session: &sess, Message: "The confirmation could not be recorded, so nothing was filed."})
 		return
 	}
 	res := s.executor.execute(ctx, token, sess.user, p.Tool, p.Args)
 	switch {
 	case res.err != nil:
-		log.Printf("executing %s: %v", p.ID, res.err)
+		logf("executing %s: %v", p.ID, res.err)
 		s.render(w, http.StatusBadGateway, "message", page{Title: "Not filed", Session: &sess,
 			Message: "The confirmation was recorded, but the executor did not report a result. Check the tickets before proposing it again."})
 	case res.denied != "":
@@ -315,14 +316,17 @@ func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), turnTimeout)
 	defer cancel()
+	// Redacted before anything else sees it: the model, the page, the logs.
+	question, removed := redact.Text(question)
 	t, err := s.chat.chat(ctx, sess, question)
+	t.Removed = removed
 	if errors.Is(err, errBusy) {
 		s.render(w, http.StatusServiceUnavailable, "chat", page{Title: "Ask the manuals", Session: &sess,
 			Message: "The model is answering another question. Try again when it has finished."})
 		return
 	}
 	if err != nil {
-		log.Printf("chat: %v", err)
+		logf("chat: %v", err)
 		s.render(w, http.StatusBadGateway, "chat", page{Title: "Ask the manuals", Session: &sess, Turn: &t,
 			Message: "The model did not answer. Any proposal made before that is listed below."})
 		return
@@ -409,7 +413,7 @@ func main() {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
-	log.Printf("listening on %s", *addr)
+	logf("listening on %s", *addr)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
@@ -456,4 +460,10 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 		org:       org,
 		now:       now,
 	}, nil
+}
+
+// logf is the gateway's only way to log. Every line is redacted first, since an error can carry text
+// from a request, the model or a service it called. See ADR 0023.
+func logf(format string, args ...any) {
+	log.Print(redact.String(fmt.Sprintf(format, args...)))
 }

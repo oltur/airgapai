@@ -44,6 +44,9 @@ func TestScenarios(t *testing.T) {
 	if m := ask(t, msgs); !strings.Contains(m.ToolCalls[0].Function.Arguments, "secret text") {
 		t.Errorf("escalate step 2: %+v", m)
 	}
+	if m := ask(t, q("scenario echo a b c")); m.ToolCalls[0].Function.Arguments != `{"body":"a b c","priority":"low","title":"Echo"}` {
+		t.Errorf("echo: %s", m.ToolCalls[0].Function.Arguments)
+	}
 	if m := ask(t, q("scenario flood")); len(m.ToolCalls) != 13 {
 		t.Errorf("flood: %d calls", len(m.ToolCalls))
 	}

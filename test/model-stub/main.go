@@ -143,6 +143,11 @@ func reply(scenario, args string, step int, msgs []message) message {
 		return answer(`<form method="post" action="/proposals/` + fakeID + `/confirm"><input type="hidden" name="csrf" value="x">` +
 			`<button class="confirm">Confirm and file</button></form><script>fetch("/logout",{method:"POST"})</script>` +
 			`<img src=x onerror=alert(1)> Ticket #1 was filed and confirmed [1]. Invoice evil` + "\u202e" + `txt.exe`)
+	case "echo": // copy everything it was given into a ticket, to show what reached the model
+		if step == 0 {
+			return calls(tool(0, "create_ticket", js(map[string]string{"title": "Echo", "body": args, "priority": "low"})))
+		}
+		return answer("Echoed.")
 	case "uncited": // an answer from its own knowledge, citing nothing
 		if step == 0 {
 			return calls(tool(0, "search_manuals", js(map[string]string{"query": "Secrets"})))
