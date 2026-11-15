@@ -115,4 +115,10 @@ none of the values during the turn. That last check would also pass if nothing w
 evidence for the logs is the unit test of the redacting writer, including a line logged as the HTTP
 server logs, and the check that the gateway installs that writer at start.
 
-The VM results follow.
+On 2026-11-15, `make rebuild` passed every suite: built in 266 s and tested in 964 s. A first attempt
+had stopped while building the bundle: `Decode`, added to the approval core, also changed the
+executor's image, whose pin had not been updated. The registry build refused the mismatch before
+anything was deployed. In the passing run, the `echo` turn showed:
+- the page said what was removed
+- the proposal held the four placeholders, and none of the values
+- the copy of the gateway logged none of them
