@@ -20,10 +20,14 @@ tamper-evident only.
   3. checks each new row: its sequence number follows on, it links to the previous row's hash, and its
      own hash matches its fields, computed by the approval core's own code, now exported as
      `approval.RowHash`
-  4. appends the new rows to the copy and syncs it to disk
+  4. writes the copy with the new rows, atomically: a new file is synced beside it and renamed over
+     it, so a run that stops halfway leaves the old copy whole
   5. prints the number of rows and the last hash
 
-  If any check fails, nothing is appended, and the program fails, naming the row.
+  If any check fails, the copy is left as it was, and the program fails, naming the row. A file lock
+  lets one run at a time write to a copy. Lines have no length limit.
+- **The copier only reads.** The test's attack and its undoing are in a separate program,
+  `infra/auditcopy/forge`, so nothing in the copier can write to the VM.
 - **One copy per database.** The file is named after PostgreSQL's system identifier, which every new
   database gets. A rebuilt VM, with a new audit log starting from its first row, gets its own copy,
   and the old copy stays as the record of the old one.
@@ -32,12 +36,21 @@ tamper-evident only.
   an attacker. The read-only transaction guards against the copier itself writing.
 - **`make rebuild` copies each run's log at the end,** after every test, and runs `make
   test-audit-copy` before that.
-- **`make test-audit-copy` plays the attacker.** It copies the log, then copies two new honest rows. It
-  then rewrites row 2 as the superuser, with every hash after it recomputed by the same code, so the
-  VM's own check still passes. It checks that the copy catches the change. Then it puts the rows back
-  from the copy, and checks that the VM's log verifies and matches the copy again. If the test stops
-  partway, its exit trap puts the rows back too. Its copies go to a temporary directory, not the lab's.
-  The program's `forge` and `restore` commands exist for this test.
+- **`make test-audit-copy` plays the attacker:**
+  - It copies the log, then two new honest rows, from a grant already in place, so the lab's
+    permissions stay as they were.
+  - With `forge`, it rewrites row 2 as the superuser, with every hash after it recomputed by the same
+    code, so the VM's own check still passes, and checks that the copy catches the change.
+  - It then appends a row, which chains to the forged hash, as a live write could.
+  - With `forge restore`, it puts every field of every copied row back as the copy holds it, and
+    re-links the row added meanwhile. It checks that the VM's log verifies and matches the copy, with
+    that row as the one new row.
+
+  `forge` holds the audit lock that the gateway holds when it appends, and refuses if the log changed
+  after it read it. The programs are built once, so no build output mixes with what the test reads. The
+  test marks the log restored only once restoring has succeeded, and if it stops partway, its exit
+  trap restores the log and keeps the copy if that fails. Its copies go to a temporary directory, not
+  the lab's.
 
 ## Alternatives
 
@@ -60,7 +73,8 @@ tamper-evident only.
   each entry was true when it was written.
 - **The test changes the lab's audit log while it runs,** and puts it back. If both the test and its
   exit trap are stopped, for example by the host losing power, the rewritten rows stay, and the copy
-  shows where.
+  shows where. `forge`'s refusal when the log has changed under it, and the copy's file lock, are not
+  tested by provoking them.
 - **The approval core exports two names**, `RowHash` and `Genesis`, for the copier, and the gateway's
   and the executor's images changed with them.
 
@@ -86,10 +100,18 @@ On 2026-11-15, against the VM from ADR 0023's rebuild:
   assigned the previous hash and the new hash in one statement, so the hash was computed before the
   link changed, and the forged chain did not verify. The test's check that the forged chain verifies
   caught it.
-- **`make test-audit-copy`:**
+- **`make test-audit-copy`, first version:**
   - the first copy took 34 rows
   - two new rows, from a grant and a revoke, were copied, and a run with nothing new copied 0
   - after row 2 was rewritten with the chain recomputed, the VM's own check still found no bad row,
     and the copy failed with "row 2 in the VM differs from the copy: it was changed after it was
     copied"
   - after the rows were put back, the VM's chain verified and matched the copy again
+
+After the review, with the copier split from `forge`, `make test-audit-copy` on the same VM:
+- copied 36 rows, then two new ones, then none
+- caught row 2 rewritten with its chain recomputed, which the VM's own check did not
+- restored every field from the copy, and re-linked a row added after the rewrite
+- found the VM's chain verified, and the copy took that row as its one new row
+
+The copier's tests also loaded a 3 MiB row.
