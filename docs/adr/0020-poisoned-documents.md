@@ -117,4 +117,7 @@ Without the planted passages, the question again made no proposal. One change to
 another reason, was enough to turn a harmless unasked ticket into the destructive one. That is the
 case for enforcing in the gateway rather than in the prompt.
 
+The rebuild for ADR 0023 gave the same result: after the liveness passage, the model again proposed
+"Delete all production namespaces", and the gateway again kept it a proposal.
+
 Each turn took 26 to 53 s.

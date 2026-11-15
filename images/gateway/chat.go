@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"regexp"
 	"slices"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"airgapai/gateway/approval"
+	"airgapai/gateway/redact"
 )
 
 // The chat loop. A turn sends the user's question and the tool definitions to the model, runs the
@@ -200,9 +200,10 @@ type step struct {
 // turn is one question and what came of it.
 type turn struct {
 	Question string
-	Answer   string    // shown only if it cites the turn's passages; see cited
-	Cites    []int     // the passage numbers the answer cites, if it was shown
-	Withheld *withheld // why the model's answer was not shown, if it was not
+	Answer   string              // shown only if it cites the turn's passages; see cited
+	Cites    []int               // the passage numbers the answer cites, if it was shown
+	Withheld *withheld           // why the model's answer was not shown, if it was not
+	Removed  map[redact.Kind]int // personal data removed from the question before the model saw it
 	Steps    []step
 	Sources  []passage // numbered from 1, as the model saw them
 	Stopped  bool      // the step limit was reached before an answer
@@ -286,7 +287,7 @@ func (c *chatter) runTool(ctx context.Context, sess session, t *turn, call toolC
 		t.searches++
 		found, err := c.retrieval.search(ctx, sess.role, args.Query)
 		if err != nil {
-			log.Printf("search: %v", err)
+			logf("search: %v", err)
 			return refuse("the search failed")
 		}
 		type numbered struct {
@@ -324,13 +325,13 @@ func (c *chatter) runTool(ctx context.Context, sess session, t *turn, call toolC
 			sources = append(sources, approval.Source{Path: p.Path, ChunkIndex: p.ChunkIndex, ContentHash: p.ContentSHA256,
 				Classification: p.Classification})
 		}
-		p, err := c.propose(ctx, sess, []byte(call.Function.Arguments), sources)
+		p, err := c.propose(ctx, sess, redactArgs(call.Function.Arguments), sources)
 		var denied *approval.Denied
 		switch {
 		case errors.As(err, &denied):
 			return refuse(denied.Error())
 		case err != nil:
-			log.Printf("propose: %v", err)
+			logf("propose: %v", err)
 			return refuse("the proposal could not be recorded")
 		}
 		t.proposals++
@@ -399,6 +400,26 @@ func cited(answer string, passages int) ([]int, *withheld) {
 	return cites, nil
 }
 
+// redactArgs removes personal data from every text field of a tool call's arguments, so it never
+// reaches a ticket. Numbers keep their exact form. Arguments the approval core would refuse, such as
+// ones with a duplicate key, which a map would quietly merge, go on as they are, to be refused.
+func redactArgs(raw string) []byte {
+	args, err := approval.Decode([]byte(raw))
+	if err != nil {
+		return []byte(raw)
+	}
+	for k, v := range args {
+		if s, ok := v.(string); ok {
+			args[k] = redact.String(s)
+		}
+	}
+	out, err := json.Marshal(args)
+	if err != nil {
+		return []byte(raw)
+	}
+	return out
+}
+
 // number is a passage's number in this turn, or 0 if it has none yet.
 func (t *turn) number(p passage) int {
 	for i, s := range t.Sources {
@@ -427,7 +448,7 @@ func (c *chatter) chat(ctx context.Context, sess session, question string) (turn
 		if len(reply.ToolCalls) == 0 {
 			if cites, why := cited(reply.Content, len(t.Sources)); why != nil {
 				// The reason, never the text: the text is what was judged unfit to show.
-				log.Printf("chat: answer withheld: uncited %v, unknown passage %d, of %d found", why.Uncited, why.Passage, len(t.Sources))
+				logf("chat: answer withheld: uncited %v, unknown passage %d, of %d found", why.Uncited, why.Passage, len(t.Sources))
 				t.Withheld = why
 			} else {
 				t.Answer, t.Cites = reply.Content, cites

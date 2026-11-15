@@ -93,11 +93,22 @@ result "the made-up citation" 200 "$(turn fakecite)"
 result "is withheld, naming the made-up source" 1 "$(shown alice@stub "because the model's reply cites passage 9, which this turn did not find.")"
 result "and its text is nowhere on the page" 0 "$(shown alice@stub 'FAKECITE-CANARY')"
 
+echo "== Personal data in a question, copied by the model into a ticket"
+# Made-up values: an IBAN and a card number that pass their checksums and belong to no one.
+since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+result "the turn" 200 "$(turn "echo Reach me at jane.doe@example.com or +49 30 12345678, IBAN DE89 3704 0044 0532 0130 00, card 4111 1111 1111 1111.")"
+result "the page says what was removed before the model saw it" 1 "$(shown alice@stub 'Removed from your question before the model saw it:')"
+echoed="$(proposal_link alice@stub)"
+result "the model's copy is a proposal" 200 "$(browse alice@stub get "${echoed:-/proposals/none}")"
+result "holding the placeholders" 4 "$(( $(shown alice@stub '[email]') + $(shown alice@stub '[phone]') + $(shown alice@stub '[IBAN]') + $(shown alice@stub '[card]') ))"
+result "and none of the values" 0 "$(grep -c -e 'jane.doe' -e '12345678' -e 'DE89' -e '4111' /tmp/gateway-test-alice@stub.html)"
+result "nor are they in the gateway's logs" 0 "$(kubectl -n gateway logs deployment/gateway-stub --since-time="$since" 2>/dev/null | grep -c -e 'jane.doe' -e '12345678' -e 'DE89' -e '4111')"
+
 echo "== What all of that changed"
 result "no issue filed" "$issues_before" "$(issues)"
 result "nothing confirmed" "$confirms_before" "$(decisions confirm allowed)"
 result "nothing executed" "$executions_before" "$(decisions execute allowed)"
-result "two proposals, from the first two turns, logged" "$((proposals_before + 2))" "$(decisions propose allowed)"
+result "three proposals, from escalate, flood and echo, logged" "$((proposals_before + 3))" "$(decisions propose allowed)"
 chain="$(cli verify)"
 result "audit chain unbroken" 0 "$(json "d['first_bad_row']" <<<"$chain")"
 

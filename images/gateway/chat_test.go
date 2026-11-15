@@ -196,6 +196,32 @@ func TestChatTurn(t *testing.T) {
 		}
 	}
 
+	// Personal data in the question never reaches the model, and a ticket's text fields are redacted
+	// before they are proposed. Made-up values only.
+	h.model.script(call("create_ticket", `{"title":"Call back","body":"IBAN DE89 3704 0044 0532 0130 00, card 4111 1111 1111 1111","priority":"low"}`), reply("ok"))
+	got = ask(alice, "Pump 3 leaks. Reach me at jane.doe@example.com or +49 30 12345678.", csrfToken)
+	sentNow, _ := json.Marshal(h.model.seen()) // script() started a fresh record
+	if strings.Contains(string(sentNow), "jane.doe") || strings.Contains(string(sentNow), "12345678") ||
+		!strings.Contains(string(sentNow), "[email]") {
+		t.Errorf("the model was sent the question unredacted: %s", sentNow)
+	}
+	if !strings.Contains(got.body, "Removed from your question before the model saw it: 1 × email address; 1 × phone number;") ||
+		strings.Contains(got.body, "jane.doe") {
+		t.Errorf("the page does not show the redacted question: %s", got.body)
+	}
+	if m := proposalLink.FindStringSubmatch(got.body); m == nil {
+		t.Error("no proposal for the redacted ticket")
+	} else if p, err := h.store.Proposal(ctx, "alice", uuid.MustParse(m[1])); err != nil ||
+		strings.Contains(p.Args, "DE89") || strings.Contains(p.Args, "4111") ||
+		!strings.Contains(p.Args, "[IBAN]") || !strings.Contains(p.Args, "[card]") {
+		t.Errorf("the proposal kept personal data: %s, %v", p.Args, err)
+	}
+	// A duplicate key is still refused: redacting must not merge it away.
+	h.model.script(call("create_ticket", `{"title":"a","title":"b","body":"b","priority":"low"}`), reply("ok"))
+	if got := ask(alice, "Twice.", csrfToken); !strings.Contains(got.body, "duplicate key") || proposalLink.MatchString(got.body) {
+		t.Errorf("a duplicate key was not refused: %s", got.body)
+	}
+
 	// The model is stopped after maxSteps calls that only call tools. The third search is over the
 	// limit, and the last call's proposal never runs, since its result could not be answered.
 	asked := len(h.search.asked())
