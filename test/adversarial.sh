@@ -100,7 +100,7 @@ result "the turn" 200 "$(turn "echo Reach me at jane.doe@example.com or +49 30 1
 result "the page says what was removed before the model saw it" 1 "$(shown alice@stub 'Removed from your question before the model saw it:')"
 echoed="$(proposal_link alice@stub)"
 result "the model's copy is a proposal" 200 "$(browse alice@stub get "${echoed:-/proposals/none}")"
-result "holding the placeholders" 4 "$(( $(shown alice@stub '[email address removed]') + $(shown alice@stub '[phone number removed]') + $(shown alice@stub '[IBAN removed]') + $(shown alice@stub '[payment card number removed]') ))"
+result "holding the placeholders" 4 "$(( $(shown alice@stub '[email]') + $(shown alice@stub '[phone]') + $(shown alice@stub '[IBAN]') + $(shown alice@stub '[card]') ))"
 result "and none of the values" 0 "$(grep -c -e 'jane.doe' -e '12345678' -e 'DE89' -e '4111' /tmp/gateway-test-alice@stub.html)"
 result "nor are they in the gateway's logs" 0 "$(kubectl -n gateway logs deployment/gateway-stub --since-time="$since" 2>/dev/null | grep -c -e 'jane.doe' -e '12345678' -e 'DE89' -e '4111')"
 

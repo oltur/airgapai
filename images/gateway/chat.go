@@ -404,13 +404,8 @@ func cited(answer string, passages int) ([]int, *withheld) {
 // reaches a ticket. Numbers keep their exact form. Arguments the approval core would refuse, such as
 // ones with a duplicate key, which a map would quietly merge, go on as they are, to be refused.
 func redactArgs(raw string) []byte {
-	if _, err := approval.Canonical([]byte(raw)); err != nil {
-		return []byte(raw)
-	}
-	dec := json.NewDecoder(strings.NewReader(raw))
-	dec.UseNumber()
-	var args map[string]any
-	if err := dec.Decode(&args); err != nil || dec.More() {
+	args, err := approval.Decode([]byte(raw))
+	if err != nil {
 		return []byte(raw)
 	}
 	for k, v := range args {

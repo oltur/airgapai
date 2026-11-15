@@ -19,6 +19,14 @@ func Canonical(raw []byte) (string, error) {
 	return text, err
 }
 
+// Decode returns the decoded object of arguments that Canonical accepts, with numbers as written, or
+// the reason Canonical would refuse them, such as a duplicate key. A caller that changes arguments
+// before proposing them starts from this, so it cannot accept what the core would refuse.
+func Decode(raw []byte) (map[string]any, error) {
+	_, v, err := canonical(raw)
+	return v, err
+}
+
 // canonical also returns the decoded object, so callers need not parse the text again.
 func canonical(raw []byte) (string, map[string]any, error) {
 	if err := noDuplicateKeys(raw); err != nil {

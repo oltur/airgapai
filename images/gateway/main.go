@@ -390,6 +390,7 @@ func (e *executor) execute(ctx context.Context, token, user, tool, args string) 
 }
 
 func main() {
+	log.SetOutput(redacting{os.Stderr})
 	fs := flag.NewFlagSet("gateway", flag.ExitOnError)
 	addr := fs.String("listen", ":8080", "address to serve on")
 	_ = fs.Parse(os.Args[1:])
@@ -462,8 +463,17 @@ func newServer(pool *pgxpool.Pool, env func(string) string, now func() time.Time
 	}, nil
 }
 
-// logf is the gateway's only way to log. Every line is redacted first, since an error can carry text
-// from a request, the model or a service it called. See ADR 0023.
-func logf(format string, args ...any) {
-	log.Print(redact.String(fmt.Sprintf(format, args...)))
+// logf logs a line. Redaction is in the log's writer, below, so it covers every line, this package's
+// and the HTTP server's own.
+func logf(format string, args ...any) { log.Printf(format, args...) }
+
+// redacting writes each log line with personal data removed, since an error can carry text from a
+// request, the model or a service the gateway called. See ADR 0023.
+type redacting struct{ w io.Writer }
+
+func (r redacting) Write(p []byte) (int, error) {
+	if _, err := io.WriteString(r.w, redact.String(string(p))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }

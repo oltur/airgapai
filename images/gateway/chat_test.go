@@ -202,7 +202,7 @@ func TestChatTurn(t *testing.T) {
 	got = ask(alice, "Pump 3 leaks. Reach me at jane.doe@example.com or +49 30 12345678.", csrfToken)
 	sentNow, _ := json.Marshal(h.model.seen()) // script() started a fresh record
 	if strings.Contains(string(sentNow), "jane.doe") || strings.Contains(string(sentNow), "12345678") ||
-		!strings.Contains(string(sentNow), "[email address removed]") {
+		!strings.Contains(string(sentNow), "[email]") {
 		t.Errorf("the model was sent the question unredacted: %s", sentNow)
 	}
 	if !strings.Contains(got.body, "Removed from your question before the model saw it: 1 × email address; 1 × phone number;") ||
@@ -213,7 +213,7 @@ func TestChatTurn(t *testing.T) {
 		t.Error("no proposal for the redacted ticket")
 	} else if p, err := h.store.Proposal(ctx, "alice", uuid.MustParse(m[1])); err != nil ||
 		strings.Contains(p.Args, "DE89") || strings.Contains(p.Args, "4111") ||
-		!strings.Contains(p.Args, "[IBAN removed]") || !strings.Contains(p.Args, "[payment card number removed]") {
+		!strings.Contains(p.Args, "[IBAN]") || !strings.Contains(p.Args, "[card]") {
 		t.Errorf("the proposal kept personal data: %s, %v", p.Args, err)
 	}
 	// A duplicate key is still refused: redacting must not merge it away.
