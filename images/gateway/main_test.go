@@ -668,11 +668,17 @@ func TestConfirmationPage(t *testing.T) {
 			t.Errorf("executor answer %s: %d", a, got.status)
 		}
 	}
-	// An executor that gives no result is not reported as success.
+	// An executor that gives no result is not reported as success, nor as nothing filed: it may have
+	// filed the issue and lost the answer.
 	h.executor.set(http.StatusInternalServerError, `{"error":"execution failed"}`)
 	p3 := propose("alice", `{"title":"Third","body":"b","priority":"low"}`)
-	if failed := alice.post("/proposals/"+p3.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil); failed.status != http.StatusBadGateway {
+	failed := alice.post("/proposals/"+p3.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil)
+	if failed.status != http.StatusBadGateway {
 		t.Errorf("an executor failure: %d", failed.status)
+	}
+	if !strings.Contains(failed.body, "Result unknown") || !strings.Contains(failed.body, "Check the tickets before proposing it again") ||
+		strings.Contains(failed.body, "Not filed") || strings.Contains(failed.body, "Nothing was filed") {
+		t.Error("an executor with no result was not reported as unknown")
 	}
 
 	// An expired proposal is shown without the button, and cannot be confirmed.
