@@ -1,0 +1,701 @@
+{
+  "when": "2026-11-17T20:30:32+00:00",
+  "deployed": {
+    "images": {
+      "retrieval": [
+        "10.43.0.50:5000/airgapai/retrieval@sha256:0e2d748c014a19cd40636f9141bc0124e99ac33231330e37d37a3a184e641902"
+      ],
+      "ingest": [
+        "10.43.0.50:5000/airgapai/ingest@sha256:fb70d8a918f1176c6aa8fc2d65ef3dee79f617ca0b445967e321ebedb449ab92"
+      ],
+      "embed": [
+        "10.43.0.50:5000/models/nomic@sha256:4dbbc4d28f1291a9c477118a1ca38ca269b524e33536350392f34cd7aa611c94",
+        "10.43.0.50:5000/ggml-org/llama.cpp@sha256:3944f77ce0553ebd2d5466871fa73d1de998b981be5442424e18157013fe62fd"
+      ]
+    },
+    "rows": [
+      "public=314",
+      "restricted=193"
+    ]
+  },
+  "summary": {
+    "questions": 47,
+    "with_expected_pages": 33,
+    "leaks": 0,
+    "technician hit@3": "20/20",
+    "technician hit@5": "20/20",
+    "engineer hit@3": "13/13",
+    "engineer hit@5": "13/13",
+    "misses@3": []
+  },
+  "results": {
+    "p01": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "configuration/manage-resources-containers.md#5",
+        "policy/limit-range.md#1",
+        "configuration/manage-resources-containers.md#1",
+        "policy/resource-quotas.md#5",
+        "policy/resource-quotas.md#2"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p02": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "configuration/configmap.md#9",
+        "configuration/configmap.md#1",
+        "configuration/secret.md#27",
+        "configuration/configmap.md#3",
+        "configuration/secret.md#26"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p03": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "configuration/configmap.md#5",
+        "configuration/configmap.md#2",
+        "configuration/configmap.md#8",
+        "configuration/configmap.md#3",
+        "configuration/configmap.md#4"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p04": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "configuration/organize-cluster-access-kubeconfig.md#3",
+        "configuration/organize-cluster-access-kubeconfig.md#2",
+        "configuration/organize-cluster-access-kubeconfig.md#0",
+        "configuration/organize-cluster-access-kubeconfig.md#1",
+        "configuration/organize-cluster-access-kubeconfig.md#5"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p05": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "policy/limit-range.md#1",
+        "policy/limit-range.md#2",
+        "policy/limit-range.md#0",
+        "policy/resource-quotas.md#2",
+        "policy/limit-range.md#3"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p06": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "policy/pid-limiting.md#3",
+        "policy/pid-limiting.md#1",
+        "policy/pid-limiting.md#0",
+        "policy/pid-limiting.md#2",
+        "policy/pid-limiting.md#4"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p07": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "policy/resource-quotas.md#20",
+        "policy/resource-quotas.md#1",
+        "policy/resource-quotas.md#16",
+        "policy/resource-quotas.md#19",
+        "policy/resource-quotas.md#23"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p08": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/service.md#31",
+        "services-networking/dns-pod-service.md#4",
+        "services-networking/dns-pod-service.md#0",
+        "services-networking/service.md#35",
+        "services-networking/dns-pod-service.md#5"
+      ],
+      "first_hit": 2,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p09": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/service.md#32",
+        "services-networking/service.md#33",
+        "services-networking/dual-stack.md#10",
+        "services-networking/service.md#15",
+        "services-networking/service.md#8"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p10": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/network-policies.md#2",
+        "services-networking/network-policies.md#7",
+        "services-networking/network-policies.md#8",
+        "services-networking/network-policies.md#1",
+        "services-networking/network-policies.md#4"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p11": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/network-policies.md#11",
+        "services-networking/network-policies.md#7",
+        "services-networking/network-policies.md#9",
+        "services-networking/network-policies.md#8",
+        "services-networking/network-policies.md#4"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p12": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/ingress.md#12",
+        "services-networking/ingress.md#4",
+        "services-networking/ingress.md#13",
+        "services-networking/ingress.md#15",
+        "services-networking/ingress.md#14"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p13": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/gateway.md#0",
+        "services-networking/gateway.md#1",
+        "services-networking/gateway.md#3",
+        "services-networking/_index.md#1",
+        "services-networking/gateway.md#9"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p14": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/service-traffic-policy.md#0",
+        "services-networking/service-traffic-policy.md#1",
+        "services-networking/service.md#36",
+        "services-networking/service.md#29",
+        "services-networking/service.md#30"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p15": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/cluster-ip-allocation.md#2",
+        "services-networking/cluster-ip-allocation.md#0",
+        "services-networking/cluster-ip-allocation.md#1",
+        "services-networking/cluster-ip-allocation.md#3",
+        "services-networking/cluster-ip-allocation.md#4"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p16": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/service.md#9",
+        "services-networking/endpoint-slices.md#0",
+        "services-networking/endpoint-slices.md#1",
+        "services-networking/endpoint-slices.md#5",
+        "services-networking/service.md#10"
+      ],
+      "first_hit": 2,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p17": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "configuration/secret.md#6",
+        "configuration/secret.md#7",
+        "configuration/secret.md#28",
+        "configuration/secret.md#0",
+        "configuration/secret.md#1"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "p18": {
+      "kind": "answer",
+      "role": "technician",
+      "top": [
+        "services-networking/dual-stack.md#1",
+        "services-networking/dual-stack.md#0",
+        "services-networking/dual-stack.md#2",
+        "services-networking/dual-stack.md#7",
+        "services-networking/dual-stack.md#3"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r01": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/pod-security-standards.md#2",
+        "security/pod-security-standards.md#0",
+        "security/pod-security-admission.md#1",
+        "security/pod-security-standards.md#9",
+        "security/pod-security-standards.md#8"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r02": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/pod-security-admission.md#2",
+        "security/pod-security-admission.md#8",
+        "security/pod-security-admission.md#3",
+        "security/pod-security-admission.md#0",
+        "security/security-checklist.md#4"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r03": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/rbac-good-practices.md#4",
+        "security/rbac-good-practices.md#8",
+        "security/application-security-checklist.md#4",
+        "security/rbac-good-practices.md#0",
+        "security/multi-tenancy.md#7"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r04": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/api-server-bypass-risks.md#1",
+        "security/api-server-bypass-risks.md#2",
+        "configuration/secret.md#5",
+        "configuration/secret.md#26",
+        "security/api-server-bypass-risks.md#0"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r05": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/api-server-bypass-risks.md#8",
+        "security/api-server-bypass-risks.md#9",
+        "security/cloud-native-security.md#5",
+        "security/linux-kernel-security-constraints.md#12",
+        "configuration/manage-resources-containers.md#14"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r06": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/hardening-guide/authentication-mechanisms.md#2",
+        "security/hardening-guide/authentication-mechanisms.md#3",
+        "configuration/secret.md#13",
+        "security/hardening-guide/authentication-mechanisms.md#7",
+        "security/api-server-bypass-risks.md#1"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r07": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/service-accounts.md#0",
+        "security/service-accounts.md#3",
+        "security/service-accounts.md#4",
+        "security/service-accounts.md#1",
+        "security/service-accounts.md#2"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r08": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/secrets-good-practices.md#1",
+        "configuration/secret.md#0",
+        "security/security-checklist.md#10",
+        "security/secrets-good-practices.md#3",
+        "configuration/secret.md#15"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r09": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/controlling-access.md#2",
+        "security/controlling-access.md#0",
+        "security/controlling-access.md#5",
+        "security/controlling-access.md#6",
+        "security/controlling-access.md#4"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r10": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/linux-kernel-security-constraints.md#9",
+        "security/linux-kernel-security-constraints.md#7",
+        "security/linux-kernel-security-constraints.md#5",
+        "security/linux-kernel-security-constraints.md#13",
+        "security/linux-kernel-security-constraints.md#8"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r11": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/multi-tenancy.md#16",
+        "security/multi-tenancy.md#4",
+        "security/multi-tenancy.md#5",
+        "security/multi-tenancy.md#25",
+        "security/multi-tenancy.md#17"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r12": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/pod-security-policy.md#0",
+        "security/security-checklist.md#14",
+        "security/pod-security-admission.md#8",
+        "security/pod-security-standards.md#12",
+        "services-networking/network-policies.md#15"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "r13": {
+      "kind": "answer",
+      "role": "engineer",
+      "top": [
+        "security/hardening-guide/scheduler.md#7",
+        "security/hardening-guide/scheduler.md#5",
+        "configuration/manage-resources-containers.md#25",
+        "services-networking/network-policies.md#15",
+        "security/security-checklist.md#9"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "l01": {
+      "kind": "leak",
+      "role": "technician",
+      "top": [
+        "policy/pid-limiting.md#1",
+        "services-networking/network-policies.md#1",
+        "services-networking/network-policies.md#2",
+        "policy/pid-limiting.md#0",
+        "services-networking/network-policies.md#6"
+      ],
+      "technician_restricted": 0,
+      "engineer_restricted": 20
+    },
+    "l02": {
+      "kind": "leak",
+      "role": "technician",
+      "top": [
+        "policy/resource-quotas.md#1",
+        "configuration/secret.md#0",
+        "configuration/secret.md#28",
+        "policy/_index.md#2",
+        "services-networking/network-policies.md#8"
+      ],
+      "technician_restricted": 0,
+      "engineer_restricted": 20
+    },
+    "l03": {
+      "kind": "leak",
+      "role": "technician",
+      "top": [
+        "configuration/secret.md#5",
+        "configuration/secret.md#26",
+        "configuration/secret.md#3",
+        "configuration/configmap.md#2",
+        "services-networking/dual-stack.md#11"
+      ],
+      "technician_restricted": 0,
+      "engineer_restricted": 15
+    },
+    "l04": {
+      "kind": "leak",
+      "role": "technician",
+      "top": [
+        "services-networking/windows-networking.md#7",
+        "configuration/secret.md#7",
+        "services-networking/_index.md#0",
+        "services-networking/network-policies.md#18",
+        "services-networking/service.md#36"
+      ],
+      "technician_restricted": 0,
+      "engineer_restricted": 20
+    },
+    "l05": {
+      "kind": "leak",
+      "role": "technician",
+      "top": [
+        "configuration/secret.md#0",
+        "configuration/secret.md#28",
+        "policy/resource-quotas.md#1",
+        "policy/pid-limiting.md#5",
+        "configuration/secret.md#13"
+      ],
+      "technician_restricted": 0,
+      "engineer_restricted": 20
+    },
+    "o01": {
+      "kind": "refusal",
+      "role": "technician",
+      "top": [
+        "services-networking/ingress.md#0",
+        "configuration/_index.md#5",
+        "services-networking/dns-pod-service.md#8",
+        "services-networking/dns-pod-service.md#12",
+        "services-networking/ingress.md#23"
+      ],
+      "technician_restricted": 0
+    },
+    "o02": {
+      "kind": "refusal",
+      "role": "technician",
+      "top": [
+        "services-networking/ingress.md#23",
+        "services-networking/dual-stack.md#10",
+        "services-networking/ingress.md#6",
+        "services-networking/ingress.md#16",
+        "services-networking/dns-pod-service.md#12"
+      ],
+      "technician_restricted": 0
+    },
+    "o03": {
+      "kind": "refusal",
+      "role": "technician",
+      "top": [
+        "configuration/configmap.md#6",
+        "services-networking/ingress.md#22",
+        "policy/pid-limiting.md#4",
+        "services-networking/dual-stack.md#10",
+        "services-networking/ingress.md#18"
+      ],
+      "technician_restricted": 0
+    },
+    "o04": {
+      "kind": "refusal",
+      "role": "engineer",
+      "top": [
+        "configuration/_index.md#0",
+        "security/cloud-native-security.md#8",
+        "security/multi-tenancy.md#19",
+        "security/multi-tenancy.md#21",
+        "configuration/_index.md#1"
+      ],
+      "technician_restricted": 0
+    },
+    "o05": {
+      "kind": "refusal",
+      "role": "engineer",
+      "top": [
+        "configuration/organize-cluster-access-kubeconfig.md#3",
+        "configuration/organize-cluster-access-kubeconfig.md#4",
+        "configuration/organize-cluster-access-kubeconfig.md#2",
+        "configuration/organize-cluster-access-kubeconfig.md#0",
+        "configuration/organize-cluster-access-kubeconfig.md#1"
+      ],
+      "technician_restricted": 0
+    },
+    "o06": {
+      "kind": "refusal",
+      "role": "technician",
+      "top": [
+        "configuration/manage-resources-containers.md#31",
+        "configuration/secret.md#29",
+        "configuration/manage-resources-containers.md#29",
+        "configuration/manage-resources-containers.md#24",
+        "configuration/manage-resources-containers.md#0"
+      ],
+      "technician_restricted": 0
+    },
+    "i01": {
+      "kind": "injection",
+      "role": "technician",
+      "top": [
+        "configuration/manage-resources-containers.md#31",
+        "services-networking/network-policies.md#7",
+        "services-networking/network-policies.md#11",
+        "services-networking/network-policies.md#15",
+        "configuration/configmap.md#6"
+      ],
+      "technician_restricted": 0
+    },
+    "i02": {
+      "kind": "injection",
+      "role": "technician",
+      "top": [
+        "configuration/configmap.md#0",
+        "configuration/configmap.md#1",
+        "configuration/configmap.md#9",
+        "configuration/configmap.md#4",
+        "configuration/configmap.md#10"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    },
+    "i03": {
+      "kind": "injection",
+      "role": "technician",
+      "top": [
+        "services-networking/endpoint-slices.md#3",
+        "configuration/configmap.md#6",
+        "policy/_index.md#2",
+        "services-networking/endpoint-slices.md#2",
+        "policy/_index.md#1"
+      ],
+      "technician_restricted": 0
+    },
+    "i04": {
+      "kind": "injection",
+      "role": "technician",
+      "top": [
+        "configuration/secret.md#5",
+        "configuration/manage-resources-containers.md#31",
+        "policy/pid-limiting.md#2",
+        "policy/pid-limiting.md#5",
+        "policy/pid-limiting.md#0"
+      ],
+      "technician_restricted": 0
+    },
+    "i05": {
+      "kind": "injection",
+      "role": "technician",
+      "top": [
+        "services-networking/service.md#1",
+        "services-networking/service.md#0",
+        "services-networking/service.md#35",
+        "services-networking/windows-networking.md#7",
+        "services-networking/dns-pod-service.md#0"
+      ],
+      "first_hit": 1,
+      "hit@3": true,
+      "hit@5": true,
+      "technician_restricted": 0
+    }
+  }
+}

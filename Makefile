@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -24,7 +24,7 @@ test-secrets: ## Prove the guard blocks fake secrets in a temporary repo
 tools: ## Install the pinned guard and lint tools into ~/.local/bin
 	@scripts/install-tools.sh
 
-lint: ## Check for hidden characters, then run ShellCheck, Ruff, go vet, go test and govulncheck
+lint: ## Check for hidden characters, then run ShellCheck, Ruff, the eval gate's tests, go vet, go test and govulncheck
 	@for tool in shellcheck ruff go govulncheck; do \
 		command -v $$tool >/dev/null || { echo "$$tool not found, see make tools"; exit 1; }; \
 	done
@@ -37,6 +37,7 @@ lint: ## Check for hidden characters, then run ShellCheck, Ruff, go vet, go test
 		|| echo "the hidden-character check could not run"; exit 1; }
 	@shellcheck -x -P SCRIPTDIR -S warning $$(git ls-files '*.sh' '.githooks/*')
 	@ruff check --quiet .
+	@python3 -m unittest discover -s test/eval -q 2>/dev/null || python3 -m unittest discover -s test/eval
 	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
 		go -C $$module vet ./... || exit 1; \
 		go -C $$module test -count=1 ./... >/dev/null || exit 1; \
@@ -108,6 +109,9 @@ measure-inference: ## Restart the model pods in the VM and measure start-up, mem
 
 measure-retrieval: ## Measure recall per role against an exact scan, and search latency, in the VM
 	@test/retrieval/measure.py --out test/retrieval/results
+
+eval-retrieval: ## Gate retrieval on the golden set in the VM against the saved baseline, and check nothing leaks
+	@test/eval/retrieval.py --baseline
 
 rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	@start=$$(date +%s); \
