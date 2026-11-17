@@ -123,6 +123,12 @@ func (e *fakeExecutor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	e.requests = append(e.requests, req)
+	if e.status == 0 { // The request arrived, and the answer is lost.
+		if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+			_ = conn.Close()
+		}
+		return
+	}
 	w.WriteHeader(e.status)
 	_, _ = io.WriteString(w, e.answer)
 }
@@ -669,16 +675,20 @@ func TestConfirmationPage(t *testing.T) {
 		}
 	}
 	// An executor that gives no result is not reported as success, nor as nothing filed: it may have
-	// filed the issue and lost the answer.
-	h.executor.set(http.StatusInternalServerError, `{"error":"execution failed"}`)
-	p3 := propose("alice", `{"title":"Third","body":"b","priority":"low"}`)
-	failed := alice.post("/proposals/"+p3.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil)
-	if failed.status != http.StatusBadGateway {
-		t.Errorf("an executor failure: %d", failed.status)
-	}
-	if !strings.Contains(failed.body, "Result unknown") || !strings.Contains(failed.body, "Check the tickets before proposing it again") ||
-		strings.Contains(failed.body, "Not filed") || strings.Contains(failed.body, "Nothing was filed") {
-		t.Error("an executor with no result was not reported as unknown")
+	// filed the issue and lost the answer. The page names where to look. Each way of losing the
+	// result is tried: an error status, an answer that is not a result, and a connection that closes.
+	for _, c := range []struct {
+		status int
+		answer string
+	}{{http.StatusInternalServerError, `{"error":"execution failed"}`}, {http.StatusOK, `{"issue":8}`}, {0, ""}} {
+		h.executor.set(c.status, c.answer)
+		pn := propose("alice", `{"title":"Third","body":"b","priority":"low"}`)
+		failed := alice.post("/proposals/"+pn.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil)
+		if failed.status != http.StatusBadGateway || !strings.Contains(failed.body, "Result unknown") ||
+			!strings.Contains(failed.body, "maintenance/tickets ") || strings.Contains(strings.ToLower(failed.body), "not filed") ||
+			strings.Contains(strings.ToLower(failed.body), "nothing was filed") {
+			t.Errorf("executor status %d, answer %q: not reported as an unknown result: %d", c.status, c.answer, failed.status)
+		}
 	}
 
 	// An expired proposal is shown without the button, and cannot be confirmed.
@@ -698,7 +708,18 @@ func TestConfirmationPage(t *testing.T) {
 	if got := alice.get(path); got.status != http.StatusSeeOther {
 		t.Error("the session outlived sign-out")
 	}
-	if n := len(h.executor.calls()); n != 5 { // the genuine call, two with bad answers, a refusal, a failure
-		t.Errorf("executor calls: %d, want 5", n)
+	if n := len(h.executor.calls()); n != 7 { // the genuine call, two with bad answers, a refusal, three lost results: none retried
+		t.Errorf("executor calls: %d, want 7", n)
+	}
+}
+
+// A result lost for a restricted ticket names the repository only engineers can read.
+func TestUnknownResult(t *testing.T) {
+	if got := unknownResult("maintenance", approval.Public); !strings.Contains(got, "maintenance/tickets before") || strings.Contains(got, "engineers") {
+		t.Errorf("public: %q", got)
+	}
+	if got := unknownResult("maintenance", approval.Restricted); !strings.Contains(got, "maintenance/tickets-restricted before") ||
+		!strings.Contains(got, "Only engineers can read it") {
+		t.Errorf("restricted: %q", got)
 	}
 }

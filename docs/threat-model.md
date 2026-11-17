@@ -178,7 +178,7 @@ The rule is to fail closed: when a part the decision depends on is missing, noth
 | Forgejo gives no answer to the create call | The outcome is logged as `unknown`, since the issue may exist | ADR 0016 |
 | Forgejo, at sign-in | The sign-in fails | The gateway's code; not tested |
 | The executor refuses | The page says nothing was filed. The proposal cannot be confirmed again, and has to be proposed again | `make test-db`, ADR 0017 |
-| The executor gives no answer | The page, titled "Result unknown", says the executor reported no result, and to check the tickets before proposing again, since the issue may exist. Until PR #21 its title said "Not filed", which could have led to a duplicate ticket | `make test-db`, ADR 0017 |
+| The executor gives no answer | The page, titled "Result unknown", says the ticket may have been filed, and names the repository to check before proposing again. For a restricted ticket it says only engineers can read it. Until PR #21 the title said "Not filed", which could have led to a duplicate ticket. The executor reports a refusal from Forgejo and a lost answer alike, so the page cannot tell them apart, and the proposal page does not show that it was confirmed | `make test-db`, ADR 0017 |
 | The model server | The turn ends with an error page. A proposal made earlier in the turn stays a proposal | `make test-db`, ADR 0018 |
 | Retrieval, during a search | The model is told the search failed, and gets no passages | The gateway's code; not tested |
 | No role reaches the database | The query returns nothing | `make test-rls`, `make test-retrieval`, ADR 0012 |
