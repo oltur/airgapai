@@ -59,11 +59,15 @@ this model asks what an insider could do, because its copy off the VM exists for
 
 ```text
  browser ── port-forward ──> gateway ──> chat model (untrusted output)
-    │                          │  ├────> retrieval ──> PostgreSQL (row-level security)
+    │                          │  ├────> retrieval ──> embedding model
+    │                          │  │          └──────> PostgreSQL (row-level security)
     │                          │  ├────> PostgreSQL: proposals, confirmations, audit log
     │                          │  └────> executor ──> Forgejo: files the issue
     └── port-forward ──> Forgejo: sign-in, reading tickets
-                                          host ── SSH ──> VM: audit copy, tests
+
+ Forgejo (Git) ──> Argo CD ──> cluster objects ──> Kyverno: signed images only ──> Zot (read-only)
+ corpus in an image ──> ingestion Job ──> embedding model, PostgreSQL
+ host ── SSH ──> VM: audit copy, tests          offline bundle ── ISO ──> VM
 ```
 
 Every arrow inside the VM is plain HTTP or PostgreSQL without TLS, and limited by the cluster's default
@@ -132,13 +136,14 @@ The boundaries that matter:
 | The model loops or floods tool calls | Per turn: at most 4 steps, 6 tool calls, 2 searches, 1 proposal, 8 KiB of tool arguments | `make test-adversarial` (`loop`, `flood`, `huge`), `make test-db`, ADRs 0018 and 0019 | None found in the tested scenarios |
 | Oversized requests | Size limits on the question and every form | `make test-db`, ADR 0018 | None found in the tested cases |
 | Many unfinished sign-ins | At most 1,000 in progress, each for ten minutes, pruned once a minute | `make test-db`, ADR 0017 | At the limit, new sign-ins are refused until old ones expire |
-| One user holds the model | One turn at a time; another user is told to try again | `make test-db`, ADR 0018 | Residual. One signed-in user can keep the model busy, since a turn takes most of a minute on CPU. Per-user rate limits were the first scope cut |
+| One user holds the model | One turn at a time; another user is told to try again | `make test-db`, ADR 0018 | Residual. One signed-in user can keep the model busy, since a turn takes most of a minute on CPU. Per-user rate limits are not built |
 
 ### Elevation of privilege
 
 | Threat | Control | Evidence | Residual |
 |---|---|---|---|
 | The model files a ticket | `create_ticket` only proposes. No tool confirms, and a confirmation needs the user's session, CSRF token and origin | `make test-adversarial`, `make test-poisoned`, `make test-gateway`, ADRs 0018 to 0020 | A misled user can still confirm. See [residual risks](#residual-risks) |
+| A user keeps reading after losing their role | None. Searches, and the source text on the confirmation page, use the role from sign-in | ADR 0017 | Residual. The role is fixed in the session until it ends, after an hour at most. Only execution asks Forgejo again |
 | A user confirms after losing their role | The executor asks Forgejo for the user's current teams at execution, and checks the grant | `make test-gateway` (team change after sign-in), `make test-db` (role and grant revoked), ADRs 0015 to 0017 | A team change that lands after the lookup and before the commit applies to the next decision |
 | A role without the grant proposes | Tool permissions are rows of role and tool, and no row means no use | `make test-db`, ADR 0015 | None found in the tested cases |
 | The model replays, alters or borrows a confirmation | Single-use, atomic, bound to user, tool, argument hash and a 5-minute expiry | `make test-db` (replay, 20 concurrent uses, another user, expiry), ADR 0015 | Not tested through the page, which never reveals the token |
@@ -169,14 +174,16 @@ The rule is to fail closed: when a part the decision depends on is missing, noth
 | What fails | What happens | Evidence |
 |---|---|---|
 | The audit write | The action fails, and the confirmation stays unused | `make test-db`, ADR 0015 |
-| Forgejo, at execution | The decision fails, is logged as failed, and nothing is filed | ADR 0016 |
+| Forgejo refuses at execution | The decision fails, is logged as failed, and nothing is filed | ADR 0016 |
+| Forgejo gives no answer to the create call | The outcome is logged as `unknown`, since the issue may exist | ADR 0016 |
 | Forgejo, at sign-in | The sign-in fails | The gateway's code; not tested |
-| The executor refuses or gives no answer | The page says the ticket was not filed. The proposal cannot be confirmed again, and has to be proposed again | `make test-db`, ADR 0017 |
+| The executor refuses | The page says nothing was filed. The proposal cannot be confirmed again, and has to be proposed again | `make test-db`, ADR 0017 |
+| The executor gives no answer | The page says the executor reported no result, and to check the tickets before proposing again, since the issue may exist. **A known fault:** the page's title says "Not filed", which its message contradicts, and could lead to a duplicate ticket | `make test-db`, ADR 0017 |
 | The model server | The turn ends with an error page. A proposal made earlier in the turn stays a proposal | `make test-db`, ADR 0018 |
 | Retrieval, during a search | The model is told the search failed, and gets no passages | The gateway's code; not tested |
 | No role reaches the database | The query returns nothing | `make test-rls`, `make test-retrieval`, ADR 0012 |
 | Kyverno stops, cleanly or by force | Signed images are denied too, until it returns | `make test-signed-images`, ADR 0006 |
-| The registry | Running pods continue, and a new unsigned pod is still denied | `make test-egress`, ADR 0008 |
+| The registry | Running pods continue, and containers restart from cache. New pods cannot start, signed ones too, since the verifier needs the registry | `make test-egress`, ADR 0008 |
 | The gateway restarts | Every session ends, and sign-ins in progress fail | ADR 0017 |
 | A citation check fails | The model's reply is withheld, and the gateway says why | `make test-db`, `make test-adversarial`, ADR 0022 |
 | An executor reply names no repository | It is not taken for success | `make test-db`, ADR 0021 |
@@ -204,15 +211,17 @@ These are the risks left after the controls above, roughly from most to least im
    passages support them.
 8. **Provenance of upstream images and models** rests on digests and published hashes, not publishers'
    signatures.
-9. **One user can hold the model,** since there are no per-user rate limits.
-10. **Cookies on `127.0.0.1` are shared with other local services,** which follows from the lab's
+9. **A role removed in Forgejo still reads for up to an hour,** through searches and the confirmation
+   page, until the session ends. Execution asks Forgejo again.
+10. **One user can hold the model,** since there are no per-user rate limits.
+11. **Cookies on `127.0.0.1` are shared with other local services,** which follows from the lab's
     port-forward access.
 
 ## What this does not prove
 
 - **That the list of threats is complete.** It covers the threats found by walking STRIDE over each
   boundary, and the OWASP list over the model's paths. Others may exist.
-- **That the tests cover every input.** The compromised-model scenarios, the three planted passages and
+- **That the tests cover every input.** The compromised-model scenarios, the four planted passages and
   the redaction values are the ones written. The controls they hit are general, but the tests show only
   those cases.
 - **That the stack is secure for a real deployment.** It is a single-node lab with one administrator,
