@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"airgapai/gateway/approval"
+	"airgapai/gateway/directory"
 	"airgapai/gateway/redact"
 
 	"github.com/google/uuid"
@@ -280,8 +281,9 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case res.err != nil:
 		logf("executing %s: %v", p.ID, res.err)
-		s.render(w, http.StatusBadGateway, "message", page{Title: "Not filed", Session: &sess,
-			Message: "The confirmation was recorded, but the executor did not report a result. Check the tickets before proposing it again."})
+		// The executor may have filed the issue and lost the answer, so this must not say it was not.
+		s.render(w, http.StatusBadGateway, "message", page{Title: "Result unknown", Session: &sess,
+			Message: unknownResult(s.org, p.Visibility)})
 	case res.denied != "":
 		// The executor's refusal leaves the token unused, but the proposal stays confirmed and the
 		// token is dropped here, so the call cannot be retried; see ADR 0017.
@@ -291,6 +293,17 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		s.render(w, http.StatusOK, "filed", page{Title: "Ticket filed", Session: &sess,
 			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%s/issues/%d", s.ticketURL, res.repo, res.issue)})
 	}
+}
+
+// unknownResult tells the user where the ticket would be, if the executor filed it before its
+// answer was lost, so that they look before proposing it again.
+func unknownResult(org, visibility string) string {
+	msg := "The confirmation was recorded, but the executor did not report a result, so the ticket may have been filed. " +
+		"Check " + org + "/" + directory.TicketRepos[visibility] + " before proposing it again."
+	if visibility == approval.Restricted {
+		msg += " Only engineers can read it, so a technician should ask one."
+	}
+	return msg
 }
 
 func (s *server) handleChatPage(w http.ResponseWriter, r *http.Request) {

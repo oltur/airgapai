@@ -77,7 +77,7 @@ func (s *server) run(ctx context.Context, r executeRequest) (int64, string, erro
 	case errors.Is(err, errVisibility):
 		// Known before anything reached Forgejo, so the caller can be told for certain.
 		record("failed", map[string]any{"stage": "visibility"})
-		return 0, "", &approval.Denied{Reason: "there is no repository for this visibility, so nothing was filed"}
+		return 0, "", &approval.Denied{Reason: "there is no repository for this visibility"}
 	case errors.As(err, &refused):
 		record("failed", map[string]any{"stage": "forgejo", "status": refused.status})
 		return 0, "", err
