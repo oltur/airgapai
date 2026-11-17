@@ -12,48 +12,22 @@ import datetime
 import json
 import pathlib
 import statistics
-import subprocess
+import sys
 import time
-import urllib.error
-import urllib.request
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "eval"))
+import lab  # noqa: E402
+
+ROOT = lab.ROOT
 PORT = 18190
-URL = f"http://127.0.0.1:{PORT}"
-KUBECTL = ("sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
-           " -n retrieval")
-VM_SSH = str(ROOT / "infra/vm-ssh.sh")
 ROLES = ["technician", "engineer"]
 SCANS = ["hnsw", "hnsw-strict", "exact"]
 KS = [5, 10, 20]
 
 
-def vm(command):
-    return subprocess.run([VM_SSH, command], capture_output=True, text=True, check=True).stdout
-
-
-def tunnel():
-    """Forward the service to the host. The terminal makes the remote forward end with SSH."""
-    process = subprocess.Popen(
-        [VM_SSH, "-tt", "-L", f"{PORT}:127.0.0.1:{PORT}",
-         f"{KUBECTL} port-forward svc/retrieval {PORT}:8080 >/dev/null"],
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(60):
-        try:
-            urllib.request.urlopen(f"{URL}/ready", timeout=2).close()
-            return process
-        except (urllib.error.URLError, ConnectionError, TimeoutError):
-            time.sleep(1)
-    process.terminate()
-    raise SystemExit("port-forward did not come up")
-
-
 def search(query, role, k, scan):
-    body = json.dumps({"query": query, "role": role, "k": k, "scan": scan}).encode()
-    request = urllib.request.Request(f"{URL}/search", body, {"Content-Type": "application/json"})
     start = time.monotonic()
-    with urllib.request.urlopen(request, timeout=60) as response:
-        results = json.load(response)["results"]
+    results = lab.search(query, role, k, scan, port=PORT)
     return results, time.monotonic() - start
 
 
@@ -67,15 +41,11 @@ def main():
     args = parser.parse_args()
     queries = [q for q in (ROOT / "test/retrieval/queries.txt").read_text().splitlines()
                if q.strip() and not q.startswith("#")]
-    image = json.loads(vm(f"{KUBECTL} get deployment retrieval -o json"))[
+    image = json.loads(lab.vm(f"{lab.KUBECTL} -n retrieval get deployment retrieval -o json"))[
         "spec"]["template"]["spec"]["containers"][0]["image"]
-    # Every connection needs a password; the superuser's is in the pod's environment.
-    sql = "SELECT classification, count(*) FROM rag.chunks GROUP BY 1 ORDER BY 1"
-    rows = vm(f"{KUBECTL} exec deploy/postgres -- sh -c 'PGPASSWORD=\"$POSTGRES_PASSWORD\""
-              f" psql -h 127.0.0.1 -U postgres -d rag -AtF= -c \"{sql}\"'")
+    rows = lab.chunk_counts()
 
-    process = tunnel()
-    try:
+    with lab.tunnel(PORT):
         search(queries[0], "engineer", 5, "hnsw")  # warm up
         per_query = []
         for query in queries:
@@ -98,8 +68,6 @@ def main():
             entry["engineer_top5_restricted"] = sum(
                 r["classification"] == "restricted" for r in top["engineer"])
             per_query.append(entry)
-    finally:
-        process.terminate()
 
     summary = {}
     for role in ROLES:
@@ -116,10 +84,10 @@ def main():
                         statistics.median(c["latency_ms"] for c in cells), 1),
                 }
     report = {
-        "when": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
+        "when": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "where": "VM pods, requests over kubectl port-forward, latency includes query embedding",
         "image": image,
-        "rows": rows.split(),
+        "rows": rows,
         "queries": len(queries),
         "roles_differ_at_5": sum(q["roles_differ_at_5"] for q in per_query),
         "summary": summary,

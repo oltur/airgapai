@@ -17,7 +17,7 @@ PHASES = [  # name, budget in hours, start
     ("1: the air gap", 60, "2026-10-31T09:41:27+01:00"),
     ("2: light retrieval", 30, "2026-11-01T13:20:00+01:00"),
     ("3: agent gateway", 55, "2026-11-10T19:24:03+01:00"),  # PR #9 merged
-    ("4: evals and write-up", 30, None),
+    ("4: evals and write-up", 30, "2026-11-17T21:19:44+01:00"),  # PR #21 merged
 ]
 
 ROOT = Path(__file__).resolve().parent.parent
