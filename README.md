@@ -14,14 +14,15 @@ private, non-commercial project, written independently from public specification
 
 ## Status
 
-Phases 1 and 2, the air gap and role-filtered retrieval, are complete. **The claim above is not
-proven yet:** the "act safely" part needs the gateway. The models are served in the cluster, a pinned
-slice of the Kubernetes documentation (CC BY 4.0) is ingested into a row-level secured table, and a
-retrieval service returns the chunks a named role may see. Of the gateway, its approval core, an
-executor that files a Forgejo issue only for a confirmed call, a confirmation page that users sign in
-to through Forgejo, and a chat page where the model searches the manuals with the user's role and can
-propose, but not file, a ticket exist. The deployed gateway is tested against a stub that acts as a
-fully compromised model, and the real model against planted prompt-injection passages. The write-up is
+Phases 1 to 3 are complete: the air gap, role-filtered retrieval and the agent gateway. The models
+are served in the cluster, a pinned slice of the Kubernetes documentation (CC BY 4.0) is ingested into a
+row-level secured table, and a gateway lets signed-in users ask the manuals and confirm the tickets the
+model proposes. The deployed gateway is tested against a stub that acts as a fully compromised model,
+and the real model against planted prompt-injection passages. **The claim above is not proven in
+full:** in the tested scenarios, no ticket is filed without a user's confirmation, but the tests do not show that answers are
+right, which Phase 4's evals measure, and a misled user who confirms a harmful proposal stays a
+residual risk. The [threat model](docs/threat-model.md) maps each threat to its control and test, or
+names it as a residual risk. The write-up of the air gap is
 [A blocked connection proves nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
 
 | Phase | What it should demonstrate |
