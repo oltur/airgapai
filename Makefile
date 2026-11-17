@@ -37,7 +37,7 @@ lint: ## Check for hidden characters, then run ShellCheck, Ruff, the eval gate's
 		|| echo "the hidden-character check could not run"; exit 1; }
 	@shellcheck -x -P SCRIPTDIR -S warning $$(git ls-files '*.sh' '.githooks/*')
 	@ruff check --quiet .
-	@python3 -m unittest discover -s test/eval -q
+	@out="$$(python3 -m unittest discover -s test/eval -q 2>&1)" || { echo "$$out"; exit 1; }
 	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
 		go -C $$module vet ./... || exit 1; \
 		go -C $$module test -count=1 ./... >/dev/null || exit 1; \
