@@ -25,7 +25,7 @@ tools: ## Install the pinned guard and lint tools into ~/.local/bin
 	@scripts/install-tools.sh
 
 lint: ## Check for hidden characters, then run ShellCheck, Ruff, the eval gate's tests, go vet, go test and govulncheck
-	@for tool in shellcheck ruff go govulncheck; do \
+	@for tool in shellcheck ruff python3 go govulncheck; do \
 		command -v $$tool >/dev/null || { echo "$$tool not found, see make tools"; exit 1; }; \
 	done
 	@# Characters that hide or reorder text, written by accident or not, must not reach the sources:
@@ -37,7 +37,7 @@ lint: ## Check for hidden characters, then run ShellCheck, Ruff, the eval gate's
 		|| echo "the hidden-character check could not run"; exit 1; }
 	@shellcheck -x -P SCRIPTDIR -S warning $$(git ls-files '*.sh' '.githooks/*')
 	@ruff check --quiet .
-	@python3 -m unittest discover -s test/eval -q 2>/dev/null || python3 -m unittest discover -s test/eval
+	@python3 -m unittest discover -s test/eval -q
 	@for module in $$(git ls-files '*/go.mod' | xargs -n1 dirname); do \
 		go -C $$module vet ./... || exit 1; \
 		go -C $$module test -count=1 ./... >/dev/null || exit 1; \

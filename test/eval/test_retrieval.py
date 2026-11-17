@@ -48,6 +48,20 @@ class Compare(unittest.TestCase):
     def test_a_changed_golden_set_fails(self):
         self.assertEqual(len(compare(run(a=hit(True)), {"b": hit(True)}, 0)), 1)
 
+    def test_a_changed_question_fails_without_crashing(self):
+        base = run(a=hit(True, asked={"question": "q", "expect": ["x.md"]}))
+        # The same id, now with no expected pages, so no hit is recorded for it.
+        now = {"a": {"technician_restricted": 0, "asked": {"question": "q", "expect": []}}}
+        failures = compare(base, now, 0)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("changed", failures[0])
+
+    def test_another_deployment_fails(self):
+        base = {"deployed": {"images": {"embed": ["a"]}}, "results": {"a": hit(True)}}
+        self.assertEqual(compare(base, {"a": hit(True)}, 0, base["deployed"]), [])
+        failures = compare(base, {"a": hit(True)}, 0, {"images": {"embed": ["b"]}})
+        self.assertTrue(any("deployed" in f for f in failures))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,7 +37,9 @@ def evaluate(golden):
     for q in golden["questions"]:
         top = lab.search(q["question"], q["role"], K)
         paths = [r["path"].removeprefix(prefix) for r in top]
-        entry = {"kind": q["kind"], "role": q["role"],
+        # What was asked: a baseline is only comparable for the same question, role and pages.
+        entry = {"asked": {k: q[k] for k in ("question", "role", "kind", "expect")},
+                 "kind": q["kind"], "role": q["role"],
                  "top": [f"{p}#{r['chunk_index']}" for p, r in zip(paths, top, strict=True)]}
         if q["expect"]:
             ranks = [i + 1 for i, p in enumerate(paths) if p in q["expect"]]
@@ -66,14 +68,24 @@ def summarise(results):
     return summary
 
 
-def compare(baseline, results, tolerance):
-    """Every way this run is worse than the baseline, as lines; empty if it passes."""
+def compare(baseline, results, tolerance, deployed=None):
+    """Every way this run is worse than the baseline, as lines; empty if it passes. A run of other
+    questions, or against another deployment, is not comparable, and fails as such."""
     failures = []
     if set(baseline["results"]) != set(results):
         failures.append("the golden set's questions differ from the baseline's: save a new one")
         return failures
+    changed = sorted(i for i, b in baseline["results"].items()
+                     if b.get("asked") != results[i].get("asked"))
+    if changed:
+        failures.append(f"questions changed since the baseline, which must be saved again: "
+                        f"{', '.join(changed)}")
+        return failures
+    if deployed is not None and baseline.get("deployed") != deployed:
+        failures.append("the deployed images or chunk counts differ from the baseline's: "
+                        "a deliberate change needs a new baseline, saved in review")
     lost = [i for i, b in baseline["results"].items()
-            if b.get(f"hit@{CHAT_K}") and not results[i][f"hit@{CHAT_K}"]]
+            if b.get(f"hit@{CHAT_K}") and not results[i].get(f"hit@{CHAT_K}")]
     if len(lost) > tolerance:
         failures.append(f"{len(lost)} questions lost their expected page from the top {CHAT_K}, "
                         f"tolerance {tolerance}: {', '.join(lost)}")
@@ -97,11 +109,13 @@ def main():
     parser.add_argument("--save", type=pathlib.Path, nargs="?", const=BASELINE,
                         help="save this run, by default as the baseline")
     args = parser.parse_args()
+    if args.save and args.baseline:
+        parser.error("--save and --baseline together would compare the run with itself")
     golden = json.loads(GOLDEN.read_text())
 
     with lab.tunnel():
         results = evaluate(golden)
-    run = {"when": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
+    run = {"when": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
            "deployed": lab.deployed(), "summary": summarise(results), "results": results}
     for name, value in run["summary"].items():
         print(f"{name}: {value}")
@@ -110,7 +124,8 @@ def main():
         args.save.write_text(json.dumps(run, indent=2) + "\n")
         print(f"saved {args.save}")
     if args.baseline:
-        failures = compare(json.loads(args.baseline.read_text()), results, args.tolerance)
+        failures = compare(json.loads(args.baseline.read_text()), results, args.tolerance,
+                           run["deployed"])
         for line in failures:
             print(f"FAIL {line}")
         if failures:

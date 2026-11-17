@@ -40,9 +40,14 @@ known answers.
     that finds no restricted text even for an engineer shows nothing about leaks
 - **It gates on a saved baseline, question by question.** It fails if any question that had an
   expected page in its top 3 in the baseline does not now, beyond a tolerance; if anything leaked;
-  if a leak question's control found nothing; or if the golden set no longer matches the baseline's
-  questions. A question improving is not a failure. The baseline is
-  `test/eval/baseline/retrieval.json`, and records the images it measured and the chunk counts.
+  or if a leak question's control found nothing. A question improving is not a failure. The
+  baseline is `test/eval/baseline/retrieval.json`.
+- **A run is compared only with a baseline of the same questions and the same deployment.** The
+  baseline records each question's text, role, kind and expected pages, the images of retrieval,
+  ingestion and the embedding server, and the chunk counts by label. If any of these differ, the gate
+  fails and says why, since the comparison would mean nothing. A deliberate change saves a new
+  baseline with `--save`, which refuses `--baseline` in the same run, so that a run is never
+  compared with itself.
 - **The tolerance is 0,** because three runs on the same VM gave identical top 5 chunks for every
   question.
 - **The gate's comparison has unit tests,** run by `make lint` and so in CI.
@@ -70,9 +75,11 @@ known answers.
 - **The baseline is tied to the deployed models, chunks and index.** A deliberate change to any of
   them needs a new baseline, saved with `test/eval/retrieval.py --save`, and the change to the
   baseline is visible in review.
-- **Not yet part of `make rebuild`.** Whether a fresh build's index gives the same results as this
-  one has not been tested. That, the CI job, and a deliberately worse change shown to fail, come in a
-  later slice.
+- **Not yet part of `make rebuild`, and a rebuild may change the results.** The HNSW index is built
+  afresh on each rebuild, and need not come out the same: `make measure-retrieval` on this VM gave
+  slightly different recall than on the VM ADR 0014 measured, with the same images, such as 0.992
+  against 0.983 for a technician at k=5. Whether the golden set's hits hold across a rebuild has not
+  been tested. That, the CI job, and a deliberately worse change shown to fail, come in a later slice.
 
 ### What this does not prove
 
@@ -93,4 +100,10 @@ images pinned in `infra/versions.env`, and 314 public and 193 restricted chunks:
 - **Repeatability:** three runs gave identical top 5 chunks for every question. Two gate runs against
   the saved baseline passed. A run takes about 5 s.
 - **The gate's rules:** breaking each one in turn made a unit test fail: the tolerance on lost hits,
-  the leak check, the control and the check that the questions match.
+  the leak check, the control, the check that the question ids match, the check that each question
+  is unchanged, and the check of the deployment. A live run against a copy of the baseline with one
+  restricted chunk fewer failed on the deployment, as it should.
+- **The review** found that the first version compared only question ids, so an edited question was
+  measured against its old entry, and one with its expected pages removed crashed the gate. It also
+  found that `--save` with `--baseline` compared a run with itself, and that a run against another
+  deployment was not flagged. Each is now a rule, with a test.
