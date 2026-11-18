@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-generation rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -112,6 +112,9 @@ measure-retrieval: ## Measure recall per role against an exact scan, and search 
 
 eval-retrieval: ## Gate retrieval on the golden set in the VM against the saved baseline, and check nothing leaks
 	@test/eval/retrieval.py --baseline
+
+eval-generation: ## Gate the model's answers on the golden set through the deployed gateway, against the saved baseline
+	@test/eval/generation.py --baseline
 
 rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	@start=$$(date +%s); \

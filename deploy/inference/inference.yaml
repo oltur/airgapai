@@ -66,6 +66,11 @@ spec:
             - "--parallel"
             - "1"
             - "--jinja"
+            # No prompt cache in RAM: its default of 8192 MiB is more than the limit below, and the
+            # eval runs of ADR 0026 had the server killed for memory. The one slot still reuses the
+            # previous prompt's shared start, which is what a turn's model calls share.
+            - "--cache-ram"
+            - "0"
           ports:
             - name: http
               containerPort: 8080

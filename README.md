@@ -147,6 +147,8 @@ make test-poisoned   # test the deployed gateway and the real model against plan
 make test-audit-copy # test that the off-VM audit copy catches a rewritten, rechained row
 make audit-copy      # copy new audit rows off the VM, after checking the copied ones are unchanged
 make measure-retrieval  # measure recall per role against an exact scan, in the VM
+make eval-retrieval  # gate retrieval on the golden set against its saved baseline, in about 5 s
+make eval-generation # gate the model's answers on the golden set through the gateway, against its baseline
 make test-egress  # test every egress path and the layer matrix from the host, with controls
 make rebuild      # destroy everything, rebuild from the bundle and run all of the above
 ```
