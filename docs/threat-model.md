@@ -179,7 +179,7 @@ The rule is to fail closed: when a part the decision depends on is missing, noth
 | Forgejo, at sign-in | The sign-in fails | The gateway's code; not tested |
 | The executor refuses | The page says nothing was filed. The proposal cannot be confirmed again, and has to be proposed again | `make test-db`, ADR 0017 |
 | The executor gives no answer | The page, titled "Result unknown", says the ticket may have been filed, and names the repository to check before proposing again. For a restricted ticket it says only engineers can read it. Until PR #21 the title said "Not filed", which could have led to a duplicate ticket. The executor reports a refusal from Forgejo and a lost answer alike, so the page cannot tell them apart, and the proposal page does not show that it was confirmed | `make test-db`, ADR 0017 |
-| The model server | The turn ends with an error page. A proposal made earlier in the turn stays a proposal | `make test-db`, ADR 0018 |
+| The model server | The turn ends with an error page. A proposal made earlier in the turn stays a proposal. In the first generation eval, the chat server was killed for memory under sustained use, and ten turns failed until it restarted; its prompt cache is now off | `make test-db`, ADR 0018, ADR 0026 |
 | Retrieval, during a search | The model is told the search failed, and gets no passages | The gateway's code; not tested |
 | No role reaches the database | The query returns nothing | `make test-rls`, `make test-retrieval`, ADR 0012 |
 | Kyverno stops, cleanly or by force | Signed images are denied too, until it returns | `make test-signed-images`, ADR 0006 |
@@ -208,7 +208,8 @@ These are the risks left after the controls above, roughly from most to least im
 6. **Personal data without a fixed pattern,** such as names and postal addresses, reaches the model and
    tickets.
 7. **Shown answers can be wrong.** They cite passages the turn found, but nothing checks that those
-   passages support them.
+   passages support them. In the generation eval, four of five leak questions got answers from the
+   model's general knowledge, citing unrelated public pages (ADR 0026).
 8. **Provenance of upstream images and models** rests on digests and published hashes, not publishers'
    signatures.
 9. **A role removed in Forgejo still reads for up to an hour,** through searches and the confirmation

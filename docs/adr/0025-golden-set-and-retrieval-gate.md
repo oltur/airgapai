@@ -80,6 +80,7 @@ known answers.
   slightly different recall than on the VM ADR 0014 measured, with the same images, such as 0.992
   against 0.983 for a technician at k=5. Whether the golden set's hits hold across a rebuild has not
   been tested. That, the CI job, and a deliberately worse change shown to fail, come in a later slice.
+  ADR 0026 later found the top 5 chunks unchanged for every question across one rebuild.
 
 ### What this does not prove
 

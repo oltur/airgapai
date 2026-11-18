@@ -62,6 +62,12 @@ class Compare(unittest.TestCase):
         failures = compare(base, {"a": hit(True)}, 0, {"images": {"embed": ["b"]}})
         self.assertTrue(any("deployed" in f for f in failures))
 
+    def test_another_deployment_still_reports_a_leak(self):
+        base = {"deployed": {"images": {"embed": ["a"]}}, "results": {"a": hit(True)}}
+        failures = compare(base, {"a": hit(True, leaked=2)}, 0, {"images": {"embed": ["b"]}})
+        self.assertEqual(len(failures), 2)
+        self.assertTrue(any("technician" in f for f in failures))
+
 
 if __name__ == "__main__":
     unittest.main()

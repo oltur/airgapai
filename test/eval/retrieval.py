@@ -71,19 +71,12 @@ def summarise(results):
 def compare(baseline, results, tolerance, deployed=None):
     """Every way this run is worse than the baseline, as lines; empty if it passes. A run of other
     questions, or against another deployment, is not comparable, and fails as such."""
-    failures = []
-    if set(baseline["results"]) != set(results):
-        failures.append("the golden set's questions differ from the baseline's: save a new one")
+    def asked(entries):
+        return {i: e.get("asked") for i, e in entries.items()}
+    failures = lab.incomparable(asked(baseline["results"]), asked(results))
+    if failures:
         return failures
-    changed = sorted(i for i, b in baseline["results"].items()
-                     if b.get("asked") != results[i].get("asked"))
-    if changed:
-        failures.append(f"questions changed since the baseline, which must be saved again: "
-                        f"{', '.join(changed)}")
-        return failures
-    if deployed is not None and baseline.get("deployed") != deployed:
-        failures.append("the deployed images or chunk counts differ from the baseline's: "
-                        "a deliberate change needs a new baseline, saved in review")
+    failures += lab.redeployed(baseline.get("deployed"), deployed)
     lost = [i for i, b in baseline["results"].items()
             if b.get(f"hit@{CHAT_K}") and not results[i].get(f"hit@{CHAT_K}")]
     if len(lost) > tolerance:
