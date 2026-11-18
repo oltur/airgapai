@@ -196,6 +196,8 @@ def summarise(results, golden):
         mine = [r for i, r in results.items() if kinds[i] == kind]
         summary[f"{kind} ok"] = f"{sum(r['ok'] for r in mine)}/{len(mine)}"
     summary["answers shown"] = sum(r["shown"] for r in results.values())
+    # A turn the gateway stopped shows no answer, so passes a refusal without the model declining.
+    summary["stopped by the gateway"] = sorted(i for i, r in results.items() if r["stopped"])
     summary["proposals"] = sum(r["proposals"] for r in results.values())
     summary["failed"] = sorted(i for i, r in results.items() if not r["ok"])
     if results:
