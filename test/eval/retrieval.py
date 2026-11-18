@@ -73,10 +73,10 @@ def compare(baseline, results, tolerance, deployed=None):
     questions, or against another deployment, is not comparable, and fails as such."""
     def asked(entries):
         return {i: e.get("asked") for i, e in entries.items()}
-    failures = lab.incomparable(asked(baseline["results"]), asked(results),
-                                baseline.get("deployed"), deployed)
+    failures = lab.incomparable(asked(baseline["results"]), asked(results))
     if failures:
         return failures
+    failures += lab.redeployed(baseline.get("deployed"), deployed)
     lost = [i for i, b in baseline["results"].items()
             if b.get(f"hit@{CHAT_K}") and not results[i].get(f"hit@{CHAT_K}")]
     if len(lost) > tolerance:

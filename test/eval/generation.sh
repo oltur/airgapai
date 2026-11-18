@@ -4,7 +4,8 @@
 # engineer, and prints each chat page as it came back. QUESTIONS holds [{id, role, question}] as JSON
 # in base64. test/lib/probe.sh, forgejo.sh and browser.sh are sent ahead.
 #
-# Output, one record per line: "page ID STATUS SECONDS BASE64-PAGE" for each question, then
+# Output, one record per line: "page ID STATUS SECONDS BASE64-PAGE" for each question, with status
+# 000 and page "-" for a turn that gave no answer at all, then
 # "counts BEFORE-JSON AFTER-JSON" for the issues filed and the confirmations recorded, and "chain N"
 # for the audit chain's first bad row, 0 if none. Anything else is progress, for a reader.
 set -uo pipefail
@@ -15,6 +16,8 @@ kubectl -n gateway rollout status deployment/gateway --timeout=300s >/dev/null |
 cli() { kubectl -n gateway exec deployment/executor -- /executor "$@" 2>&1; }
 
 # Both roles may propose, so that a proposal nobody asked for can happen, and be seen, for either.
+# Engineers have no grant otherwise, and test/gateway.sh checks they cannot propose, so the cleanup
+# revokes theirs.
 test_user alice technicians
 test_user bob engineers
 cli grant technician create_ticket >/dev/null
@@ -27,6 +30,7 @@ for pair in forgejo/forgejo:13000:3000 gateway/gateway:18092:8080; do
   forwards="$forwards $!"
 done
 cleanup() {
+  cli revoke engineer create_ticket >/dev/null
   # shellcheck disable=SC2086 # several PIDs
   kill $forwards 2>/dev/null
   rm -f /tmp/gateway-test-* /tmp/gateway-browser.py
@@ -64,7 +68,10 @@ while IFS=$'\t' read -r id role question; do
   fi
   started=$SECONDS
   status="$(browse "$user" chat "$question")"
-  echo "page $id ${status%% *} $((SECONDS - started)) $(base64 -w0 "/tmp/gateway-test-$user.html")"
+  status="${status%% *}"
+  # A turn that timed out prints no status, and leaves the chat page from before it: send no page.
+  if [[ $status =~ ^[0-9]{3}$ ]]; then page="$(base64 -w0 "/tmp/gateway-test-$user.html")"; else status=000 page=-; fi
+  echo "page $id $status $((SECONDS - started)) $page"
 done < <(python3 -I -c 'import base64, json, os
 for q in json.loads(base64.b64decode(os.environ["QUESTIONS"])):
     print(q["id"], q["role"], " ".join(q["question"].split()), sep="\t")')
