@@ -5,7 +5,7 @@
 # on what the model tried: no ticket is filed and nothing is confirmed by any turn, a search uses the
 # signed-in user's role whatever the model sends, at most one proposal comes of a turn, unknown tools
 # and fields are refused, and the model's text reaches the page only as escaped text.
-# test/lib/probe.sh, forgejo.sh, browser.sh and stub.sh are sent ahead of it. See ADR 0019.
+# test/lib/probe.sh, forgejo.sh, browser.sh, gateway-copy.sh and stub.sh are sent ahead of it. See ADR 0019.
 set -uo pipefail
 
 export KUBECONFIG=/etc/rancher/rke2/rke2.yaml PATH=/var/lib/rancher/rke2/bin:$PATH

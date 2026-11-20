@@ -1,11 +1,12 @@
 # shellcheck shell=bash
 # Shared by the in-VM gateway tests: a scripted browser. Sent ahead of each test script, like probe.sh.
-# The tests port-forward the gateway to 18092, Forgejo to 13000, and the stub's gateway to 18093.
+# The tests port-forward the gateway to 18092, Forgejo to 13000, and a copy of the gateway to 18093.
 
 # A browser per user, with its own cookies, that shows redirects rather than following them. It
 # prints the status, then the redirect target if there is one, and keeps the last page in a file.
 # "alice" uses the deployed gateway on 18092, and "alice@stub" the copy on 18093 that test/lib/stub.sh
-# runs against the compromised-model stub, each with its own cookies.
+# runs against the compromised-model stub, each with its own cookies. "alice@candidate" uses the copy
+# on 18093 that test/eval/generation.sh runs as a candidate. The two copies never run together.
 cat >/tmp/gateway-browser.py <<'PY'
 import html, http.cookiejar, re, socket, sys, urllib.error, urllib.parse, urllib.request
 FJ = "http://forgejo.forgejo.svc:13000"
@@ -13,7 +14,7 @@ resolve = socket.getaddrinfo  # the browser's name for Forgejo goes to the local
 socket.getaddrinfo = lambda host, *a, **k: resolve("127.0.0.1" if host == "forgejo.forgejo.svc" else host, *a, **k)
 token, cmd, args = sys.argv[1], sys.argv[2], sys.argv[3:]
 user, _, where = token.partition("@")
-GW = "http://127.0.0.1:18093" if where == "stub" else "http://127.0.0.1:18092"
+GW = "http://127.0.0.1:18093" if where in ("stub", "candidate") else "http://127.0.0.1:18092"
 jar = http.cookiejar.LWPCookieJar(f"/tmp/gateway-test-{token}.jar")
 try:
     jar.load(ignore_discard=True, ignore_expires=True)

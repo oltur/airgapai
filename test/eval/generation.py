@@ -20,10 +20,17 @@ The model's answers vary, so a baseline holds several runs. With --baseline, a r
 the questions that passed in every baseline run fail now than the tolerance, which is set from the
 baseline runs themselves: the most such questions any one of them failed, measured against the
 others. With --save, the runs become the new baseline.
+
+With --candidate, the questions go to a copy of the gateway beside the deployed one, served by the
+rest of the deployment as the deployed gateway is. "deployed", a copy with the deployed image, is
+the control. A name in test/eval/candidates, such as "worse-prompt", is a gateway built with that
+change. The deployment is still compared with the baseline's, so the candidate's change is the only
+difference, and the gate then passes or fails it by its answers.
 """
 import argparse
 import base64
 import datetime
+import hashlib
 import html
 import json
 import pathlib
@@ -36,7 +43,9 @@ import lab  # noqa: E402
 GOLDEN = lab.ROOT / "test/eval/golden.json"
 BASELINE = lab.ROOT / "test/eval/baseline/generation.json"
 SCRIPTS = ["test/lib/probe.sh", "test/lib/forgejo.sh", "test/lib/browser.sh",
-           "test/eval/generation.sh"]
+           "test/lib/gateway-copy.sh", "test/eval/generation.sh"]
+CANDIDATES = lab.ROOT / "test/eval/candidates"
+CANDIDATE_NAME = re.compile(r"[a-z0-9-]+")  # a registry tag, as generation.sh accepts
 ANSWER_CHARS = 1000  # of each answer kept in the results, for a reader
 # Markup from images/gateway/pages.go that only the template writes: the model's text is escaped, so
 # it cannot produce these, though it can write the same words.
@@ -47,12 +56,45 @@ UNCITED = "<p><strong>No answer is shown,</strong> because the model's reply cit
 UNKNOWN = "<p><strong>No answer is shown,</strong> because the model's reply cites passage "
 
 
-def prompt_sentences():
+def prompt_sentences(candidate=None):
     """The gateway's system prompt, sentence by sentence, from its source, so the leak check needs
-    no copy, and one sentence repeated is enough to fail it."""
+    no copy, and one sentence repeated is enough to fail it. A candidate's own prompt, if it has
+    one, is added."""
     source = (lab.ROOT / "images/gateway/chat.go").read_text()
     prompt = re.search(r"const systemPrompt = `(.*?)`", source, re.S).group(1)
+    own = CANDIDATES / f"{candidate}.prompt"
+    if candidate and own.exists():
+        prompt += "\n" + own.read_text()
     return [s for s in re.split(r"(?<=[.:])\s+", " ".join(prompt.split())) if len(s) >= 20]
+
+
+def candidates():
+    """The candidates that can be asked for: the control and each change in test/eval/candidates."""
+    return ["deployed"] + sorted(p.stem for p in CANDIDATES.glob("*.prompt")
+                                 if CANDIDATE_NAME.fullmatch(p.stem))
+
+
+def candidate_env(candidate):
+    """What generation.sh needs to run a candidate: its name, and for a prompt, the prompt's hash,
+    which the image must carry, so that the image tested is the prompt scored."""
+    if not candidate:
+        return {}
+    env = {"CANDIDATE": candidate}
+    if candidate != "deployed":
+        prompt = (CANDIDATES / f"{candidate}.prompt").read_bytes()
+        env["PROMPT_SHA256"] = hashlib.sha256(prompt).hexdigest()
+    return env
+
+
+def wrong_candidate(candidate, reported, deployed):
+    """Why the image the VM ran is not the candidate asked for, or None."""
+    if reported is None:
+        return "the candidate's image was not reported"
+    want = (deployed["images"]["gateway"][0]["image"] if candidate == "deployed"
+            else "10.43.0.50:5000/gateway-candidate@sha256:")
+    if reported == want or (candidate != "deployed" and reported.startswith(want)):
+        return None
+    return f"the candidate {candidate} ran {reported}, not {want}"
 
 
 def text(fragment):
@@ -117,15 +159,16 @@ def asked(golden):
     return {q["id"]: {k: q.get(k) for k in keys} for q in golden["questions"]}
 
 
-def evaluate(golden, ids=None):
+def evaluate(golden, ids=None, candidate=None):
     """One run of the questions in the VM: each question's score, the counts and the audit chain."""
     questions = [q for q in golden["questions"] if ids is None or q["id"] in ids]
     by_id = {q["id"]: q for q in questions}
     payload = base64.b64encode(json.dumps(
         [{k: q[k] for k in ("id", "role", "question")} for q in questions]).encode()).decode()
-    prompt = prompt_sentences()
+    prompt = prompt_sentences(candidate)
     run = {"results": {}}
-    for line in lab.in_vm(SCRIPTS, {"QUESTIONS": payload}):
+    env = {"QUESTIONS": payload} | candidate_env(candidate)
+    for line in lab.in_vm(SCRIPTS, env):
         kind, _, rest = line.partition(" ")
         if kind == "page":
             qid, status, seconds, page = rest.split(" ")
@@ -141,6 +184,8 @@ def evaluate(golden, ids=None):
             run["counts"] = {"before": json.loads(before), "after": json.loads(after)}
         elif kind == "chain":
             run["chain"] = rest
+        elif kind == "candidate":
+            run["candidate"] = rest
         else:
             print(f"  {line}", file=sys.stderr, flush=True)
     return run
@@ -233,7 +278,12 @@ def main():
                         help="runs to make; a baseline needs 2 or more")
     parser.add_argument("--only", help="comma-separated question ids, to try a few; not gated")
     parser.add_argument("--out", type=pathlib.Path, help="also write the runs here, for a reader")
+    parser.add_argument("--candidate", choices=candidates(),
+                        help="ask a copy of the gateway instead: the deployed image, as the "
+                             "control, or one built with a change in test/eval/candidates")
     args = parser.parse_args()
+    if args.candidate and args.save:
+        parser.error("a baseline is of the deployed gateway, not a candidate")
     if args.save and args.baseline:
         parser.error("--save and --baseline together would compare the runs with themselves")
     if args.save and args.runs < 2:
@@ -255,13 +305,19 @@ def main():
     for n in range(args.runs):
         print(f"run {n + 1} of {args.runs}", file=sys.stderr, flush=True)
         try:
-            run = evaluate(golden, ids)
+            run = evaluate(golden, ids, args.candidate)
         except lab.VMError as error:  # The runs before this one are kept for --out.
             print(f"FAIL run {n + 1}: {error}")
             failed = True
             break
         if ids:
             run["partial"] = True
+        if args.candidate:
+            print(f"candidate: {args.candidate}, {run.get('candidate')}")
+            wrong = wrong_candidate(args.candidate, run.get("candidate"), deployed)
+            if wrong:
+                print(f"FAIL {wrong}")
+                failed = True
         for name, value in summarise(run["results"], golden).items():
             print(f"{name}: {value}")
         for line in hard_failures(run, golden):
@@ -294,8 +350,9 @@ def main():
             print(f"FAIL {line}")
         if lines or failed:
             sys.exit(1)
-        print(f"ok   no more than {allowed} of the questions every baseline run passed failed, "
-              "and nothing leaked, was filed or was confirmed")
+        who = f"the candidate {args.candidate}: " if args.candidate else ""
+        print(f"ok   {who}no more than {allowed} of the questions every baseline run passed "
+              "failed, and nothing leaked, was filed or was confirmed")
     if failed:
         sys.exit(1)
 
