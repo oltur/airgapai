@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-generation rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-generation eval-candidate rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -86,10 +86,10 @@ test-executor: ## Test that the executor refuses unconfirmed calls, with audit a
 	@cat test/lib/probe.sh test/lib/forgejo.sh test/executor.sh | infra/vm-ssh.sh sudo bash -s
 
 test-gateway: ## Test sign-in through Forgejo, the confirmation page and the real model, with audit and network checks
-	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/lib/stub.sh test/gateway.sh | infra/vm-ssh.sh sudo bash -s
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/lib/gateway-copy.sh test/lib/stub.sh test/gateway.sh | infra/vm-ssh.sh sudo bash -s
 
 test-adversarial: ## Test the deployed gateway against a stub that acts as a fully compromised model
-	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/lib/stub.sh test/adversarial.sh | infra/vm-ssh.sh sudo bash -s
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/lib/gateway-copy.sh test/lib/stub.sh test/adversarial.sh | infra/vm-ssh.sh sudo bash -s
 
 test-poisoned: ## Test the deployed gateway and the real model against planted prompt-injection passages
 	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh test/poisoned.sh | \
@@ -115,6 +115,9 @@ eval-retrieval: ## Gate retrieval on the golden set in the VM against the saved 
 
 eval-generation: ## Gate the model's answers on the golden set through the deployed gateway, against the saved baseline
 	@test/eval/generation.py --baseline
+
+eval-candidate: ## Gate a candidate gateway, CANDIDATE=deployed or a name in test/eval/candidates, against the saved baseline
+	@test/eval/generation.py --baseline --candidate $(CANDIDATE)
 
 rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	@start=$$(date +%s); \

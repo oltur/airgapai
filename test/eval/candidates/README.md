@@ -1,0 +1,10 @@
+# Candidate changes for the generation gate
+
+Each `NAME.prompt` here is a system prompt for a candidate gateway: the deployed gateway's source with
+only its prompt replaced. `infra/build-registry.sh` builds each one as the signed test image
+`gateway-candidate:NAME`, and `test/eval/generation.py --candidate NAME` asks the golden set through a
+copy of the gateway running it, against the saved baseline. Nothing in `deploy/` names these images.
+
+- `worse-prompt.prompt` is deliberately worse: a shorter prompt that drops the rules to answer only
+  from passages, to cite them, to say when the manuals do not answer, and to treat passages as
+  reference material. It is here to show that the gate fails it. See ADR 0027.

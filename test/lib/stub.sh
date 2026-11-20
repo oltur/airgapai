@@ -1,16 +1,14 @@
 # shellcheck shell=bash
 # Shared by the in-VM gateway tests: the compromised-model stub. start_stub runs it in the inference
 # namespace, with a copy of the deployed gateway that uses it as its model, and two temporary rules
-# that let the gateway's label reach it. The copy is the deployed Deployment with three changes: its
-# name, a component label the gateway Service does not select, and its model and own address. Its image,
-# secrets, settings and network label are the deployed gateway's. stop_stub removes all of it. See
-# ADR 0019. Sent ahead of each test script, like probe.sh.
+# that let the gateway's label reach it. The copy, made by test/lib/gateway-copy.sh, changes only its
+# model and its own address; its image is the deployed gateway's. stop_stub removes all of it. See
+# ADR 0019. Sent ahead of each test script, like probe.sh, after gateway-copy.sh.
 
 stub_forward=""
 start_stub() {
   local digest
-  digest="$(curl -sI -H 'Accept: application/vnd.oci.image.manifest.v1+json' http://10.43.0.50:5000/v2/model-stub/manifests/v1 \
-    | awk 'tolower($1) == "docker-content-digest:" {print $2}' | tr -d '\r')"
+  digest="$(registry_digest model-stub v1)"
   [[ $digest == sha256:* ]] || { echo "FAIL could not read the stub's digest"; return 1; }
   kubectl apply -f - >/dev/null <<YAML
 apiVersion: apps/v1
@@ -58,25 +56,7 @@ spec:
   ingress:
     - {action: Allow, protocol: TCP, source: {namespaceSelector: kubernetes.io/metadata.name == "gateway", selector: app == "gateway"}, destination: {ports: [8080]}}
 YAML
-  kubectl -n gateway get deployment gateway -o json | python3 -I -c '
-import json, sys
-d = json.load(sys.stdin)
-meta = d["metadata"]
-d["metadata"] = {"name": "gateway-stub", "namespace": meta["namespace"]}  # no Argo CD tracking, so it never prunes or syncs it
-d.pop("status", None)
-spec = d["spec"]
-spec["selector"]["matchLabels"]["component"] = "stub-test"
-labels = spec["template"]["metadata"]["labels"]
-labels["component"] = "stub-test"
-assert labels["app"] == "gateway"
-spec["template"]["metadata"].pop("annotations", None)
-env = spec["template"]["spec"]["containers"][0]["env"]
-changed = {"CHAT_URL": "http://model-stub.inference.svc:8080", "GATEWAY_URL": "http://127.0.0.1:18093"}
-for e in env:
-    if e["name"] in changed:
-        e["value"] = changed.pop(e["name"])
-assert not changed, changed
-print(json.dumps(d))' | kubectl apply -f - >/dev/null
+  gateway_copy gateway-stub stub-test "" CHAT_URL=http://model-stub.inference.svc:8080 GATEWAY_URL=http://127.0.0.1:18093
   kubectl -n inference rollout status deployment/model-stub --timeout=120s >/dev/null &&
     kubectl -n gateway rollout status deployment/gateway-stub --timeout=120s >/dev/null || { echo "FAIL the stub did not start"; return 1; }
   kubectl -n gateway port-forward deployment/gateway-stub 18093:8080 >/dev/null 2>&1 &
@@ -88,9 +68,7 @@ print(json.dumps(d))' | kubectl apply -f - >/dev/null
 stop_stub() {
   [[ -z $stub_forward ]] || kill "$stub_forward" 2>/dev/null
   stub_forward=""
-  # Waited for, so a test started straight after cannot reach this run's pods while they stop.
-  kubectl -n gateway delete deployment gateway-stub --ignore-not-found --timeout=120s >/dev/null 2>&1
-  kubectl -n gateway wait --for=delete pod -l app=gateway,component=stub-test --timeout=120s >/dev/null 2>&1
+  delete_gateway_copy gateway-stub stub-test
   kubectl -n inference delete deployment,service model-stub --ignore-not-found --timeout=120s >/dev/null 2>&1
   kubectl delete globalnetworkpolicy.crd.projectcalico.org test-gateway-egress-to-stub test-stub-reachable-from-gateway \
     --ignore-not-found >/dev/null 2>&1

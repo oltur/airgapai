@@ -138,6 +138,16 @@ sign probe-other-key "$("$crane" digest "$local_reg/probe-other-key:v1")" "$tmp/
 # run at all; deploy/ never names it.
 GO_IMAGE_SRC="$here/../test/model-stub" "$here/build-go-image.sh" "$crane" model-stub "$local_reg/model-stub:v1" >/dev/null
 sign model-stub "$("$crane" digest "$local_reg/model-stub:v1")" "$keys/cosign.key"
+# Candidate gateways for the generation gate: the gateway's source with only its system prompt
+# replaced by one in test/eval/candidates. Only test/eval/generation.sh runs them, beside the
+# deployed gateway, while it runs. Signed so they can run at all; deploy/ never names them.
+for candidate in "$here"/../test/eval/candidates/*.prompt; do
+  name="$(basename "$candidate" .prompt)"
+  cp -r "$here/../images/gateway" "$tmp/gateway-$name"
+  python3 -I "$here/../test/eval/candidates/swap-prompt.py" "$tmp/gateway-$name/chat.go" "$candidate"
+  GO_IMAGE_SRC="$tmp/gateway-$name" "$here/build-go-image.sh" "$crane" gateway "$local_reg/gateway-candidate:$name" >/dev/null
+  sign gateway-candidate "$("$crane" digest "$local_reg/gateway-candidate:$name")" "$keys/cosign.key"
+done
 
 "$cosign" verify --key "$keys/cosign.pub" --insecure-ignore-tlog --allow-http-registry "$local_reg/probe@$probe" >/dev/null 2>&1 \
   || { echo "signature does not verify"; exit 1; }
