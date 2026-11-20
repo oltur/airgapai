@@ -83,7 +83,8 @@ asks for that next, compared question by question, with a tolerance set from rep
 ### What this does not prove
 
 - **That the gate fails a worse prompt, chunking or model.** Its rules are unit tested, and an
-  unchanged run passed once, but no worse change has been run against it yet. That is the next slice.
+  unchanged run passed once, but no worse change had been run against it. ADR 0027 later ran a
+  worse prompt, which failed it.
 - **That shown answers are right.** They cite a passage, and for 30 of the 31 answer questions one
   from an expected page. Whether the text says what that page says is not checked.
 - **Anything about real users' questions.** The golden set is written for the test, as ADR 0025
