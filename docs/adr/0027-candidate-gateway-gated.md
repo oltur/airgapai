@@ -30,6 +30,11 @@ about its answers. Deploying it also takes a rebuild, since the registry in the 
   might produce, which drops the rules to answer only from passages, to cite them, to say when the
   manuals do not answer, and to treat passages as reference material. It keeps the rule to propose a
   ticket when asked.
+- **The image tested must be the candidate asked for.** Each candidate image is labelled with its
+  prompt file's hash, and the run is refused unless the label matches the file on the host, whose
+  sentences the leak check uses: a prompt edited since the last rebuild is not tested by an older
+  image. A copy left by an earlier run is removed before the run, and the image the copy runs is
+  checked against the deployed gateway's, for the control, or the candidate's, before any question.
 - **A candidate cannot be saved as a baseline.** The baseline is of the deployed gateway.
 
 ## Alternatives
@@ -78,6 +83,10 @@ the shared copy, with the images pinned in `infra/versions.env`, Ministral 3 3B 
 - **Why it failed:** the gateway showed no answer at all. All 47 replies cited no passage, so all 47
   were withheld. The model searched in 29 of the 47 turns, against 43 for the control, and for p01 it
   did not search at all. Turns took 1962 s, 42 s per turn on average.
+- **After the review,** the image label and the stale-copy checks were added. A one-question run of
+  the control passed them, and the worse-prompt image, built before the label existed, was refused
+  with "built from another prompt than the host's", until a rebuild. The two full runs above were
+  made before these checks.
 - **No hard failures in either run:** every turn completed, no technician turn found a restricted
   passage, no issue was filed, no proposal was confirmed, and the audit chain was unbroken.
 - **The citation check is what kept this prompt's replies from users.** Without the rule to cite,

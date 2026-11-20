@@ -117,6 +117,7 @@ eval-generation: ## Gate the model's answers on the golden set through the deplo
 	@test/eval/generation.py --baseline
 
 eval-candidate: ## Gate a candidate gateway, CANDIDATE=deployed or a name in test/eval/candidates, against the saved baseline
+	@[ -n "$(CANDIDATE)" ] || { echo "set CANDIDATE: deployed, or a name in test/eval/candidates"; exit 1; }
 	@test/eval/generation.py --baseline --candidate $(CANDIDATE)
 
 rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test

@@ -6,7 +6,9 @@
 #
 # With CANDIDATE set, the questions go instead to a copy of the gateway, beside the deployed one:
 # "deployed" for a copy with the deployed image, the control, or a tag of the gateway-candidate test
-# image in the registry, such as "worse-prompt". The copy is removed when this ends.
+# image in the registry, such as "worse-prompt". For a tag, PROMPT_SHA256 is the hash of the prompt
+# file the host scores against, and the image must carry it as its label, so an image built from an
+# older prompt is refused. A copy left by an earlier run is removed first, and this one when it ends.
 #
 # Output, one record per line: "candidate IMAGE" first, if there is one, then
 # "page ID STATUS SECONDS BASE64-PAGE" for each question, with status
@@ -40,18 +42,25 @@ trap cleanup EXIT
 kubectl -n forgejo port-forward svc/forgejo 13000:3000 >/dev/null 2>&1 &
 forwards="$!"
 if [[ -n ${CANDIDATE:-} ]]; then
-  image=""
+  image="" want="$(kubectl -n gateway get deployment gateway -o jsonpath='{.spec.template.spec.containers[0].image}')"
   if [[ $CANDIDATE != deployed ]]; then
     [[ $CANDIDATE =~ ^[a-z0-9-]+$ ]] || { echo "FAIL CANDIDATE is not a tag: $CANDIDATE"; exit 1; }
     digest="$(registry_digest gateway-candidate "$CANDIDATE")"
     [[ $digest == sha256:* ]] || { echo "FAIL no gateway-candidate:$CANDIDATE in the registry"; exit 1; }
-    image="10.43.0.50:5000/gateway-candidate@$digest"
+    built="$(registry_label gateway-candidate "$CANDIDATE" airgapai.prompt-sha256)"
+    [[ -n ${PROMPT_SHA256:-} && $built == "$PROMPT_SHA256" ]] ||
+      { echo "FAIL gateway-candidate:$CANDIDATE was built from another prompt than the host's, ${built:-none}: rebuild"; exit 1; }
+    image="10.43.0.50:5000/gateway-candidate@$digest" want="$image"
   fi
-  gateway_copy gateway-candidate candidate "$image" GATEWAY_URL=http://127.0.0.1:18093
+  delete_gateway_copy gateway-candidate candidate
+  gateway_copy gateway-candidate candidate "$image" GATEWAY_URL=http://127.0.0.1:18093 || { echo "FAIL the candidate could not be made"; exit 1; }
   kubectl -n gateway rollout status deployment/gateway-candidate --timeout=120s >/dev/null || { echo "FAIL the candidate did not start"; exit 1; }
-  echo "candidate $(kubectl -n gateway get deployment gateway-candidate -o jsonpath='{.spec.template.spec.containers[0].image}')"
-  kubectl -n gateway port-forward deployment/gateway-candidate 18093:8080 >/dev/null 2>&1 &
-  forwards="$forwards $!" at=@candidate port=18093
+  running="$(kubectl -n gateway get deployment gateway-candidate -o jsonpath='{.spec.template.spec.containers[0].image}')"
+  [[ $running == "$want" ]] || { echo "FAIL the candidate runs $running, not $want"; exit 1; }
+  echo "candidate $running"
+  forward_gateway_copy gateway-candidate 18093
+  # shellcheck disable=SC2154 # copy_forward is set by test/lib/gateway-copy.sh, sent ahead
+  forwards="$forwards $copy_forward" at=@candidate port=18093
 else
   kubectl -n gateway port-forward svc/gateway 18092:8080 >/dev/null 2>&1 &
   forwards="$forwards $!"

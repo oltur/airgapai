@@ -7,8 +7,10 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import lab  # noqa: E402
 from generation import (  # noqa: E402
     CANDIDATES,
+    candidate_env,
     candidates,
     compare,
     hard_failures,
@@ -17,6 +19,7 @@ from generation import (  # noqa: E402
     score,
     stable,
     tolerance,
+    wrong_candidate,
 )
 
 PREFIX = "content/en/docs/concepts/"
@@ -219,7 +222,7 @@ class Candidates(unittest.TestCase):
         self.assertIn("When the user asks for a ticket, call create_ticket.", own)
 
     def test_the_swap_replaces_only_the_prompt(self):
-        gateway = CANDIDATES.parent.parent.parent / "images/gateway/chat.go"
+        gateway = lab.ROOT / "images/gateway/chat.go"
         with tempfile.TemporaryDirectory() as tmp:
             chat = pathlib.Path(tmp) / "chat.go"
             shutil.copy(gateway, chat)
@@ -239,6 +242,23 @@ class Candidates(unittest.TestCase):
             done = subprocess.run([sys.executable, "-I", CANDIDATES / "swap-prompt.py", chat,
                                    CANDIDATES / "worse-prompt.prompt"], capture_output=True)
             self.assertNotEqual(done.returncode, 0)
+
+    def test_a_prompt_candidate_sends_its_prompts_hash(self):
+        self.assertEqual(candidate_env(None), {})
+        self.assertEqual(candidate_env("deployed"), {"CANDIDATE": "deployed"})
+        env = candidate_env("worse-prompt")
+        self.assertEqual(env["CANDIDATE"], "worse-prompt")
+        self.assertRegex(env["PROMPT_SHA256"], r"^[0-9a-f]{64}$")
+
+    def test_the_image_run_must_be_the_candidate_asked_for(self):
+        gateway = "10.43.0.50:5000/airgapai/gateway@sha256:" + "a" * 64
+        other = "10.43.0.50:5000/gateway-candidate@sha256:" + "b" * 64
+        deployed = {"images": {"gateway": [{"image": gateway}]}}
+        self.assertIsNone(wrong_candidate("deployed", gateway, deployed))
+        self.assertIsNone(wrong_candidate("worse-prompt", other, deployed))
+        self.assertIn("ran", wrong_candidate("deployed", other, deployed))
+        self.assertIn("ran", wrong_candidate("worse-prompt", gateway, deployed))
+        self.assertIn("not reported", wrong_candidate("deployed", None, deployed))
 
 
 if __name__ == "__main__":

@@ -47,3 +47,27 @@ registry_digest() {
   curl -sI -H 'Accept: application/vnd.oci.image.manifest.v1+json' "http://10.43.0.50:5000/v2/$1/manifests/$2" \
     | awk 'tolower($1) == "docker-content-digest:" {print $2}' | tr -d '\r'
 }
+
+# Forwards PORT to a copy and waits until it is ready. Sets copy_forward to the forward's PID.
+# Usage: forward_gateway_copy NAME PORT
+# shellcheck disable=SC2034 # read by the scripts sent after this one
+copy_forward=""
+
+forward_gateway_copy() {
+  kubectl -n gateway port-forward "deployment/$1" "$2:8080" >/dev/null 2>&1 &
+  # shellcheck disable=SC2034 # as above
+  copy_forward=$!
+  for _ in $(seq 30); do curl -fs "http://127.0.0.1:$2/ready" >/dev/null && return 0; sleep 1; done
+  return 1
+}
+
+# A label of a test image in the in-cluster registry, or nothing.
+# Usage: registry_label REPOSITORY TAG LABEL
+registry_label() {
+  local config
+  config="$(curl -s -H 'Accept: application/vnd.oci.image.manifest.v1+json' "http://10.43.0.50:5000/v2/$1/manifests/$2" \
+    | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["config"]["digest"])' 2>/dev/null)"
+  [[ $config == sha256:* ]] || return 0
+  curl -s "http://10.43.0.50:5000/v2/$1/blobs/$config" \
+    | python3 -I -c 'import json, sys; print((json.load(sys.stdin)["config"].get("Labels") or {}).get(sys.argv[1], ""))' "$3" 2>/dev/null
+}

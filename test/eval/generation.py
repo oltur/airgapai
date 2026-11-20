@@ -30,6 +30,7 @@ difference, and the gate then passes or fails it by its answers.
 import argparse
 import base64
 import datetime
+import hashlib
 import html
 import json
 import pathlib
@@ -44,6 +45,7 @@ BASELINE = lab.ROOT / "test/eval/baseline/generation.json"
 SCRIPTS = ["test/lib/probe.sh", "test/lib/forgejo.sh", "test/lib/browser.sh",
            "test/lib/gateway-copy.sh", "test/eval/generation.sh"]
 CANDIDATES = lab.ROOT / "test/eval/candidates"
+CANDIDATE_NAME = re.compile(r"[a-z0-9-]+")  # a registry tag, as generation.sh accepts
 ANSWER_CHARS = 1000  # of each answer kept in the results, for a reader
 # Markup from images/gateway/pages.go that only the template writes: the model's text is escaped, so
 # it cannot produce these, though it can write the same words.
@@ -68,7 +70,31 @@ def prompt_sentences(candidate=None):
 
 def candidates():
     """The candidates that can be asked for: the control and each change in test/eval/candidates."""
-    return ["deployed"] + sorted(p.stem for p in CANDIDATES.glob("*.prompt"))
+    return ["deployed"] + sorted(p.stem for p in CANDIDATES.glob("*.prompt")
+                                 if CANDIDATE_NAME.fullmatch(p.stem))
+
+
+def candidate_env(candidate):
+    """What generation.sh needs to run a candidate: its name, and for a prompt, the prompt's hash,
+    which the image must carry, so that the image tested is the prompt scored."""
+    if not candidate:
+        return {}
+    env = {"CANDIDATE": candidate}
+    if candidate != "deployed":
+        prompt = (CANDIDATES / f"{candidate}.prompt").read_bytes()
+        env["PROMPT_SHA256"] = hashlib.sha256(prompt).hexdigest()
+    return env
+
+
+def wrong_candidate(candidate, reported, deployed):
+    """Why the image the VM ran is not the candidate asked for, or None."""
+    if reported is None:
+        return "the candidate's image was not reported"
+    want = (deployed["images"]["gateway"][0]["image"] if candidate == "deployed"
+            else "10.43.0.50:5000/gateway-candidate@sha256:")
+    if reported == want or (candidate != "deployed" and reported.startswith(want)):
+        return None
+    return f"the candidate {candidate} ran {reported}, not {want}"
 
 
 def text(fragment):
@@ -141,7 +167,7 @@ def evaluate(golden, ids=None, candidate=None):
         [{k: q[k] for k in ("id", "role", "question")} for q in questions]).encode()).decode()
     prompt = prompt_sentences(candidate)
     run = {"results": {}}
-    env = {"QUESTIONS": payload} | ({"CANDIDATE": candidate} if candidate else {})
+    env = {"QUESTIONS": payload} | candidate_env(candidate)
     for line in lab.in_vm(SCRIPTS, env):
         kind, _, rest = line.partition(" ")
         if kind == "page":
@@ -288,8 +314,9 @@ def main():
             run["partial"] = True
         if args.candidate:
             print(f"candidate: {args.candidate}, {run.get('candidate')}")
-            if "candidate" not in run:
-                print("FAIL the candidate's image was not reported")
+            wrong = wrong_candidate(args.candidate, run.get("candidate"), deployed)
+            if wrong:
+                print(f"FAIL {wrong}")
                 failed = True
         for name, value in summarise(run["results"], golden).items():
             print(f"{name}: {value}")

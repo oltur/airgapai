@@ -59,9 +59,10 @@ YAML
   gateway_copy gateway-stub stub-test "" CHAT_URL=http://model-stub.inference.svc:8080 GATEWAY_URL=http://127.0.0.1:18093
   kubectl -n inference rollout status deployment/model-stub --timeout=120s >/dev/null &&
     kubectl -n gateway rollout status deployment/gateway-stub --timeout=120s >/dev/null || { echo "FAIL the stub did not start"; return 1; }
-  kubectl -n gateway port-forward deployment/gateway-stub 18093:8080 >/dev/null 2>&1 &
-  stub_forward=$!
-  for _ in $(seq 30); do curl -fs http://127.0.0.1:18093/ready >/dev/null && return 0; sleep 1; done
+  # shellcheck disable=SC2154 # copy_forward is set by test/lib/gateway-copy.sh, sent ahead
+  forward_gateway_copy gateway-stub 18093 && { stub_forward=$copy_forward; return 0; }
+  # shellcheck disable=SC2154 # as above
+  stub_forward=$copy_forward
   echo "FAIL the stub's gateway is not ready"; return 1
 }
 
