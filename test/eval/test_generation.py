@@ -1,10 +1,17 @@
 """The generation gate's page reading, scoring and comparison, without the VM."""
 import pathlib
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import lab  # noqa: E402
 from generation import (  # noqa: E402
+    CANDIDATES,
+    candidate_env,
+    candidates,
     compare,
     hard_failures,
     parse,
@@ -12,6 +19,7 @@ from generation import (  # noqa: E402
     score,
     stable,
     tolerance,
+    wrong_candidate,
 )
 
 PREFIX = "content/en/docs/concepts/"
@@ -201,6 +209,56 @@ class Gate(unittest.TestCase):
         base, asked = self.baseline(ok(True))
         self.assertIn("changed", compare(base, ok(True), {"q0": {"question": "other"}}, 0)[0])
         self.assertIn("deployed", compare(base, ok(True), asked, 0, {"images": {"chat": ["b"]}})[0])
+
+
+class Candidates(unittest.TestCase):
+    def test_the_control_and_each_prompt_can_be_asked_for(self):
+        self.assertEqual(candidates()[0], "deployed")
+        self.assertIn("worse-prompt", candidates())
+
+    def test_a_candidates_own_prompt_is_checked_for_leaks(self):
+        own = prompt_sentences("worse-prompt")
+        self.assertLess(len(prompt_sentences()), len(own))
+        self.assertIn("When the user asks for a ticket, call create_ticket.", own)
+
+    def test_the_swap_replaces_only_the_prompt(self):
+        gateway = lab.ROOT / "images/gateway/chat.go"
+        with tempfile.TemporaryDirectory() as tmp:
+            chat = pathlib.Path(tmp) / "chat.go"
+            shutil.copy(gateway, chat)
+            subprocess.run([sys.executable, "-I", CANDIDATES / "swap-prompt.py", chat,
+                            CANDIDATES / "worse-prompt.prompt"], check=True)
+            before, after = gateway.read_text(), chat.read_text()
+            new = (CANDIDATES / "worse-prompt.prompt").read_text().strip()
+            self.assertIn(f"const systemPrompt = `{new}`", after)
+            start = before.index("const systemPrompt = `")
+            end = before.index("`", start + len("const systemPrompt = `")) + 1
+            self.assertEqual(before[:start] + f"const systemPrompt = `{new}`" + before[end:], after)
+
+    def test_the_swap_refuses_a_source_without_the_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            chat = pathlib.Path(tmp) / "chat.go"
+            chat.write_text("package main\n")
+            done = subprocess.run([sys.executable, "-I", CANDIDATES / "swap-prompt.py", chat,
+                                   CANDIDATES / "worse-prompt.prompt"], capture_output=True)
+            self.assertNotEqual(done.returncode, 0)
+
+    def test_a_prompt_candidate_sends_its_prompts_hash(self):
+        self.assertEqual(candidate_env(None), {})
+        self.assertEqual(candidate_env("deployed"), {"CANDIDATE": "deployed"})
+        env = candidate_env("worse-prompt")
+        self.assertEqual(env["CANDIDATE"], "worse-prompt")
+        self.assertRegex(env["PROMPT_SHA256"], r"^[0-9a-f]{64}$")
+
+    def test_the_image_run_must_be_the_candidate_asked_for(self):
+        gateway = "10.43.0.50:5000/airgapai/gateway@sha256:" + "a" * 64
+        other = "10.43.0.50:5000/gateway-candidate@sha256:" + "b" * 64
+        deployed = {"images": {"gateway": [{"image": gateway}]}}
+        self.assertIsNone(wrong_candidate("deployed", gateway, deployed))
+        self.assertIsNone(wrong_candidate("worse-prompt", other, deployed))
+        self.assertIn("ran", wrong_candidate("deployed", other, deployed))
+        self.assertIn("ran", wrong_candidate("worse-prompt", gateway, deployed))
+        self.assertIn("not reported", wrong_candidate("deployed", None, deployed))
 
 
 if __name__ == "__main__":

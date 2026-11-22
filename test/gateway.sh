@@ -5,7 +5,7 @@
 # session's CSRF token or from another origin are refused, a second confirmation is refused, and a team
 # change after sign-in is caught at execution. Every decision is in an unbroken audit chain, and the
 # gateway's network paths reach PostgreSQL, Forgejo and the executor only, with controls.
-# test/lib/probe.sh, forgejo.sh, browser.sh and stub.sh are sent ahead of it.
+# test/lib/probe.sh, forgejo.sh, browser.sh, gateway-copy.sh and stub.sh are sent ahead of it.
 #
 # The browser reaches the gateway and Forgejo through kubectl port-forward, on the addresses the
 # gateway's OAuth client is registered with. Proposals for the page's checks are made through the chat
