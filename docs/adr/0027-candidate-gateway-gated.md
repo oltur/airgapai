@@ -85,9 +85,11 @@ the shared copy, with the images pinned in `infra/versions.env`, Ministral 3 3B 
   did not search at all. Turns took 1962 s, 42 s per turn on average.
 - **After the review,** the image label and the stale-copy checks were added. A one-question run of
   the control passed them, and the worse-prompt image, built before the label existed, was refused
-  with "built from another prompt than the host's", until a rebuild. The two full runs above were
-  made before these checks.
-- **No hard failures in either run:** every turn completed, no technician turn found a restricted
+  with "built from another prompt than the host's". After another `make rebuild`, which passed, the
+  labelled worse-prompt image ran in full and failed the gate the same way: the same 30 questions
+  lost, every reply withheld, and the same searches for all 47 questions as its first run, in
+  1994 s.
+- **No hard failures in any of these runs:** every turn completed, no technician turn found a restricted
   passage, no issue was filed, no proposal was confirmed, and the audit chain was unbroken.
 - **The citation check is what kept this prompt's replies from users.** Without the rule to cite,
   the model replied without citations, and ADR 0022's rule that an uncited answer is not shown held
