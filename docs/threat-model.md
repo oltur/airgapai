@@ -1,6 +1,9 @@
 # Threat model
 
-This document covers the stack as built at the end of Phase 3. It lists what an attacker could want,
+This document covers the stack as built with Phase 4's eval gates (ADRs 0025 to 0028). Phase 4
+changed one thing in what `deploy/` runs, the chat server's prompt cache (ADR 0026). It added the
+gates, which run from the host, and signed candidate gateways in the registry, which run beside the
+deployment during an eval. It lists what an attacker could want,
 who could try it, and for each threat the control that stands in the way, the test that shows the
 control works, and what is left over. Where a row says "residual", nothing in this repository stops
 that threat, and the row says so.
@@ -71,8 +74,10 @@ this model asks what an insider could do, because its copy off the VM exists for
 ```
 
 Every arrow inside the VM is plain HTTP or PostgreSQL without TLS, and limited by the cluster's default
-deny network rules. Only the gateway may call retrieval and the executor. Nothing in the cluster may
-call the gateway: the browser reaches it through `kubectl port-forward`.
+deny network rules. Only the gateway may call retrieval and the executor. The test copies of the
+gateway, the compromised-model stub's and the eval's candidates, carry its network label and so
+the same paths, while a test runs them. Nothing in the cluster may call the gateway: the browser
+reaches it through `kubectl port-forward`.
 
 The boundaries that matter:
 
@@ -103,8 +108,9 @@ The boundaries that matter:
 | A planted document steers the model | The model's output is never trusted: see [LLM01](#llm-specific-risks) | `make test-poisoned`, ADR 0020 | The model was steered. See LLM01 |
 | A source's text changes after it was cited | Each source is stored with the chunk's content hash. The confirmation page shows text only if the hash still matches | `make test-db`, ADR 0018 | None found in the tested cases |
 | The audit log is rewritten | The gateway's login can only append. Each row hashes the previous one. A copy kept off the VM checks every copied row on each run | `make test-db`, `make test-audit-copy`, ADRs 0015 and 0024 | Rows written since the last copy can be rewritten without detection. Root on the host can change the copy |
-| An image is swapped | Kyverno admits only images signed with the lab key, by digest, from a read-only registry. The guard webhook fails closed if Kyverno is down | `make test-signed-images`, `make test-egress`, ADR 0006 | The signature attests only that the digest was mirrored here, not who built it upstream. Exempt namespaces such as `kube-system` are not checked |
+| An image is swapped | Kyverno admits only images signed with the lab key, by digest, from a read-only registry. The guard webhook fails closed if Kyverno is down | `make test-signed-images`, `make test-egress`, ADR 0006 | The signature attests only that the digest was mirrored here, not who built it upstream. Exempt namespaces such as `kube-system` are not checked. The test images are signed with the same key and admitted like the deployed ones: the compromised-model stub and the candidate gateways, one with a prompt that drops the safety rules (ADRs 0019 and 0027). `deploy/` names none of them, but anyone who can push to Git or create a Deployment can run them |
 | The deployed configuration is changed | Argo CD deploys only what Git names, and reverts manual changes | `make test-gitops`, ADR 0007 | Residual. Anyone who can push to the in-cluster repository controls the cluster. Commits are not signature-checked |
+| A change to the prompt, the model or the chunks makes answers worse, or leaks | Each eval gate compares a run with a saved baseline, question by question, on the golden set's 47 questions: the retrieval gate scores hits on the 33 with an expected page, and leaks on all. `make rebuild` runs the retrieval gate every time, and the generation gate with `EVALS=generation`. A candidate prompt is gated as a copy beside the deployed gateway | `make eval-retrieval`, `make test-eval-gate`, ADRs 0025 to 0028 | Only a prompt can be gated before it is deployed. A model or chunking change is gated only after a rebuild has deployed it, and no such change has been run. The generation gate is opt-in, and nothing makes a prompt or model change run it. It has been shown failing one far worse prompt, not a subtle one. That prompt passed the refusal and leak checks only because every reply was withheld |
 | The executor's token edits or closes existing issues | The token is scoped to issues and to reading the organisation. The executor's code only creates issues | ADR 0016 | Residual. The token's scope allows editing and closing any issue in `maintenance` |
 
 ### Repudiation
@@ -156,15 +162,15 @@ Mapped to the [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/l
 
 | Risk | How it applies here | Control | Evidence | Residual |
 |---|---|---|---|---|
-| LLM01 Prompt injection | A planted passage, or a user's question, instructs the model | Nothing tries to stop the injection. The gateway limits what an injected model can cause: searches with the session's role, proposals only, and a page that shows the source to the person who decides | `make test-poisoned`, `make test-adversarial`, ADRs 0019 and 0020 | **The model was steered.** In every run, the liveness passage made it propose a ticket nobody asked for. Since ADR 0022's prompt change, that was the destructive ticket the passage named. Each stayed a proposal |
+| LLM01 Prompt injection | A planted passage, or a user's question, instructs the model | Nothing tries to stop the injection. The gateway limits what an injected model can cause: searches with the session's role, proposals only, and a page that shows the source to the person who decides | `make test-poisoned`, `make test-adversarial`, ADRs 0019 and 0020 | **The model was steered.** In every run, the liveness passage made it propose a ticket nobody asked for. Since ADR 0022's prompt change, that was the destructive ticket the passage named. In the generation eval, the golden set's i03, which claims a proposal was already confirmed, got a ticket proposed in every run (ADR 0026). Each stayed a proposal |
 | LLM02 Sensitive information disclosure | Restricted text or personal data in answers, tickets or logs | Row-level security, restricted routing, redaction | See [Information disclosure](#information-disclosure) | An engineer's turn gives the model restricted passages, and its answer can repeat them to that engineer, as intended |
 | LLM03 Supply chain | A tampered image, model file or corpus | Pinned digests, reproducible Go images, signed admission, model hashes from each Hugging Face record, a pinned corpus commit | `make test-signed-images`, ADRs 0006, 0010, 0011 and 0013 | Provenance is limited: hashes from the publisher's record are not signatures, and the llama.cpp file was hashed as first downloaded |
 | LLM04 Data and model poisoning | A document added to the corpus with instructions | The corpus comes from Git through the ingestion Job, labelled by path | `make test-poisoned`, ADR 0020 | A document that reaches the corpus is read by the model. See LLM01 |
 | LLM05 Improper output handling | The model's text is rendered as HTML, or read as a form or link | Escaped by `html/template`; a Content Security Policy with no scripts and forms only to the gateway; marked as the model's | `make test-adversarial` (`lie`), ADRs 0017 and 0019 | A convincing text can still persuade a reader |
 | LLM06 Excessive agency | The model acts beyond what the user asked | Two tools only, one read-only and one that proposes; per-turn limits; the user confirms each ticket | `make test-adversarial`, ADR 0019 | The user's confirmation is the last control. See [residual risks](#residual-risks) |
 | LLM07 System prompt leakage | The prompt reveals secrets or controls | The prompt is public and holds no secret. No control depends on the model obeying it: the rules that matter, such as roles, proposals only and citations, are enforced by the gateway | ADRs 0018 and 0022 | None |
-| LLM08 Vector and embedding weaknesses | A role's search returns another role's chunks, or too few | Row-level security applies to the vector search; iterative HNSW scans; recall per role measured against an exact scan | `make test-retrieval`, `make measure-retrieval`, ADR 0014 | Recall was measured for k of 5 and more. The chat uses k=3 |
-| LLM09 Misinformation | A wrong answer, or one with made-up sources | An answer is shown only if it cites passages that the turn found | `make test-db`, `make test-adversarial` (`uncited`, `fakecite`), ADR 0022 | **Citations are checked for form and range, not truth.** Phase 4's evals measure whether answers are right |
+| LLM08 Vector and embedding weaknesses | A role's search returns another role's chunks, or too few | Row-level security applies to the vector search; iterative HNSW scans; recall per role measured against an exact scan | `make test-retrieval`, `make measure-retrieval`, `make eval-retrieval`, ADRs 0014 and 0025 | Recall against an exact scan was measured for k of 5 and more. At the chat's k=3, the golden set's 33 questions with an expected page found one, but they follow the pages' own headings, so they are easy |
+| LLM09 Misinformation | A wrong answer, or one with made-up sources | An answer is shown only if it cites passages that the turn found. The generation gate checks that each answer question cites an expected page | `make test-db`, `make test-adversarial` (`uncited`, `fakecite`), `make test-eval-gate`, ADRs 0022, 0026 and 0027 | **Citations are checked for form and range, not truth,** by the gateway and by the gate. Citing the expected page does not show the answer is right. Four of the five leak questions were answered from the model's general knowledge, citing unrelated public pages (ADR 0026) |
 | LLM10 Unbounded consumption | The model or a user exhausts the CPU | Per-turn limits; one turn at a time; size limits | See [Denial of service](#denial-of-service) | One user can hold the model |
 
 ## Failure modes
@@ -187,6 +193,7 @@ The rule is to fail closed: when a part the decision depends on is missing, noth
 | The gateway restarts | Every session ends, and sign-ins in progress fail | ADR 0017 |
 | A citation check fails | The model's reply is withheld, and the gateway says why | `make test-db`, `make test-adversarial`, ADR 0022 |
 | An executor reply names no repository | It is not taken for success | `make test-db`, ADR 0021 |
+| An eval gate, in `make rebuild` | The rebuild fails. The gates run after every test and the audit copy, and the generation gate's turns are copied whether it passes or not, so no security test is skipped and no audit row is left uncopied. The retrieval gate exits 1 for worse results or a leak; the generation gate exits 1 for worse answers only, and 2 for a leak, which is one of its hard failures. Both exit 2 for anything else | Exit codes: unit tests in `make lint`. The order: the Makefile, ADR 0028. Neither rebuild has yet been run as a whole |
 
 ## Residual risks
 
@@ -209,22 +216,28 @@ These are the risks left after the controls above, roughly from most to least im
    tickets.
 7. **Shown answers can be wrong.** They cite passages the turn found, but nothing checks that those
    passages support them. In the generation eval, four of five leak questions got answers from the
-   model's general knowledge, citing unrelated public pages (ADR 0026).
+   model's general knowledge, citing unrelated public pages (ADR 0026). The generation gate checks
+   that answers cite an expected page, not that they are right.
 8. **Provenance of upstream images and models** rests on digests and published hashes, not publishers'
    signatures.
 9. **A role removed in Forgejo still reads for up to an hour,** through searches and the confirmation
    page, until the session ends. Execution asks Forgejo again.
-10. **One user can hold the model,** since there are no per-user rate limits.
-11. **Cookies on `127.0.0.1` are shared with other local services,** which follows from the lab's
+10. **A prompt or model change can reach main without the generation gate,** which runs only on
+    request (ADR 0028). The gate has been shown to fail one far worse prompt, and how small a change it
+    can see is not measured (ADR 0027).
+11. **Signed test images, including a gateway without its safety prompt,** sit in the registry and
+    pass admission. Running one takes the access that already controls the cluster.
+12. **One user can hold the model,** since there are no per-user rate limits.
+13. **Cookies on `127.0.0.1` are shared with other local services,** which follows from the lab's
     port-forward access.
 
 ## What this does not prove
 
 - **That the list of threats is complete.** It covers the threats found by walking STRIDE over each
   boundary, and the OWASP list over the model's paths. Others may exist.
-- **That the tests cover every input.** The compromised-model scenarios, the four planted passages and
-  the redaction values are the ones written. The controls they hit are general, but the tests show only
-  those cases.
+- **That the tests cover every input.** The compromised-model scenarios, the four planted
+  passages, the redaction values and the golden set's 47 questions are the ones written. The
+  controls they hit are general, but the tests show only those cases.
 - **That the stack is secure for a real deployment.** It is a single-node lab with one administrator,
   test users and public documents. The residual risks above are the minimum a deployment would have to
   close.

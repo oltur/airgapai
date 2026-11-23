@@ -25,7 +25,8 @@ run of the deployed gateway in ADR 0026, and 3270 s for the candidate pair below
   that a gate failure never skips a security test or loses the run's audit rows. It takes about 5 s.
   ADR 0025's baseline passed after the rebuild in ADR 0026 and after the one measured below, so a
   rebuilt index has not yet made it fail with nothing changed, in two rebuilds.
-- **`make rebuild EVALS=generation` adds `make test-eval-gate`,** then copies the audit log again.
+- **`make rebuild EVALS=generation` adds `make test-eval-gate`,** then copies the audit log again,
+  whether the gate passed or not, and only then fails if it did.
   It is opt-in, for a change to the model, the prompt or the gateway, as the plan asks, since it
   more than triples a rebuild. Its control is the deployed image, through a copy, against the
   baseline, so it gates the unchanged gateway as well, and `make eval-generation` is not run
