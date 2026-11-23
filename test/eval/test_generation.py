@@ -13,7 +13,9 @@ from generation import (  # noqa: E402
     candidate_env,
     candidates,
     compare,
+    exit_status,
     hard_failures,
+    losses,
     parse,
     prompt_sentences,
     score,
@@ -259,6 +261,30 @@ class Candidates(unittest.TestCase):
         self.assertIn("ran", wrong_candidate("deployed", other, deployed))
         self.assertIn("ran", wrong_candidate("worse-prompt", gateway, deployed))
         self.assertIn("not reported", wrong_candidate("deployed", None, deployed))
+
+
+class ExitStatus(unittest.TestCase):
+    LOST = ["2 questions that passed in every baseline run failed, tolerance 0: p01, p02"]
+
+    def test_a_pass_is_0(self):
+        self.assertEqual(exit_status(False, [], []), 0)
+
+    def test_failing_by_answers_alone_is_1(self):
+        self.assertEqual(exit_status(False, self.LOST, self.LOST), 1)
+
+    def test_a_hard_failure_is_2_even_with_losses(self):
+        self.assertEqual(exit_status(True, self.LOST, self.LOST), 2)
+        self.assertEqual(exit_status(True, [], []), 2)
+
+    def test_another_deployment_is_2_even_with_losses(self):
+        lines = ["the deployed images differ"] + self.LOST
+        self.assertEqual(exit_status(False, lines, self.LOST), 2)
+
+    def test_losses_within_tolerance_are_none(self):
+        base = {"runs": [{"p01": {"ok": True}, "p02": {"ok": True}}]}
+        now = {"p01": {"ok": False}, "p02": {"ok": True}}
+        self.assertEqual(losses(base, now, 1), [])
+        self.assertIn("p01", losses(base, now, 0)[0])
 
 
 if __name__ == "__main__":
