@@ -146,6 +146,6 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, run every test and th
 	$(MAKE) --no-print-directory test-egress && \
 	$(MAKE) --no-print-directory audit-copy && \
 	$(MAKE) --no-print-directory eval-retrieval && \
-	{ [ "$(EVALS)" != generation ] || { $(MAKE) --no-print-directory test-eval-gate && \
-	  $(MAKE) --no-print-directory audit-copy; }; } && \
+	{ [ "$(EVALS)" != generation ] || { $(MAKE) --no-print-directory test-eval-gate; gate=$$?; \
+	  $(MAKE) --no-print-directory audit-copy && [ $$gate -eq 0 ]; }; } && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"

@@ -1,8 +1,9 @@
 # Threat model
 
 This document covers the stack as built with Phase 4's eval gates (ADRs 0025 to 0028). Phase 4
-changed one thing in the deployment, the chat server's prompt cache (ADR 0026). It added the gates,
-which run from the host, and test images that run beside the deployment. It lists what an attacker could want,
+changed one thing in what `deploy/` runs, the chat server's prompt cache (ADR 0026). It added the
+gates, which run from the host, and signed candidate gateways in the registry, which run beside the
+deployment during an eval. It lists what an attacker could want,
 who could try it, and for each threat the control that stands in the way, the test that shows the
 control works, and what is left over. Where a row says "residual", nothing in this repository stops
 that threat, and the row says so.
@@ -73,8 +74,10 @@ this model asks what an insider could do, because its copy off the VM exists for
 ```
 
 Every arrow inside the VM is plain HTTP or PostgreSQL without TLS, and limited by the cluster's default
-deny network rules. Only the gateway may call retrieval and the executor. Nothing in the cluster may
-call the gateway: the browser reaches it through `kubectl port-forward`.
+deny network rules. Only the gateway may call retrieval and the executor. The test copies of the
+gateway, the compromised-model stub's and the eval's candidates, carry its network label and so
+the same paths, while a test runs them. Nothing in the cluster may call the gateway: the browser
+reaches it through `kubectl port-forward`.
 
 The boundaries that matter:
 
@@ -107,7 +110,7 @@ The boundaries that matter:
 | The audit log is rewritten | The gateway's login can only append. Each row hashes the previous one. A copy kept off the VM checks every copied row on each run | `make test-db`, `make test-audit-copy`, ADRs 0015 and 0024 | Rows written since the last copy can be rewritten without detection. Root on the host can change the copy |
 | An image is swapped | Kyverno admits only images signed with the lab key, by digest, from a read-only registry. The guard webhook fails closed if Kyverno is down | `make test-signed-images`, `make test-egress`, ADR 0006 | The signature attests only that the digest was mirrored here, not who built it upstream. Exempt namespaces such as `kube-system` are not checked. The test images are signed with the same key and admitted like the deployed ones: the compromised-model stub and the candidate gateways, one with a prompt that drops the safety rules (ADRs 0019 and 0027). `deploy/` names none of them, but anyone who can push to Git or create a Deployment can run them |
 | The deployed configuration is changed | Argo CD deploys only what Git names, and reverts manual changes | `make test-gitops`, ADR 0007 | Residual. Anyone who can push to the in-cluster repository controls the cluster. Commits are not signature-checked |
-| A change to the prompt, the model or the chunks makes answers worse, or leaks | Each eval gate compares a run with a saved baseline, question by question, on 47 written questions. `make rebuild` runs the retrieval gate every time, and the generation gate with `EVALS=generation`. A candidate prompt is gated as a copy beside the deployed gateway | `make eval-retrieval`, `make test-eval-gate`, ADRs 0025 to 0028 | The generation gate is opt-in, and nothing makes a prompt or model change run it. It has been shown failing one far worse prompt, not a subtle one. That prompt passed the refusal and leak checks only because every reply was withheld |
+| A change to the prompt, the model or the chunks makes answers worse, or leaks | Each eval gate compares a run with a saved baseline, question by question, on the golden set's 47 questions: the retrieval gate scores hits on the 33 with an expected page, and leaks on all. `make rebuild` runs the retrieval gate every time, and the generation gate with `EVALS=generation`. A candidate prompt is gated as a copy beside the deployed gateway | `make eval-retrieval`, `make test-eval-gate`, ADRs 0025 to 0028 | Only a prompt can be gated before it is deployed. A model or chunking change is gated only after a rebuild has deployed it, and no such change has been run. The generation gate is opt-in, and nothing makes a prompt or model change run it. It has been shown failing one far worse prompt, not a subtle one. That prompt passed the refusal and leak checks only because every reply was withheld |
 | The executor's token edits or closes existing issues | The token is scoped to issues and to reading the organisation. The executor's code only creates issues | ADR 0016 | Residual. The token's scope allows editing and closing any issue in `maintenance` |
 
 ### Repudiation
@@ -190,7 +193,7 @@ The rule is to fail closed: when a part the decision depends on is missing, noth
 | The gateway restarts | Every session ends, and sign-ins in progress fail | ADR 0017 |
 | A citation check fails | The model's reply is withheld, and the gateway says why | `make test-db`, `make test-adversarial`, ADR 0022 |
 | An executor reply names no repository | It is not taken for success | `make test-db`, ADR 0021 |
-| An eval gate, in `make rebuild` | The rebuild fails, after every test and the audit copy have run, so no security test is skipped and no audit row is lost. Exit 1 means worse results or a leak, and 2 anything else | Unit tests in `make lint`, ADR 0028 |
+| An eval gate, in `make rebuild` | The rebuild fails. The gates run after every test and the audit copy, and the generation gate's turns are copied whether it passes or not, so no security test is skipped and no audit row is left uncopied. The retrieval gate exits 1 for worse results or a leak; the generation gate exits 1 for worse answers only, and 2 for a leak, which is one of its hard failures. Both exit 2 for anything else | Exit codes: unit tests in `make lint`. The order: the Makefile, ADR 0028. Neither rebuild has yet been run as a whole |
 
 ## Residual risks
 
@@ -232,9 +235,9 @@ These are the risks left after the controls above, roughly from most to least im
 
 - **That the list of threats is complete.** It covers the threats found by walking STRIDE over each
   boundary, and the OWASP list over the model's paths. Others may exist.
-- **That the tests cover every input.** The compromised-model scenarios, the four planted passages,
-  the redaction values and the golden set's 47 questions are the ones written. The controls they hit are general, but the tests show only
-  those cases.
+- **That the tests cover every input.** The compromised-model scenarios, the four planted
+  passages, the redaction values and the golden set's 47 questions are the ones written. The
+  controls they hit are general, but the tests show only those cases.
 - **That the stack is secure for a real deployment.** It is a single-node lab with one administrator,
   test users and public documents. The residual risks above are the minimum a deployment would have to
   close.
