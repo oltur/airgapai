@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-generation eval-candidate rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-generation eval-candidate test-eval-gate rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -120,7 +120,13 @@ eval-candidate: ## Gate a candidate gateway, CANDIDATE=deployed or a name in tes
 	@[ -n "$(CANDIDATE)" ] || { echo "set CANDIDATE: deployed, or a name in test/eval/candidates"; exit 1; }
 	@test/eval/generation.py --baseline --candidate $(CANDIDATE)
 
-rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
+test-eval-gate: ## Show the generation gate passing an unchanged copy of the gateway and failing the worse prompt by its answers
+	@$(MAKE) --no-print-directory eval-candidate CANDIDATE=deployed
+	@test/eval/generation.py --baseline --candidate worse-prompt; code=$$?; \
+	if [ $$code -eq 1 ]; then echo "ok   the gate failed the worse prompt by its answers, as it should"; \
+	else echo "FAIL the worse prompt should fail the gate by its answers, exit 1, but exited $$code"; exit 1; fi
+
+rebuild: ## Destroy the VM, rebuild the bundle and the VM, run every test and the retrieval gate; EVALS=generation adds test-eval-gate, about 55 min
 	@start=$$(date +%s); \
 	$(MAKE) --no-print-directory vm-down && \
 	$(MAKE) --no-print-directory bundle && \
@@ -139,4 +145,7 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, and run every test
 	$(MAKE) --no-print-directory test-audit-copy && \
 	$(MAKE) --no-print-directory test-egress && \
 	$(MAKE) --no-print-directory audit-copy && \
+	$(MAKE) --no-print-directory eval-retrieval && \
+	{ [ "$(EVALS)" != generation ] || { $(MAKE) --no-print-directory test-eval-gate && \
+	  $(MAKE) --no-print-directory audit-copy; }; } && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"

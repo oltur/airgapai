@@ -26,6 +26,10 @@ rest of the deployment as the deployed gateway is. "deployed", a copy with the d
 the control. A name in test/eval/candidates, such as "worse-prompt", is a gateway built with that
 change. The deployment is still compared with the baseline's, so the candidate's change is the only
 difference, and the gate then passes or fails it by its answers.
+
+Exit status: 0 if the run passed; 1 if it failed only because more stable questions failed than the
+tolerance, that is, by its answers; 2 for anything else, such as a hard failure, a run that did not
+finish, a changed deployment or the wrong candidate.
 """
 import argparse
 import base64
@@ -36,6 +40,7 @@ import json
 import pathlib
 import re
 import sys
+import traceback
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import lab  # noqa: E402
@@ -234,17 +239,37 @@ def tolerance(runs):
                for n, run in enumerate(runs))
 
 
+def losses(baseline, results, allowed):
+    """The line failing this run for its answers, if more stable questions failed than allowed. A
+    question the run did not ask counts as failed; that the run is incomplete is a hard failure."""
+    lost = sorted(i for i in stable(baseline["runs"]) if not results.get(i, {}).get("ok"))
+    if len(lost) > allowed:
+        return [f"{len(lost)} questions that passed in every baseline run failed, "
+                f"tolerance {allowed}: {', '.join(lost)}"]
+    return []
+
+
+def gate(baseline, results, asked_now, allowed, deployed=None):
+    """How this run is worse than the baseline: the lines that make the comparison mean something
+    else, and the lines for its answers, kept apart for the exit status."""
+    other = lab.incomparable(baseline["asked"], asked_now)
+    if other:
+        return other, []
+    return lab.redeployed(baseline.get("deployed"), deployed), losses(baseline, results, allowed)
+
+
 def compare(baseline, results, asked_now, allowed, deployed=None):
     """Every way this run is worse than the baseline, as lines; empty if it passes."""
-    failures = lab.incomparable(baseline["asked"], asked_now)
-    if failures:
-        return failures
-    failures += lab.redeployed(baseline.get("deployed"), deployed)
-    lost = sorted(i for i in stable(baseline["runs"]) if not results[i]["ok"])
-    if len(lost) > allowed:
-        failures.append(f"{len(lost)} questions that passed in every baseline run failed, "
-                        f"tolerance {allowed}: {', '.join(lost)}")
-    return failures
+    other, lost = gate(baseline, results, asked_now, allowed, deployed)
+    return other + lost
+
+
+def exit_status(failed, other, lost):
+    """1 only if the run failed by its answers alone, so that a run that measured nothing, or
+    against something else, is never taken for one that failed by its answers."""
+    if failed or other:
+        return 2
+    return 1 if lost else 0
 
 
 def summarise(results, golden):
@@ -298,7 +323,8 @@ def main():
     baseline = json.loads(args.baseline.read_text()) if args.baseline else None
     if baseline:  # Known before the run, so not worth a run to find out.
         for line in lab.incomparable(baseline["asked"], asked(golden)):
-            sys.exit(f"FAIL {line}")
+            print(f"FAIL {line}")
+            sys.exit(2)
 
     deployed = lab.deployed(lab.GENERATION, args=True)
     runs, failed = [], False
@@ -333,7 +359,8 @@ def main():
 
     if args.save:
         if failed:
-            sys.exit("not saved: a baseline must have no hard failures")
+            print("not saved: a baseline must have no hard failures")
+            sys.exit(2)
         saved = {"when": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                  "deployed": deployed, "asked": asked(golden),
                  "tolerance": tolerance([r["results"] for r in runs]),
@@ -345,17 +372,22 @@ def main():
               f"tolerance {saved['tolerance']}")
     if baseline and runs:
         allowed = baseline["tolerance"] if args.tolerance is None else args.tolerance
-        lines = compare(baseline, runs[0]["results"], asked(golden), allowed, deployed)
-        for line in lines:
+        other, lost = gate(baseline, runs[0]["results"], asked(golden), allowed, deployed)
+        for line in other + lost:
             print(f"FAIL {line}")
-        if lines or failed:
-            sys.exit(1)
+        code = exit_status(failed, other, lost)
+        if code:
+            sys.exit(code)
         who = f"the candidate {args.candidate}: " if args.candidate else ""
         print(f"ok   {who}no more than {allowed} of the questions every baseline run passed "
               "failed, and nothing leaked, was filed or was confirmed")
     if failed:
-        sys.exit(1)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:  # A crash is not a run that failed by its answers.
+        traceback.print_exc()
+        sys.exit(2)

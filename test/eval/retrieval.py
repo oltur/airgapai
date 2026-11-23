@@ -12,6 +12,9 @@ that met k=3 in the baseline no longer does, beyond --tolerance such questions, 
 leaked.
 With --save, the run becomes the new baseline.
 
+Exit status: 0 if the run passed, 1 if its results were worse or something leaked, 2 for anything
+else, such as other questions, a changed deployment or a crash.
+
 The search uses the question, not the query the model would write, so this measures the index and
 the embeddings, not the model's searching.
 """
@@ -20,6 +23,7 @@ import datetime
 import json
 import pathlib
 import sys
+import traceback
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import lab  # noqa: E402
@@ -68,28 +72,36 @@ def summarise(results):
     return summary
 
 
-def compare(baseline, results, tolerance, deployed=None):
-    """Every way this run is worse than the baseline, as lines; empty if it passes. A run of other
-    questions, or against another deployment, is not comparable, and fails as such."""
+def gate(baseline, results, tolerance, deployed=None):
+    """How this run is worse than the baseline: the lines that make the comparison mean something
+    else, and the lines for its results, kept apart for the exit status."""
     def asked(entries):
         return {i: e.get("asked") for i, e in entries.items()}
-    failures = lab.incomparable(asked(baseline["results"]), asked(results))
-    if failures:
-        return failures
-    failures += lab.redeployed(baseline.get("deployed"), deployed)
+    other = lab.incomparable(asked(baseline["results"]), asked(results))
+    if other:
+        return other, []
+    other = lab.redeployed(baseline.get("deployed"), deployed)
+    worse = []
     lost = [i for i, b in baseline["results"].items()
             if b.get(f"hit@{CHAT_K}") and not results[i].get(f"hit@{CHAT_K}")]
     if len(lost) > tolerance:
-        failures.append(f"{len(lost)} questions lost their expected page from the top {CHAT_K}, "
-                        f"tolerance {tolerance}: {', '.join(lost)}")
+        worse.append(f"{len(lost)} questions lost their expected page from the top {CHAT_K}, "
+                     f"tolerance {tolerance}: {', '.join(lost)}")
     leaks = [i for i, r in results.items() if r["technician_restricted"]]
     if leaks:
-        failures.append(f"restricted chunks reached a technician for {', '.join(leaks)}")
+        worse.append(f"restricted chunks reached a technician for {', '.join(leaks)}")
     blind = [i for i, r in results.items() if r.get("engineer_restricted") == 0]
     if blind:
-        failures.append(f"leak questions found no restricted text even for an engineer, so their "
-                        f"check shows nothing: {', '.join(blind)}")
-    return failures
+        worse.append(f"leak questions found no restricted text even for an engineer, so their "
+                     f"check shows nothing: {', '.join(blind)}")
+    return other, worse
+
+
+def compare(baseline, results, tolerance, deployed=None):
+    """Every way this run is worse than the baseline, as lines; empty if it passes. A run of other
+    questions, or against another deployment, is not comparable, and fails as such."""
+    other, worse = gate(baseline, results, tolerance, deployed)
+    return other + worse
 
 
 def main():
@@ -117,15 +129,21 @@ def main():
         args.save.write_text(json.dumps(run, indent=2) + "\n")
         print(f"saved {args.save}")
     if args.baseline:
-        failures = compare(json.loads(args.baseline.read_text()), results, args.tolerance,
-                           run["deployed"])
-        for line in failures:
+        other, worse = gate(json.loads(args.baseline.read_text()), results, args.tolerance,
+                            run["deployed"])
+        for line in other + worse:
             print(f"FAIL {line}")
-        if failures:
+        if other:
+            sys.exit(2)
+        if worse:
             sys.exit(1)
         print(f"ok   no question lost its hit@{CHAT_K} beyond tolerance {args.tolerance},"
               " and nothing leaked")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:  # A crash is not a run whose results were worse.
+        traceback.print_exc()
+        sys.exit(2)
