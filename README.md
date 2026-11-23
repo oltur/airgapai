@@ -22,7 +22,8 @@ model proposes. The deployed gateway is tested against a stub that acts as a ful
 and the real model against planted prompt-injection passages. **The claim above is not proven in
 full:** in the tested scenarios, no ticket is filed without a user's confirmation, but the tests do not show that answers are
 right, which Phase 4's evals measure, and a misled user who confirms a harmful proposal stays a
-residual risk. The [threat model](docs/threat-model.md) maps each threat to its control and test, or
+residual risk. The [architecture](docs/architecture.md) shows the parts and where each rule is
+enforced. The [threat model](docs/threat-model.md) maps each threat to its control and test, or
 names it as a residual risk. The write-up of the air gap is
 [A blocked connection proves nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
 
@@ -203,7 +204,8 @@ Confirming files the ticket in `maintenance/tickets`, which you can open from th
 
 ## Documentation
 
-[`docs/`](docs/README.md) holds the architecture decision records and the hours log.
+[`docs/`](docs/README.md) holds the [architecture](docs/architecture.md), the
+[threat model](docs/threat-model.md), the architecture decision records and the hours log.
 
 ## Licence
 
