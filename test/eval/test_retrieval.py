@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from retrieval import compare  # noqa: E402
+from retrieval import compare, gate  # noqa: E402
 
 
 def run(**results):
@@ -67,6 +67,20 @@ class Compare(unittest.TestCase):
         failures = compare(base, {"a": hit(True, leaked=2)}, 0, {"images": {"embed": ["b"]}})
         self.assertEqual(len(failures), 2)
         self.assertTrue(any("technician" in f for f in failures))
+
+
+class Gate(unittest.TestCase):
+    def test_another_deployment_is_kept_apart_from_worse_results(self):
+        base = run(a=hit(True))
+        base["deployed"] = {"images": {"embed": ["a"]}}
+        other, worse = gate(base, {"a": hit(False, leaked=1)}, 0, {"images": {"embed": ["b"]}})
+        self.assertEqual(len(other), 1)
+        self.assertEqual(len(worse), 2)
+
+    def test_worse_results_alone_are_not_other_failures(self):
+        other, worse = gate(run(a=hit(True)), {"a": hit(False)}, 0)
+        self.assertEqual(other, [])
+        self.assertEqual(len(worse), 1)
 
 
 if __name__ == "__main__":

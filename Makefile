@@ -126,7 +126,7 @@ test-eval-gate: ## Show the generation gate passing an unchanged copy of the gat
 	if [ $$code -eq 1 ]; then echo "ok   the gate failed the worse prompt by its answers, as it should"; \
 	else echo "FAIL the worse prompt should fail the gate by its answers, exit 1, but exited $$code"; exit 1; fi
 
-rebuild: ## Destroy the VM, rebuild the bundle and the VM, run every test and the retrieval gate; EVALS=generation adds the generation gates, about 80 min
+rebuild: ## Destroy the VM, rebuild the bundle and the VM, run every test and the retrieval gate; EVALS=generation adds test-eval-gate, about 55 min
 	@start=$$(date +%s); \
 	$(MAKE) --no-print-directory vm-down && \
 	$(MAKE) --no-print-directory bundle && \
@@ -138,7 +138,6 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, run every test and th
 	$(MAKE) --no-print-directory test-rls && \
 	$(MAKE) --no-print-directory test-ingest && \
 	$(MAKE) --no-print-directory test-retrieval && \
-	$(MAKE) --no-print-directory eval-retrieval && \
 	$(MAKE) --no-print-directory test-executor && \
 	$(MAKE) --no-print-directory test-gateway && \
 	$(MAKE) --no-print-directory test-adversarial && \
@@ -146,6 +145,7 @@ rebuild: ## Destroy the VM, rebuild the bundle and the VM, run every test and th
 	$(MAKE) --no-print-directory test-audit-copy && \
 	$(MAKE) --no-print-directory test-egress && \
 	$(MAKE) --no-print-directory audit-copy && \
-	{ [ "$(EVALS)" != generation ] || { $(MAKE) --no-print-directory eval-generation && \
-	  $(MAKE) --no-print-directory test-eval-gate; }; } && \
+	$(MAKE) --no-print-directory eval-retrieval && \
+	{ [ "$(EVALS)" != generation ] || { $(MAKE) --no-print-directory test-eval-gate && \
+	  $(MAKE) --no-print-directory audit-copy; }; } && \
 	echo "rebuild passed: built in $$((built - start)) s, tested in $$(($$(date +%s) - built)) s"

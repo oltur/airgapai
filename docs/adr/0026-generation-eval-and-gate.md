@@ -72,8 +72,8 @@ asks for that next, compared question by question, with a tolerance set from rep
 - **Questions that always failed are not gated.** p11 and i03 failed in every baseline run, so a
   change cannot make them worse, and one that fixes them passes as well.
 - **A run takes about 22 minutes,** so it is not in CI, which has no VM, nor in every `make rebuild`.
-  It needs the lab's VM, up, with its models. ADR 0028 later added it to `make rebuild
-  EVALS=generation`.
+  It needs the lab's VM, up, with its models. ADR 0028 later put a run of the deployed
+  image, through a copy, in `make rebuild EVALS=generation`.
 - **The tolerance of 0 rests on three runs.** A question that varies rarely may fail a later run with
   nothing changed. If that happens, the baseline needs more runs, not a larger tolerance by hand.
 - **The pages are read with patterns from the gateway's template.** A changed template could make

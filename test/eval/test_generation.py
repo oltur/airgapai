@@ -14,6 +14,7 @@ from generation import (  # noqa: E402
     candidates,
     compare,
     exit_status,
+    gate,
     hard_failures,
     losses,
     parse,
@@ -270,15 +271,26 @@ class ExitStatus(unittest.TestCase):
         self.assertEqual(exit_status(False, [], []), 0)
 
     def test_failing_by_answers_alone_is_1(self):
-        self.assertEqual(exit_status(False, self.LOST, self.LOST), 1)
+        self.assertEqual(exit_status(False, [], self.LOST), 1)
 
     def test_a_hard_failure_is_2_even_with_losses(self):
-        self.assertEqual(exit_status(True, self.LOST, self.LOST), 2)
+        self.assertEqual(exit_status(True, [], self.LOST), 2)
         self.assertEqual(exit_status(True, [], []), 2)
 
     def test_another_deployment_is_2_even_with_losses(self):
-        lines = ["the deployed images differ"] + self.LOST
-        self.assertEqual(exit_status(False, lines, self.LOST), 2)
+        self.assertEqual(exit_status(False, ["the deployed images differ"], self.LOST), 2)
+
+    def test_the_gate_keeps_a_changed_deployment_apart_from_losses(self):
+        base = {"asked": {"p01": {}}, "deployed": {"images": {}},
+                "runs": [{"p01": {"ok": True}}]}
+        other, lost = gate(base, {"p01": {"ok": False}}, {"p01": {}}, 0, {"images": {"x": []}})
+        self.assertEqual(len(other), 1)
+        self.assertEqual(len(lost), 1)
+        self.assertEqual(exit_status(False, other, lost), 2)
+
+    def test_a_question_not_asked_counts_as_lost_not_a_crash(self):
+        base = {"runs": [{"p01": {"ok": True}}]}
+        self.assertIn("p01", losses(base, {}, 0)[0])
 
     def test_losses_within_tolerance_are_none(self):
         base = {"runs": [{"p01": {"ok": True}, "p02": {"ok": True}}]}

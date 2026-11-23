@@ -240,29 +240,36 @@ def tolerance(runs):
 
 
 def losses(baseline, results, allowed):
-    """The line failing this run for its answers, if more stable questions failed than allowed."""
-    lost = sorted(i for i in stable(baseline["runs"]) if not results[i]["ok"])
+    """The line failing this run for its answers, if more stable questions failed than allowed. A
+    question the run did not ask counts as failed; that the run is incomplete is a hard failure."""
+    lost = sorted(i for i in stable(baseline["runs"]) if not results.get(i, {}).get("ok"))
     if len(lost) > allowed:
         return [f"{len(lost)} questions that passed in every baseline run failed, "
                 f"tolerance {allowed}: {', '.join(lost)}"]
     return []
 
 
+def gate(baseline, results, asked_now, allowed, deployed=None):
+    """How this run is worse than the baseline: the lines that make the comparison mean something
+    else, and the lines for its answers, kept apart for the exit status."""
+    other = lab.incomparable(baseline["asked"], asked_now)
+    if other:
+        return other, []
+    return lab.redeployed(baseline.get("deployed"), deployed), losses(baseline, results, allowed)
+
+
 def compare(baseline, results, asked_now, allowed, deployed=None):
     """Every way this run is worse than the baseline, as lines; empty if it passes."""
-    failures = lab.incomparable(baseline["asked"], asked_now)
-    if failures:
-        return failures
-    failures += lab.redeployed(baseline.get("deployed"), deployed)
-    return failures + losses(baseline, results, allowed)
+    other, lost = gate(baseline, results, asked_now, allowed, deployed)
+    return other + lost
 
 
-def exit_status(failed, lines, lost):
+def exit_status(failed, other, lost):
     """1 only if the run failed by its answers alone, so that a run that measured nothing, or
     against something else, is never taken for one that failed by its answers."""
-    if failed or set(lines) - set(lost):
+    if failed or other:
         return 2
-    return 1 if lines else 0
+    return 1 if lost else 0
 
 
 def summarise(results, golden):
@@ -365,10 +372,10 @@ def main():
               f"tolerance {saved['tolerance']}")
     if baseline and runs:
         allowed = baseline["tolerance"] if args.tolerance is None else args.tolerance
-        lines = compare(baseline, runs[0]["results"], asked(golden), allowed, deployed)
-        for line in lines:
+        other, lost = gate(baseline, runs[0]["results"], asked(golden), allowed, deployed)
+        for line in other + lost:
             print(f"FAIL {line}")
-        code = exit_status(failed, lines, losses(baseline, runs[0]["results"], allowed))
+        code = exit_status(failed, other, lost)
         if code:
             sys.exit(code)
         who = f"the candidate {args.candidate}: " if args.candidate else ""
