@@ -63,9 +63,10 @@ run of the deployed gateway in ADR 0026, and 3270 s for the candidate pair below
 ### What this does not prove
 
 - **That CI catches a worse answer.** CI tests the gate's rules, not the deployment's answers.
-- **That the rebuild runs them as described.** `make eval-retrieval` and `make test-eval-gate` were
-  each run on their own on a rebuilt VM, below. Neither `make rebuild` with the retrieval gate in it
-  nor `make rebuild EVALS=generation` has been run as a whole.
+- **That a failing generation gate still has its turns copied, in a real rebuild.** The rebuild
+  below passed, so that path ran only with stand-ins for the gate and the copy.
+- **That a plain `make rebuild` runs as described,** separately: the run below with
+  `EVALS=generation` runs the same steps first.
 
 ## Measurements
 
@@ -78,5 +79,8 @@ retrieval gate, with the images pinned in `infra/versions.env` and the baselines
 - **`make test-eval-gate` passed in 3270 s.** The control passed, failing only the baseline's p11 and
   i03, in 1275 s of turns. The worse prompt exited 1, with 30 of the 45 stable questions lost and no
   answer shown, in 1976 s of turns, the same result as its two runs in ADR 0027.
-- **Not measured:** a full `make rebuild` with the retrieval gate in it, or with `EVALS=generation`.
-  The pieces were each run on their own, as above.
+- **The first full `make rebuild EVALS=generation`,** of `889c131` later that day, passed: built in
+  276 s, tested in 4173 s. Every VM test passed, then the audit copy, the retrieval gate with all 33
+  at hit@3 and no leak, and the gate's pair: the control failed only p11 and i03, at 27 s per turn,
+  and the worse prompt lost the same 30 questions with no answer shown, at 41 s per turn. The second
+  audit copy then copied 10 rows.

@@ -154,7 +154,7 @@ The design puts each rule where the model cannot reach it.
   the database tests on every change (ADRs 0009, 0028). It has no VM, so it does not test the
   deployment.
 
-The [README](../README.md#what-is-and-is-not-proven) lists each claim with its test and what the test
+The [evidence index](evidence.md) lists each claim with its test, its latest run and what the test
 does not prove.
 
 ## Limits
