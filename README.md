@@ -15,17 +15,18 @@ private, non-commercial project, written independently from public specification
 ## Status
 
 Phases 1 and 2, the air gap and role-filtered retrieval, are complete. Phase 3's agent gateway, its
-tests and its threat model are built, and its write-up is still to come. The models
-are served in the cluster, a pinned slice of the Kubernetes documentation (CC BY 4.0) is ingested into a
-row-level secured table, and a gateway lets signed-in users ask the manuals and confirm the tickets the
-model proposes. The deployed gateway is tested against a stub that acts as a fully compromised model,
-and the real model against planted prompt-injection passages. **The claim above is not proven in
-full:** in the tested scenarios, no ticket is filed without a user's confirmation, but the tests
-do not show that answers are right: the eval gates check that they cite the expected pages, not
-that they are true. A misled user who confirms a harmful proposal stays a residual risk. The [architecture](docs/architecture.md) shows the parts and where each rule is
-enforced. The [threat model](docs/threat-model.md) maps each threat to its control and test, or
-names it as a residual risk. The write-up of the air gap is
-[A blocked connection proves nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
+tests and its threat model are built, and its write-up is still to come. The models are served in
+the cluster, a pinned slice of the Kubernetes documentation (CC BY 4.0) is ingested into a row-level
+secured table, and a gateway lets signed-in users ask the manuals and confirm the tickets the model
+proposes. The deployed gateway is tested against a stub that acts as a fully compromised model, and
+the real model against planted prompt-injection passages. **The claim above is not proven in full:**
+in the tested scenarios, no ticket is filed without a user's confirmation, but the tests do not show
+that answers are right: the eval gates check that they cite the expected pages, not that they are
+true. A misled user who confirms a harmful proposal stays a residual risk. The
+[architecture](docs/architecture.md) shows the parts and where each rule is enforced. The [threat
+model](docs/threat-model.md) maps each threat to its control and test, or names it as a residual
+risk. The write-up of the air gap is [A blocked connection proves
+nothing](https://turevskiy.com/blog/a-blocked-connection-proves-nothing/).
 
 | Phase | What it should demonstrate |
 |---|---|
@@ -40,7 +41,8 @@ names it as a residual risk. The write-up of the air gap is
 The [evidence index](docs/evidence.md) lists each claim with its test, its latest run and what the
 test does not prove, and what none of it shows: one node, one low-consequence action, no real users,
 no GPU, no independent review and no day-2 evidence. The latest full run, `make rebuild
-EVALS=generation` on 2026-11-23, passed every VM test and both eval gates.
+EVALS=generation` on 2026-11-23, passed every VM test and the retrieval gate, and the generation
+gate passed an unchanged copy of the deployed gateway and failed the worse prompt, as it should.
 
 ## What Phase 1 contains
 

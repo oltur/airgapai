@@ -23,8 +23,8 @@ run of the deployed gateway in ADR 0026, and 3270 s for the candidate pair below
   is broken, as ADR 0026's mutation checks showed.
 - **`make rebuild` runs the retrieval gate every time,** after all the tests and the audit copy, so
   that a gate failure never skips a security test or loses the run's audit rows. It takes about 5 s.
-  ADR 0025's baseline passed after the rebuild in ADR 0026 and after the one measured below, so a
-  rebuilt index has not yet made it fail with nothing changed, in two rebuilds.
+  ADR 0025's baseline passed after the rebuild in ADR 0026 and after both rebuilds measured below,
+  so a rebuilt index has not yet made it fail with nothing changed, in three rebuilds.
 - **`make rebuild EVALS=generation` adds `make test-eval-gate`,** then copies the audit log again,
   whether the gate passed or not, and only then fails if it did.
   It is opt-in, for a change to the model, the prompt or the gateway, as the plan asks, since it
@@ -70,9 +70,9 @@ run of the deployed gateway in ADR 0026, and 3270 s for the candidate pair below
 
 ## Measurements
 
-On 2026-11-23, in the lab VM built by ADR 0027's last `make rebuild`, before the rebuild included the
-retrieval gate, with the images pinned in `infra/versions.env` and the baselines of ADRs 0025 and
-0026.
+On 2026-11-23, with the images pinned in `infra/versions.env` and the baselines of ADRs 0025 and
+0026. The first two were run in the lab VM built by ADR 0027's last `make rebuild`, before the
+rebuild included the retrieval gate; the last is a rebuild of its own, with the gates in it.
 
 - **`make eval-retrieval` passed in 5 s,** all 33 questions with expected pages at hit@3, nothing
   leaked.
