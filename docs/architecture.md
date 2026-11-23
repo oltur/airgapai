@@ -6,7 +6,7 @@ each was chosen and what was measured. This page names them and does not repeat 
 
 ## What it is for
 
-A maintenance-manual assistant, inside an air gap. A technician or an engineer signs in, asks a
+A maintenance-manual assistant, in a single-node lab behind a simulated air gap. A technician or an engineer signs in, asks a
 question, and gets an answer that cites passages from the manuals their role may read. The model may
 propose a maintenance ticket; only the user, on a separate page, can confirm it, and only then is it
 filed. The manuals are a pinned slice of the Kubernetes documentation (CC BY 4.0), with some paths
@@ -16,7 +16,7 @@ CPU. Both licences are Apache-2.0, as their Hugging Face records state (ADR 0010
 
 Three properties matter, as the threat model states them: no ticket without a valid confirmation from
 an authenticated user, no text above a reader's role in an answer or a ticket, and an audit log whose
-rewriting is detectable. All of it inside a boundary nothing leaves.
+rewriting is detectable. All of it inside network layers that, in the paths tested, let nothing out.
 
 ## Deployment
 
@@ -45,7 +45,10 @@ flowchart LR
   build -- "read-only ISO" --> vm
   tests -- SSH --> vm
   copy -- SSH --> pg
-  fj --> argo --> k8s
+  argo --> fj
+  argo --> k8s
+  runner["CI runner"] --> fj
+  kyv --> zot
   gw --> chat
   gw --> ret --> emb
   ret --> pg
@@ -59,19 +62,22 @@ flowchart LR
 
 - **The host builds, the VM runs.** `make bundle` builds everything the VM needs on the online host:
   packages, RKE2, images, the models, the corpus and the Git repository, onto a read-only ISO
-  (ADR 0004). The host signs every image with a key whose public half alone enters the bundle
-  (ADR 0006). Nothing in the VM fetches anything.
+  (ADR 0004). The host signs the images it puts in the registry with a key whose public half alone
+  enters the bundle (ADR 0006). For an image built elsewhere, such as Forgejo, Argo CD, llama.cpp or
+  pgvector, the signature says only that this digest was mirrored here, pinned by digest. The VM
+  needs nothing from outside, and the egress tests found no path out open.
 - **The air gap has layers, each tested with a control** (ADR 0008): the VM's default route is a
   black hole, the host's firewall drops the VM's traffic to the outside and to host services, and a
   default-deny Calico policy in the cluster allows only the paths below (ADR 0003). The egress tests
   open each layer in turn and show the path then works, so a blocked result means the layer blocked
   it.
-- **One node.** RKE2 on one VM, with restricted Pod Security on every namespace but `kube-system`
-  (ADR 0005).
+- **One node.** RKE2 on one VM, with restricted Pod Security on every namespace except
+  `kube-system` and `zot`, which needs `hostPath` (ADRs 0005, 0006).
 - **Git inside the air gap drives the cluster.** Forgejo holds the repository the bundle brings in.
   Argo CD applies `deploy/` from it, and Forgejo's own CI runs a secret scan on it (ADR 0007). Images
-  come only from Zot, a read-only registry, and Kyverno admits only images signed by the host's key
-  (ADR 0006).
+  come from Zot, a read-only registry. Kyverno admits only images signed by the host's key, except in
+  `kube-system`, `kube-public` and `kube-node-lease`, which run RKE2's own images from the bundle, and
+  in `zot` and `kyverno`, which cannot check themselves (ADR 0006).
 - **The host keeps a copy of the audit log,** read over SSH, so that a rewrite inside the VM, even one
   with every hash recomputed, shows against it (ADR 0024).
 
@@ -88,9 +94,11 @@ Each component, what it does, and the only paths the network rules give it.
 | ingestion Job | `retrieval` | Chunks, labels and embeds the corpus from its image | embedding model, PostgreSQL | 0013 |
 | chat model | `inference` | llama.cpp serving Ministral 3 3B Instruct | nothing | 0010, 0011 |
 | embedding model | `inference` | llama.cpp serving nomic-embed-text v1.5 | nothing | 0010, 0011 |
-| Forgejo | `forgejo` | Git, CI, users and teams, the ticket repositories | nothing | 0007, 0017, 0021 |
+| Forgejo | `forgejo` | Git, users and teams, the ticket repositories | nothing | 0007, 0017, 0021 |
+| CI runner | `forgejo` | Runs Forgejo's CI jobs | Forgejo | 0007 |
 | Argo CD | `argocd` | Applies `deploy/` from Forgejo | itself, the API server, Forgejo | 0007 |
-| Zot, Kyverno | `zot`, `kyverno` | The read-only registry, and admission of signed images only | nothing | 0006 |
+| Zot | `zot` | The read-only registry | nothing | 0006 |
+| Kyverno | `kyverno` | Admits signed images only, outside the exempt namespaces | the API server, Zot | 0006 |
 
 The Go services are static binaries on an empty base, built so that the same source gives the same
 digest, and `infra/versions.env` pins every digest that `deploy/` names.
@@ -129,15 +137,16 @@ The design puts each rule where the model cannot reach it.
 | A search uses the user's role | The gateway's session, and row-level security in PostgreSQL | The model's arguments |
 | A ticket is readable only by roles that may read its sources | The proposal's sources, recorded by the gateway, and Forgejo's team permissions | What the model writes |
 | An answer shows its sources | The gateway's citation check | The model's honesty |
-| Nothing leaves | Three network layers, each tested with a control | Any component's good behaviour |
-| Only the built images run | Kyverno and the read-only registry | The manifests |
+| Nothing leaves, on the paths tested | Three network layers, each tested with a control | Any component's good behaviour |
+| Outside the exempt namespaces, only images signed by the host's key run | Kyverno and the read-only registry | The manifests |
 
 ## How it is checked
 
-- **`make rebuild`** destroys the VM, builds it again from the bundle, and runs every test: hardening,
-  signed images, GitOps, row-level security, ingestion, retrieval, the executor, the gateway, the
-  compromised-model stub, planted prompt injections, the audit copy and the egress layers. It then runs
-  the retrieval gate (ADR 0028).
+- **`make rebuild`** destroys the VM, builds the bundle and the VM again, and runs the tests that need
+  the VM: hardening, signed images, GitOps, row-level security, ingestion, retrieval, the executor,
+  the gateway, the compromised-model stub, planted prompt injections, the audit copy and the egress
+  layers. It then copies the audit log and runs the retrieval gate, and with `EVALS=generation` the
+  generation gate's pair (ADR 0028). The guard and database tests run outside it, in CI.
 - **The eval gates** compare retrieval and the model's answers on a golden set of 47 questions with
   saved baselines (ADRs 0025, 0026). A candidate gateway runs beside the deployed one, and a
   deliberately worse prompt fails the gate while an unchanged copy passes (ADR 0027).
