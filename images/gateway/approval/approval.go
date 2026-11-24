@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -309,48 +310,41 @@ func (s *Store) Proposal(ctx context.Context, user string, id uuid.UUID) (Propos
 }
 
 // Status is what has become of a proposal since it was made. It is read from the confirmation and
-// the executor's logged result, so the page can say what happened rather than offer it again.
+// the last result logged for it, so the page can say what happened rather than offer it again.
 type Status struct {
 	ConfirmedAt time.Time // zero if the proposal was not confirmed
-	Executed    bool      // the executor used the confirmation
-	Result      string    // succeeded, failed or unknown, as the executor logged it; empty if none is logged
+	ExpiresAt   time.Time // when the confirmation, if unused, can no longer be used
+	Executed    bool      // the confirmation was used
+	Result      string    // succeeded, failed or unknown, as logged; empty if none is logged
 	Issue       int64     // with succeeded: the issue's number
 	Repo        string    // with succeeded: where it was filed, as org/repo
 }
 
 // Status returns what has become of user's own proposal. Another user's proposal, or one that does
-// not exist, reads as never confirmed, so the caller must have read it with Proposal first.
+// not exist, reads as never confirmed, so the caller must have read it with Proposal first. The
+// result is the executor's audit entry. The gateway's login could append one too, since the
+// executor uses the same login, so it is what was logged, not proof of what happened.
 func (s *Store) Status(ctx context.Context, user string, id uuid.UUID) (Status, error) {
 	var st Status
-	err := s.pool.QueryRow(ctx, `SELECT c.created_at, c.consumed_at IS NOT NULL
+	var result, issue, repo *string
+	err := s.pool.QueryRow(ctx, `SELECT c.created_at, c.expires_at, c.consumed_at IS NOT NULL, r.decision, r.issue, r.repo
 		FROM gateway.confirmations c JOIN gateway.proposals p ON p.id = c.proposal_id
-		WHERE c.proposal_id = $1 AND p.user_id = $2`, id, user).Scan(&st.ConfirmedAt, &st.Executed)
+		LEFT JOIN LATERAL (SELECT a.decision, (a.detail::jsonb)->>'issue' AS issue, (a.detail::jsonb)->>'repo' AS repo
+			FROM gateway.audit a
+			WHERE a.action = 'result' AND a.actor = 'executor' AND (a.detail::jsonb)->>'proposal' = c.proposal_id::text
+			ORDER BY a.seq DESC LIMIT 1) r ON true
+		WHERE c.proposal_id = $1 AND p.user_id = $2`, id, user).Scan(&st.ConfirmedAt, &st.ExpiresAt, &st.Executed, &result, &issue, &repo)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Status{}, nil
 	}
-	if err != nil || !st.Executed {
+	if err != nil || result == nil {
 		return st, err
 	}
-	// The last result the executor logged for it. The log is scanned, which is fine at a lab's size.
-	var detail string
-	err = s.pool.QueryRow(ctx, `SELECT decision, detail FROM gateway.audit
-		WHERE action = 'result' AND actor = 'executor' AND (detail::jsonb)->>'proposal' = $1
-		ORDER BY seq DESC LIMIT 1`, id.String()).Scan(&st.Result, &detail)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return st, nil
-	}
-	if err != nil {
-		return st, err
-	}
-	if st.Result == "succeeded" {
-		var d struct {
-			Issue int64  `json:"issue"`
-			Repo  string `json:"repo"`
-		}
-		if err := json.Unmarshal([]byte(detail), &d); err != nil {
-			return st, err
-		}
-		st.Issue, st.Repo = d.Issue, d.Repo
+	st.Result = *result
+	if st.Result == "succeeded" && issue != nil && repo != nil {
+		// A number that does not parse stays 0, which the page takes for no ticket.
+		st.Issue, _ = strconv.ParseInt(*issue, 10, 64)
+		st.Repo = *repo
 	}
 	return st, nil
 }

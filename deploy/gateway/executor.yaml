@@ -36,7 +36,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: executor
-          image: 10.43.0.50:5000/airgapai/executor@sha256:210bce6e14da1f1a404b21850c972a7fd79b8559970fb00672c371fdea3381fd
+          image: 10.43.0.50:5000/airgapai/executor@sha256:bf5de200dbdf7cb53e39af9118ca3cae1031ce14477273ba2ace3d84e418fef5
           args: [serve, -listen=:8080]
           env:
             - name: PGHOST

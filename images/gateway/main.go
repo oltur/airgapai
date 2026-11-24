@@ -252,6 +252,27 @@ func (s *server) handleProposal(w http.ResponseWriter, r *http.Request) {
 	s.render(w, http.StatusOK, "proposal", v)
 }
 
+// proposeAnew is the next step after a confirmation that filed nothing for certain.
+const proposeAnew = "If the ticket is still needed, propose it anew."
+
+// validIssue is a ticket the executor reported, fit to go into a link: a positive number in a
+// repository of the form org/repo.
+func validIssue(repo string, issue int64) bool { return issue > 0 && ticketRepo.MatchString(repo) }
+
+// issueLink is a ticket's address in Forgejo as the browser reaches it, if the ticket is valid.
+func (s *server) issueLink(repo string, issue int64) (string, bool) {
+	if !validIssue(repo, issue) {
+		return "", false
+	}
+	return fmt.Sprintf("%s/%s/issues/%d", s.ticketURL, repo, issue), true
+}
+
+// mustIssueLink is issueLink for a ticket already checked with validIssue.
+func (s *server) mustIssueLink(repo string, issue int64) string {
+	link, _ := s.issueLink(repo, issue)
+	return link
+}
+
 // outcome fills in what has become of a confirmed proposal, from the confirmation and the executor's
 // logged result, so that the page reports it instead of offering the proposal again.
 func (s *server) outcome(ctx context.Context, v *proposalView, sess session, p approval.Proposal) {
@@ -265,13 +286,18 @@ func (s *server) outcome(ctx context.Context, v *proposalView, sess session, p a
 		return
 	}
 	v.Confirmed = st.ConfirmedAt.UTC().Format(time.RFC3339)
+	link, linked := s.issueLink(st.Repo, st.Issue)
 	switch {
+	case !st.Executed && s.now().Before(st.ExpiresAt):
+		// The executor's request may still be on its way, so nothing can be said yet.
+		v.Outcome = "The executor has not used the confirmation yet, and still can until " +
+			st.ExpiresAt.UTC().Format(time.RFC3339) + ". Reload this page after then before proposing it again."
 	case !st.Executed:
-		v.Outcome = "The executor has not used the confirmation, so nothing has been filed for it. If it was refused, the result page said why."
-	case st.Result == "succeeded" && st.Issue > 0 && ticketRepo.MatchString(st.Repo):
-		v.Issue, v.IssueURL = st.Issue, fmt.Sprintf("%s/%s/issues/%d", s.ticketURL, st.Repo, st.Issue)
+		v.Outcome = "The confirmation expired unused, so nothing was filed through it, such as after a refusal at execution. " + proposeAnew
+	case st.Result == "succeeded" && linked:
+		v.Issue, v.IssueURL = st.Issue, link
 	case st.Result == "failed":
-		v.Outcome = "The executor reports that it failed before anything was filed, so nothing was. If the ticket is still needed, propose it anew."
+		v.Outcome = "The executor reports that nothing was filed. " + proposeAnew
 	default:
 		// No result logged, an unknown one, or a success that names no ticket: the issue may exist.
 		v.Outcome = unknownResult(s.org, p.Visibility)
@@ -316,7 +342,7 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		// there. The token was used, so, as with a refusal, the proposal cannot be confirmed again.
 		logf("executing %s: not filed: %s", p.ID, res.failed)
 		s.render(w, http.StatusBadGateway, "message", page{Title: "Not filed", Session: &sess,
-			Message: "The executor reports that " + res.failed + ", so nothing was filed. This proposal cannot be confirmed again: if the ticket is still needed, propose it anew."})
+			Message: "The executor reports that " + res.failed + ", so nothing was filed. This proposal cannot be confirmed again. " + proposeAnew})
 	case res.denied != "":
 		// The executor's refusal leaves the token unused, but the proposal stays confirmed and the
 		// token is dropped here, so the call cannot be retried; see ADR 0017.
@@ -324,7 +350,7 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 			Message: res.denied + ". Nothing was filed. This proposal cannot be confirmed again: once the reason is resolved, it has to be proposed anew."})
 	default:
 		s.render(w, http.StatusOK, "filed", page{Title: "Ticket filed", Session: &sess,
-			Issue: res.issue, IssueURL: fmt.Sprintf("%s/%s/issues/%d", s.ticketURL, res.repo, res.issue)})
+			Issue: res.issue, IssueURL: s.mustIssueLink(res.repo, res.issue)})
 	}
 }
 
@@ -433,7 +459,7 @@ func (e *executor) execute(ctx context.Context, token, user, tool, args string) 
 		return outcome{err: fmt.Errorf("executor answered %d: %w", resp.StatusCode, err)}
 	}
 	switch {
-	case resp.StatusCode == http.StatusOK && answer.Issue > 0 && ticketRepo.MatchString(answer.Repo):
+	case resp.StatusCode == http.StatusOK && validIssue(answer.Repo, answer.Issue):
 		return outcome{issue: answer.Issue, repo: answer.Repo}
 	case resp.StatusCode == http.StatusForbidden && answer.Denied != "":
 		return outcome{denied: answer.Denied}
