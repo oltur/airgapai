@@ -63,8 +63,8 @@ the issue does not exist.
 
 - **That Forgejo never writes an issue before answering 4xx.** It is how its API is meant to work, and
   not tested against Forgejo itself: the tests use a fake Forgejo.
-- **The pages in the VM.** The change is in the executor's and gateway's images, which reach the VM
-  with the next `make rebuild`. No VM test makes Forgejo refuse.
+- **The "Not filed" page in the VM.** The change was deployed by the `make rebuild` of `3d70755` on
+  2026-11-24, which passed, but no VM test makes Forgejo refuse, so that page has not been seen there.
 
 ## Measurements
 
