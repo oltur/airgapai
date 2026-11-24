@@ -154,6 +154,10 @@ else
   held "alice confirms" 200 "$(browse alice post "$proposal/confirm" genuine)"
   say "$(grep -o 'ticket #[0-9]*' /tmp/gateway-test-alice.html | head -1) was filed by the executor."
   held "exactly one ticket filed" "$((before + 1))" "$(count_issues)"
+  browse alice get "$proposal" >/dev/null
+  say "Back on the proposal's page: $(grep -o 'The executor filed it as <a [^>]*>ticket #[0-9]*' /tmp/gateway-test-alice.html | sed 's/<a [^>]*>//')."
+  held "the proposal's page shows the ticket it filed, and offers no second confirmation" "1 0" \
+    "$(shown alice 'The executor filed it as') $(shown alice 'Confirm and file')"
 fi
 
 step "5. Every decision is in the audit log"
