@@ -54,6 +54,8 @@ the issue does not exist.
 - **The gateway trusts the executor's `failed`,** as it trusts its `denied` and its results. Both are
   inside the cluster's network rules, and neither has TLS (residual risk 2).
 
+- **ADR 0030 changes the gateway image again,** and the same holds for its baseline.
+
 ### What this does not prove
 
 - **The stored-arguments cause, in a test.** The arguments reach that step only after they are

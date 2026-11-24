@@ -242,6 +242,7 @@ func (s *server) handleProposal(w http.ResponseWriter, r *http.Request) {
 	v, err := s.view(p, sess)
 	if err == nil {
 		s.sourceText(r.Context(), v.Proposal, sess, p.Sources)
+		s.outcome(r.Context(), v.Proposal, sess, p)
 	}
 	if err != nil {
 		logf("rendering proposal %s: %v", p.ID, err)
@@ -249,6 +250,32 @@ func (s *server) handleProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, http.StatusOK, "proposal", v)
+}
+
+// outcome fills in what has become of a confirmed proposal, from the confirmation and the executor's
+// logged result, so that the page reports it instead of offering the proposal again.
+func (s *server) outcome(ctx context.Context, v *proposalView, sess session, p approval.Proposal) {
+	st, err := s.store.Status(ctx, sess.user, p.ID)
+	if err != nil {
+		logf("reading the status of proposal %s: %v", p.ID, err)
+		v.StatusUnreadable = true
+		return
+	}
+	if st.ConfirmedAt.IsZero() {
+		return
+	}
+	v.Confirmed = st.ConfirmedAt.UTC().Format(time.RFC3339)
+	switch {
+	case !st.Executed:
+		v.Outcome = "The executor has not used the confirmation, so nothing has been filed for it. If it was refused, the result page said why."
+	case st.Result == "succeeded" && st.Issue > 0 && ticketRepo.MatchString(st.Repo):
+		v.Issue, v.IssueURL = st.Issue, fmt.Sprintf("%s/%s/issues/%d", s.ticketURL, st.Repo, st.Issue)
+	case st.Result == "failed":
+		v.Outcome = "The executor reports that it failed before anything was filed, so nothing was. If the ticket is still needed, propose it anew."
+	default:
+		// No result logged, an unknown one, or a success that names no ticket: the issue may exist.
+		v.Outcome = unknownResult(s.org, p.Visibility)
+	}
 }
 
 // confirmTimeout bounds the confirmation and the executor's work, which go on if the browser leaves.

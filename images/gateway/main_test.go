@@ -712,6 +712,58 @@ func TestConfirmationPage(t *testing.T) {
 		t.Errorf("confirming an expired proposal: %d", got.status)
 	}
 
+	// Once confirmed, the page says what became of the proposal, read from the confirmation and the
+	// executor's logged result, and no longer offers it. The fake executor neither uses a token nor
+	// logs a result, so where one is needed the test does both with the token the gateway sent it.
+	executeAs := func(outcome string, detail map[string]any) string {
+		t.Helper()
+		const a = `{"title":"Fifth","body":"b","priority":"low"}`
+		pe := propose("alice", a)
+		alice.post("/proposals/"+pe.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil)
+		if outcome != "" {
+			calls := h.executor.calls()
+			xctx := withSession(ctx, session{identity: identity{user: "alice", role: "technician"}})
+			ex, err := h.store.Execute(xctx, calls[len(calls)-1]["token"].(string), "alice", "create_ticket", []byte(a))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if outcome != "none" {
+				if err := h.store.RecordResult(ctx, ex, outcome, detail); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		return alice.get("/proposals/" + pe.ID.String()).body
+	}
+	h.executor.set(http.StatusForbidden, `{"denied":"denied: the user has no role"}`)
+	for _, c := range []struct {
+		name, outcome string
+		detail        map[string]any
+		want, not     []string
+	}{
+		{"refused, so never used", "", nil, []string{"has not used the confirmation"}, []string{"may have been filed"}},
+		{"filed", "succeeded", map[string]any{"issue": 9, "repo": "maintenance/tickets"},
+			[]string{"ticket #9", "/maintenance/tickets/issues/9\""}, []string{"may have been filed"}},
+		{"not filed", "failed", map[string]any{"stage": "forgejo", "status": 422},
+			[]string{"failed before anything was filed"}, []string{"may have been filed", "ticket #"}},
+		{"unknown", "unknown", map[string]any{"stage": "forgejo"}, []string{"may have been filed", "Check maintenance/tickets "}, []string{"ticket #"}},
+		{"used, no result logged", "none", nil, []string{"may have been filed"}, []string{"ticket #"}},
+		{"a success naming no repository", "succeeded", map[string]any{"issue": 9, "repo": "../../evil"},
+			[]string{"may have been filed"}, []string{"ticket #", "evil"}},
+	} {
+		body := executeAs(c.outcome, c.detail)
+		for _, w := range append(c.want, "You confirmed this at", "cannot be confirmed again") {
+			if !strings.Contains(body, w) {
+				t.Errorf("%s: the page lacks %q", c.name, w)
+			}
+		}
+		for _, w := range append(c.not, "Confirm and file") {
+			if strings.Contains(body, w) {
+				t.Errorf("%s: the page has %q", c.name, w)
+			}
+		}
+	}
+
 	// Signing out ends the session.
 	if got := alice.post("/logout", url.Values{"csrf": {token}}, nil); got.status != http.StatusSeeOther {
 		t.Errorf("sign out: %d", got.status)
@@ -719,9 +771,10 @@ func TestConfirmationPage(t *testing.T) {
 	if got := alice.get(path); got.status != http.StatusSeeOther {
 		t.Error("the session outlived sign-out")
 	}
-	// The genuine call, two with bad answers, a refusal, a certain failure, seven lost results: none retried.
-	if n := len(h.executor.calls()); n != 12 {
-		t.Errorf("executor calls: %d, want 12", n)
+	// The genuine call, two with bad answers, a refusal, a certain failure, seven lost results and six
+	// confirmations whose outcome the page then shows: none retried.
+	if n := len(h.executor.calls()); n != 18 {
+		t.Errorf("executor calls: %d, want 18", n)
 	}
 }
 

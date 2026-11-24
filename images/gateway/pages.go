@@ -44,6 +44,12 @@ type proposalView struct {
 	SourcesError         bool
 	Expires              string
 	Expired              bool
+	// What has become of it, once confirmed: when, and either the filed ticket or what is known.
+	Confirmed        string
+	Issue            int64
+	IssueURL         string
+	Outcome          string
+	StatusUnreadable bool
 }
 
 // fieldOrder puts a known tool's fields in reading order. Others are shown in canonical order.
@@ -215,7 +221,11 @@ yourself: the model wrote them, and what is shown is exactly what will be filed.
 {{else}}<p>Readable by technicians and engineers: the ticket goes to {{.Repository}}.</p>{{end}}
 <p class="note">The executor files the ticket as itself, with a first line naming you and this proposal.
 It checks your team in Forgejo again before filing.</p>
-{{if .Expired}}<p><strong>This proposal has expired and can no longer be confirmed.</strong></p>
+{{if .Confirmed}}<p><strong>You confirmed this at {{.Confirmed}}.</strong>
+{{if .IssueURL}}The executor filed it as <a href="{{.IssueURL}}">ticket #{{.Issue}}</a>.{{else}}{{.Outcome}}{{end}}
+It cannot be confirmed again.</p>
+{{else if .StatusUnreadable}}<p><strong>Whether this proposal was confirmed could not be read,</strong> so it is not offered here. Reload the page to try again.</p>
+{{else if .Expired}}<p><strong>This proposal has expired and can no longer be confirmed.</strong></p>
 {{else}}<form method="post" action="/proposals/{{.ID}}/confirm"><input type="hidden" name="csrf" value="{{$.Session.CSRF}}">
 <button class="confirm">Confirm and file</button></form>{{end}}
 {{end}}{{template "bottom"}}{{end}}

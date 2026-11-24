@@ -91,6 +91,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0027](docs/adr/0027-candidate-gateway-gated.md) | Candidate gateways, gated beside the deployed one |
 | [0028](docs/adr/0028-where-the-eval-gates-run.md) | Where the eval gates run |
 | [0029](docs/adr/0029-not-filed-or-unknown.md) | The executor says when nothing was filed |
+| [0030](docs/adr/0030-proposal-page-shows-its-outcome.md) | A confirmed proposal's page shows what became of it |
 
 ## Requirements
 
