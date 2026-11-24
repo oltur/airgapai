@@ -666,6 +666,15 @@ func TestConfirmationPage(t *testing.T) {
 	if refused.status != http.StatusForbidden || !strings.Contains(refused.body, "Refused at execution") {
 		t.Errorf("an executor refusal: %d", refused.status)
 	}
+	// The executor's certainty that nothing was filed, such as Forgejo rejecting the call, is shown as
+	// such, and not as a result that may have been filed.
+	h.executor.set(http.StatusBadGateway, `{"failed":"Forgejo refused the ticket (422)"}`)
+	pf := propose("alice", `{"title":"Rejected","body":"b","priority":"low"}`)
+	notFiled := alice.post("/proposals/"+pf.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil)
+	if notFiled.status != http.StatusBadGateway || !strings.Contains(notFiled.body, "<title>Not filed") ||
+		!strings.Contains(notFiled.body, "Forgejo refused the ticket (422), so nothing was filed") || strings.Contains(notFiled.body, "may have been filed") {
+		t.Errorf("a certain failure: %d", notFiled.status)
+	}
 	// Nor is one that does not say where it filed, or names something that is not a repository.
 	for _, a := range []string{`{"issue":8}`, `{"issue":8,"repo":"../../evil"}`} {
 		h.executor.set(http.StatusOK, a)
@@ -680,7 +689,9 @@ func TestConfirmationPage(t *testing.T) {
 	for _, c := range []struct {
 		status int
 		answer string
-	}{{http.StatusInternalServerError, `{"error":"execution failed"}`}, {http.StatusOK, `{"issue":8}`}, {0, ""}} {
+	}{{http.StatusInternalServerError, `{"error":"execution failed"}`}, {http.StatusOK, `{"issue":8}`}, {0, ""},
+		{http.StatusBadGateway, `{"error":"execution failed"}`}, {http.StatusInternalServerError, `{"failed":"x"}`},
+		{http.StatusBadGateway, `{"failed":"anything else"}`}, {http.StatusBadGateway, `{"failed":"Forgejo refused the ticket (500)"}`}} {
 		h.executor.set(c.status, c.answer)
 		pn := propose("alice", `{"title":"Third","body":"b","priority":"low"}`)
 		failed := alice.post("/proposals/"+pn.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil)
@@ -708,8 +719,9 @@ func TestConfirmationPage(t *testing.T) {
 	if got := alice.get(path); got.status != http.StatusSeeOther {
 		t.Error("the session outlived sign-out")
 	}
-	if n := len(h.executor.calls()); n != 7 { // the genuine call, two with bad answers, a refusal, three lost results: none retried
-		t.Errorf("executor calls: %d, want 7", n)
+	// The genuine call, two with bad answers, a refusal, a certain failure, seven lost results: none retried.
+	if n := len(h.executor.calls()); n != 12 {
+		t.Errorf("executor calls: %d, want 12", n)
 	}
 }
 

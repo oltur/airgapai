@@ -180,11 +180,11 @@ The rule is to fail closed: when a part the decision depends on is missing, noth
 | What fails | What happens | Evidence |
 |---|---|---|
 | The audit write | The action fails, and the confirmation stays unused | `make test-db`, ADR 0015 |
-| Forgejo refuses at execution | The decision fails, is logged as failed, and nothing is filed | ADR 0016 |
-| Forgejo gives no answer to the create call | The outcome is logged as `unknown`, since the issue may exist | ADR 0016 |
+| Forgejo rejects the create call, with a 4xx | Logged as `failed`. The executor tells the gateway nothing was filed, and the page, titled "Not filed", says so | `make test-db`, ADRs 0016 and 0029 |
+| Forgejo gives no answer to the create call, or a 5xx | The outcome is logged as `unknown`, since the issue may exist | `make test-db`, ADRs 0016 and 0029 |
 | Forgejo, at sign-in | The sign-in fails | The gateway's code; not tested |
 | The executor refuses | The page says nothing was filed. The proposal cannot be confirmed again, and has to be proposed again | `make test-db`, ADR 0017 |
-| The executor gives no answer | The page, titled "Result unknown", says the ticket may have been filed, and names the repository to check before proposing again. For a restricted ticket it says only engineers can read it. Until PR #21 the title said "Not filed", which could have led to a duplicate ticket. The executor reports a refusal from Forgejo and a lost answer alike, so the page cannot tell them apart, and the proposal page does not show that it was confirmed | `make test-db`, ADR 0017 |
+| The executor gives no answer, or one that is not a result | The page, titled "Result unknown", says the ticket may have been filed, and names the repository to check before proposing again. For a restricted ticket it says only engineers can read it. Until PR #21 the title said "Not filed", which could have led to a duplicate ticket. The proposal page does not show that it was confirmed | `make test-db`, ADRs 0017 and 0029 |
 | The model server | The turn ends with an error page. A proposal made earlier in the turn stays a proposal. In the first generation eval, the chat server was killed for memory under sustained use, and ten turns failed until it restarted; its prompt cache is now off | `make test-db`, ADR 0018, ADR 0026 |
 | Retrieval, during a search | The model is told the search failed, and gets no passages | The gateway's code; not tested |
 | No role reaches the database | The query returns nothing | `make test-rls`, `make test-retrieval`, ADR 0012 |
