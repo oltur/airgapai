@@ -121,8 +121,8 @@ eval-candidate: ## Gate a candidate gateway, CANDIDATE=deployed or a name in tes
 	@test/eval/generation.py --baseline --candidate $(CANDIDATE)
 
 demo: ## Show the claim end to end with the real model, about 3 minutes, on a VM make rebuild built; then copy the audit log
-	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh demo/demo.sh | infra/vm-ssh.sh sudo bash -s
-	@$(MAKE) --no-print-directory audit-copy
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh demo/demo.sh | infra/vm-ssh.sh sudo bash -s; code=$$?; \
+	$(MAKE) --no-print-directory audit-copy && exit $$code
 
 test-eval-gate: ## Show the generation gate passing an unchanged copy of the gateway and failing the worse prompt by its answers
 	@$(MAKE) --no-print-directory eval-candidate CANDIDATE=deployed

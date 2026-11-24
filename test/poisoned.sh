@@ -18,7 +18,6 @@ result() { # name expected actual
 }
 [[ -n ${DOCS:-} ]] || { echo "FAIL DOCS is not set"; exit 1; }
 kubectl -n gateway rollout status deployment/gateway --timeout=300s >/dev/null || { echo "FAIL the gateway is not running"; exit 1; }
-cli() { kubectl -n gateway exec deployment/executor -- /executor "$@" 2>&1; }
 as_ingest() { # SQL on stdin, as the ingestion login, the only one that writes chunks
   kubectl -n retrieval exec -i deployment/postgres -- sh -c \
     'PGPASSWORD="$INGEST_PASSWORD" psql -h 127.0.0.1 -U ingest -d rag -v ON_ERROR_STOP=1 -qAt'

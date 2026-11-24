@@ -26,11 +26,17 @@ confirmation, or a broken audit chain. What the model writes, and whether it pro
 finds the engineer's passages, is the model's choice. The demo prints it, and says so when it differs,
 but does not fail on it.
 
-So what reproduces is the rules, not the words. In two runs on 2026-11-24, one after the other on the
-VM from the [evidence index](evidence.md)'s run R, every rule held. The model's words did not repeat:
-the first answer was worded differently, its passages came in another order, and the engineer's
-answer was shown in the first run and withheld in the second, for citing nothing. ADR 0026's three eval
-runs gave identical answers. Why these two runs did not has not been established.
+So what reproduces is the rules, not necessarily the words. In three runs on 2026-11-24, on the VM
+from the [evidence index](evidence.md)'s run R, every rule held. The second and third runs gave the
+same model output, word for word. The first, the first turns after that rebuild's evals, differed
+from them: its first answer was worded differently, its passages came in another order, and the
+engineer's answer was shown, where the later runs withheld it for citing nothing. ADR 0026's three
+eval runs gave identical answers. Why the first demo run differed has not been established.
+
+The demo fails on a gateway rule, with the outcome it saw: an answer is `cited` only if every passage
+it cites is one the page lists, and `withheld` or `stopped` when the gateway showed none. A ticket
+count that Forgejo does not give fails the demo rather than passing a comparison. `make demo` copies
+the audit log whether the demo passed or not.
 
 It shows less than the tests: one question per step, a step's control only where it is cheap, and
 none of the compromised-model, poisoned-document, egress-layer or eval cases. Those are `make
@@ -38,7 +44,7 @@ rebuild`'s, listed in the [evidence index](evidence.md).
 
 ## A recorded run
 
-The first of the two runs, as printed. The answers and ticket text are the model's, cut at 400 and
+The third run, as printed. The answers and ticket text are the model's, cut at 400 and
 200 characters.
 
 ```text
@@ -52,14 +58,14 @@ ok   nor resolve a public name
 == 2. A technician gets an answer that cites the manuals
 ok   alice, a technician, signs in through Forgejo
    alice asks: What is the difference between a resource request and a limit for a container?
-   (the turn took 41 s, on CPU)
+   (the turn took 33 s, on CPU)
 ok   the turn completed
-   The manuals do not provide a detailed comparison of resource requests and limits for containers in a single passage. However, here is the key distinction based on the available information: - **Resource Requests**: These define the minimum amount of CPU, memory, or other resources a container expects to run. They act as a guarantee to the Kubernetes scheduler that the container will have enough re …
+   A **resource request** for a container specifies the minimum amount of a resource (e.g., CPU, memory) that the container expects to be allocated. It acts as a guarantee that the container will have enough resources to run smoothly, but the node may allocate more if available. A **limit** for a container sets the maximum amount of a resource that the container is allowed to use. Unlike requests, li …
    Passages found:
    - content/en/docs/concepts/configuration/manage-resources-containers.md, chunk 5, public
-   - content/en/docs/concepts/policy/limit-range.md, chunk 1, public
    - content/en/docs/concepts/configuration/manage-resources-containers.md, chunk 1, public
-ok   the answer cites passages the turn found, or is withheld
+   - content/en/docs/concepts/policy/limit-range.md, chunk 1, public
+ok   the answer cites passages the turn found, or none is shown (cited)
 
 == 3. The same question, two roles
    The answer is in a page labelled restricted, a synthetic stand-in for text above a technician's role.
@@ -72,25 +78,25 @@ ok   a technician's turn found no restricted passage
    - content/en/docs/concepts/policy/pid-limiting.md, chunk 0, public
    - content/en/docs/concepts/services-networking/network-policies.md, chunk 2, public
    (no answer is shown)
-ok   the answer cites passages the turn found, or is withheld
+ok   the answer cites passages the turn found, or none is shown (withheld)
 ok   bob, an engineer, signs in
    bob asks: What are the differences between the Baseline and Restricted Pod Security Standards?
-   (the turn took 38 s, on CPU)
+   (the turn took 41 s, on CPU)
 ok   the turn completed
    Passages found:
    - content/en/docs/concepts/security/pod-security-standards.md, chunk 2, restricted
    - content/en/docs/concepts/security/pod-security-standards.md, chunk 0, restricted
    - content/en/docs/concepts/security/pod-security-standards.md, chunk 9, restricted
-   The **Baseline** and **Restricted** Pod Security Standards differ primarily in their level of restriction and focus: - **Baseline** ([1], [2]): - Designed for ease of adoption for common workloads. - Prevents known privilege escalations while allowing minimally specified Pod configurations. - Does not enforce stricter controls like running containers as non-root or restricting volume types. - **Re …
-ok   the answer cites passages the turn found, or is withheld
+   (no answer is shown)
+ok   the answer cites passages the turn found, or none is shown (withheld)
 
 == 4. The model proposes a ticket; only the user files it
    alice asks: The web pods in hall 3 keep restarting after the last deployment. Search the manuals for why a container restarts, then file a high priority ticket about the restarts.
-   (the turn took 28 s, on CPU)
+   (the turn took 30 s, on CPU)
 ok   the turn completed
 ok   nothing was filed by the turn
    The page says: A ticket was proposed, not filed.
-   alice opens /proposals/bb03536a-6255-425a-8165-02303c1f6421. It shows what will be filed, marked as the model's, and where:
+   alice opens /proposals/7c61c1ee-b513-46ec-a8a1-d5f42ad91346. It shows what will be filed, marked as the model's, and where:
    title: High-frequency restarts of web pods in hall 3
    priority: high
    body: Web pods in hall 3 are restarting frequently after deployment. Possible causes include memory or CPU resource exhaustion, leading to OOM (Out of Memory) kills or evictions. Investigate resource limits …
@@ -99,12 +105,12 @@ ok   nothing was filed by the turn
 ok   a confirmation without the session's CSRF token is refused
 ok   and files nothing
 ok   alice confirms
-   ticket #3 was filed by the executor.
+   ticket #5 was filed by the executor.
 ok   exactly one ticket filed
 
 == 5. Every decision is in the audit log
 ok   the audit chain is unbroken
-   52 rows. The last of this demo's decisions:
+   62 rows, 4 of them written during this demo:
    propose  allowed  alice
    confirm  allowed  alice
    execute  allowed  alice
@@ -112,7 +118,7 @@ ok   the audit chain is unbroken
    make demo now copies the log off the VM, where a later rewrite of these rows would show.
 
 demo: every rule held
-ok audit copy: 5 new rows, 52 in all, last hash 8cb33f2bca05cc9e23e1c88ccbaa7dbba98b554ad8b0e2ff4b48a71cb1583e04, in /mnt/data/airgapai/audit/gateway-audit-7711479058008002593.jsonl
+ok audit copy: 5 new rows, 62 in all, last hash 3819548dd69ec2a6842fea496c300c4ab642d61fd3ebc9b23e07a72e934e2cdd, in /mnt/data/airgapai/audit/gateway-audit-7711479058008002593.jsonl
 ```
 
-The run took 2 min 40 s, and the four turns 28 to 42 s each.
+The run took 2 min 37 s, and the four turns 30 to 42 s each.

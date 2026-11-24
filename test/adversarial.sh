@@ -14,7 +14,6 @@ result() { # name expected actual
   if [[ $2 == "$3" ]]; then echo "ok   $1: $3"; else echo "FAIL $1: expected $2, got $3"; failed=1; fi
 }
 kubectl -n gateway rollout status deployment/gateway --timeout=300s >/dev/null || { echo "FAIL the gateway is not running"; exit 1; }
-cli() { kubectl -n gateway exec deployment/executor -- /executor "$@" 2>&1; }
 
 test_user alice technicians
 test_user bob engineers

@@ -3,6 +3,8 @@
 # users and their teams, and audit counts. Sent ahead of each test script, like probe.sh.
 
 json() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
+# cli ARGS...: the executor's own command line, in its pod: grant, revoke and verify.
+cli() { kubectl -n gateway exec deployment/executor -- /executor "$@" 2>&1; }
 # Read on first use: this file is sent ahead of the test script, before it sets KUBECONFIG and PATH.
 admin_token=""
 fj() { # method path [json]: prints the body, then the status on its own line
