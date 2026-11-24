@@ -11,7 +11,7 @@ those tools, and it counts time when Claude was working unattended.
 | 1: the air gap | 60 | 7.4 |
 | 2: light retrieval | 30 | 7.5 |
 | 3: agent gateway | 55 | 7.0 |
-| 4: evals and write-up | 30 | 8.1 |
+| 4: evals and write-up | 30 | 8.2 |
 
 ## By day
 
