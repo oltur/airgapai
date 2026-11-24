@@ -27,10 +27,13 @@ func newForgejo(base, token, org string) *forgejo {
 	return &forgejo{base: base, token: token, org: org, client: &http.Client{Timeout: 15 * time.Second}}
 }
 
-// refusedError is Forgejo answering and refusing, as opposed to no answer: then the issue does not exist.
+// refusedError is Forgejo answering the create call with anything but 201 Created. Only a 4xx, a
+// request Forgejo rejected, says the issue does not exist: a 5xx may come after Forgejo created it.
 type refusedError struct{ status int }
 
 func (e *refusedError) Error() string { return fmt.Sprintf("Forgejo refused the issue: %d", e.status) }
+
+func (e *refusedError) certain() bool { return e.status >= 400 && e.status < 500 }
 
 func (f *forgejo) do(ctx context.Context, method, path string, body any) (int, []byte, error) {
 	var r io.Reader

@@ -90,6 +90,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0026](docs/adr/0026-generation-eval-and-gate.md) | A generation eval through the gateway, gated on repeated runs |
 | [0027](docs/adr/0027-candidate-gateway-gated.md) | Candidate gateways, gated beside the deployed one |
 | [0028](docs/adr/0028-where-the-eval-gates-run.md) | Where the eval gates run |
+| [0029](docs/adr/0029-not-filed-or-unknown.md) | The executor says when nothing was filed |
 
 ## Requirements
 

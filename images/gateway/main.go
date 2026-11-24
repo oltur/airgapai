@@ -284,6 +284,12 @@ func (s *server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		// The executor may have filed the issue and lost the answer, so this must not say it was not.
 		s.render(w, http.StatusBadGateway, "message", page{Title: "Result unknown", Session: &sess,
 			Message: unknownResult(s.org, p.Visibility)})
+	case res.failed != "":
+		// The executor says nothing was filed for certain: Forgejo rejected the call, or it never got
+		// there. The token was used, so, as with a refusal, the proposal cannot be confirmed again.
+		logf("executing %s: not filed: %s", p.ID, res.failed)
+		s.render(w, http.StatusBadGateway, "message", page{Title: "Not filed", Session: &sess,
+			Message: "The executor reports that " + res.failed + ", so nothing was filed. This proposal cannot be confirmed again: if the ticket is still needed, propose it anew."})
 	case res.denied != "":
 		// The executor's refusal leaves the token unused, but the proposal stays confirmed and the
 		// token is dropped here, so the call cannot be retried; see ADR 0017.
@@ -367,6 +373,7 @@ type outcome struct {
 	issue  int64
 	repo   string // where the executor filed it, as org/repo
 	denied string
+	failed string // why nothing was filed, when the executor is certain of it
 	err    error
 }
 
@@ -389,6 +396,7 @@ func (e *executor) execute(ctx context.Context, token, user, tool, args string) 
 		Issue  int64  `json:"issue"`
 		Repo   string `json:"repo"`
 		Denied string `json:"denied"`
+		Failed string `json:"failed"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&answer); err != nil {
 		return outcome{err: fmt.Errorf("executor answered %d: %w", resp.StatusCode, err)}
@@ -398,6 +406,8 @@ func (e *executor) execute(ctx context.Context, token, user, tool, args string) 
 		return outcome{issue: answer.Issue, repo: answer.Repo}
 	case resp.StatusCode == http.StatusForbidden && answer.Denied != "":
 		return outcome{denied: answer.Denied}
+	case resp.StatusCode == http.StatusBadGateway && answer.Failed != "":
+		return outcome{failed: answer.Failed}
 	}
 	return outcome{err: fmt.Errorf("executor answered %d", resp.StatusCode)}
 }

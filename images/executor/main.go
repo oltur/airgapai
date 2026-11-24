@@ -52,10 +52,24 @@ const finishTimeout = 30 * time.Second
 // run executes one confirmed call. A refusal is returned as such; the token is consumed only if the
 // call is allowed, and the outcome is logged either way.
 // It returns the issue's number and the repository it was filed in, as org/repo.
+// notFiledError is an execution that certainly filed nothing: it stopped before the create call
+// reached Forgejo, or Forgejo rejected the call. Any other failure after the token is used may have
+// filed the issue, and is reported as an unknown result.
+type notFiledError struct {
+	reason string
+	err    error
+}
+
+func (e *notFiledError) Error() string { return e.reason + ": " + e.err.Error() }
+func (e *notFiledError) Unwrap() error { return e.err }
+
 func (s *server) run(ctx context.Context, r executeRequest) (int64, string, error) {
 	ex, err := s.store.Execute(ctx, r.Token, r.User, r.Tool, r.Args)
-	if err != nil {
+	if approval.IsDenied(err) {
 		return 0, "", err
+	}
+	if err != nil {
+		return 0, "", &notFiledError{"the execution could not be checked", err}
 	}
 	// The token is used up now, so finish even if the caller goes away: a cancelled request must not
 	// leave a consumed confirmation with no attempt and no result.
@@ -69,7 +83,7 @@ func (s *server) run(ctx context.Context, r executeRequest) (int64, string, erro
 	var args map[string]string
 	if err := json.Unmarshal([]byte(ex.Args), &args); err != nil {
 		record("failed", map[string]any{"stage": "arguments"})
-		return 0, "", err
+		return 0, "", &notFiledError{"the stored arguments could not be read", err}
 	}
 	number, repo, err := s.forgejo.createIssue(ctx, ex.Visibility, args["title"], ticketBody(ex, args))
 	var refused *refusedError
@@ -78,8 +92,11 @@ func (s *server) run(ctx context.Context, r executeRequest) (int64, string, erro
 		// Known before anything reached Forgejo, so the caller can be told for certain.
 		record("failed", map[string]any{"stage": "visibility"})
 		return 0, "", &approval.Denied{Reason: "there is no repository for this visibility"}
-	case errors.As(err, &refused):
+	case errors.As(err, &refused) && refused.certain():
 		record("failed", map[string]any{"stage": "forgejo", "status": refused.status})
+		return 0, "", &notFiledError{fmt.Sprintf("Forgejo refused the ticket (%d)", refused.status), err}
+	case errors.As(err, &refused):
+		record("unknown", map[string]any{"stage": "forgejo", "status": refused.status})
 		return 0, "", err
 	case err != nil:
 		// The request may have reached Forgejo and created the issue before the answer was lost.
@@ -104,10 +121,16 @@ func (s *server) handleExecute(w http.ResponseWriter, req *http.Request) {
 	}
 	number, repo, err := s.run(req.Context(), r)
 	w.Header().Set("Content-Type", "application/json")
+	var notFiled *notFiledError
 	switch {
 	case approval.IsDenied(err):
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]string{"denied": err.Error()})
+	case errors.As(err, &notFiled):
+		// Nothing was filed, for certain, so the caller may say so. The token is used up all the same.
+		log.Printf("execute: %v", err)
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]string{"failed": notFiled.reason})
 	case err != nil:
 		log.Printf("execute: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

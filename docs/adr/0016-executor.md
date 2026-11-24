@@ -29,7 +29,8 @@ Forgejo as its identity provider, so its teams are the natural source.
 - **Once a confirmation is consumed, the executor finishes regardless of the caller.** Filing the issue
   and logging its outcome run on a context detached from the request, limited to 30 seconds. The
   outcome is `succeeded`, `failed` when Forgejo answered with a refusal, or `unknown` when no answer
-  came, since the issue may then exist.
+  came, since the issue may then exist. ADR 0029 later counts only a 4xx as a refusal, and a 5xx as
+  `unknown`.
 - **The executor's Forgejo account owns that organisation only, with a token scoped to `write:issue`
   and `read:organization`.** Owner is the least that lets a member check team membership. A local
   Forgejo from the pinned image showed what the token can and cannot do; see Measurements.

@@ -25,7 +25,7 @@ type fakeForgejo struct {
 	mu      sync.Mutex
 	members map[string]string // user to team
 	issues  []map[string]string
-	fail    bool
+	fail    int // a status for the create call to answer with instead of 201
 	onIssue func() // called when an issue request arrives, before it is filed
 }
 
@@ -61,8 +61,8 @@ func (f *fakeForgejo) handler(t *testing.T) http.Handler {
 		}
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		if f.fail {
-			http.Error(w, "", http.StatusInternalServerError)
+		if f.fail != 0 {
+			http.Error(w, "", f.fail)
 			return
 		}
 		var issue map[string]string
@@ -83,7 +83,7 @@ func (f *fakeForgejo) setTeam(user, team string) {
 	f.members[user] = team
 }
 
-func (f *fakeForgejo) setFail(fail bool) {
+func (f *fakeForgejo) setFail(fail int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.fail = fail
@@ -184,11 +184,17 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 		return token
 	}
 	confirm := func() string { return confirmFrom(nil) }
-	post := func(token, user, tool, a string) int {
+	postBody := func(token, user, tool, a string) (int, map[string]string) {
 		body, _ := json.Marshal(map[string]any{"token": token, "user": user, "tool": tool, "args": json.RawMessage(a)})
 		w := httptest.NewRecorder()
 		s.handleExecute(w, httptest.NewRequest(http.MethodPost, "/execute", bytes.NewReader(body)))
-		return w.Code
+		var answer map[string]string
+		_ = json.Unmarshal(w.Body.Bytes(), &answer)
+		return w.Code, answer
+	}
+	post := func(token, user, tool, a string) int {
+		code, _ := postBody(token, user, tool, a)
+		return code
 	}
 
 	token := confirm()
@@ -232,15 +238,23 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	}
 	fake.setTeam("alice", "technicians")
 
-	// If Forgejo refuses, the confirmation is still used up and the failure is logged.
-	fake.setFail(true)
-	if code := post(token, "alice", "create_ticket", args); code != http.StatusInternalServerError {
-		t.Fatalf("with Forgejo failing: %d", code)
+	// If Forgejo rejects the call, nothing was filed for certain, and the caller is told so. The
+	// confirmation is still used up, and the failure is logged.
+	fake.setFail(http.StatusUnprocessableEntity)
+	if code, body := postBody(token, "alice", "create_ticket", args); code != http.StatusBadGateway || body["failed"] != "Forgejo refused the ticket (422)" {
+		t.Fatalf("with Forgejo rejecting the call: %d %v", code, body)
 	}
-	fake.setFail(false)
+	fake.setFail(0)
 	if code := post(token, "alice", "create_ticket", args); code != http.StatusForbidden {
 		t.Fatalf("a retry of a consumed token: %d", code)
 	}
+	// A 5xx may come after Forgejo created the issue, so the result is unknown, not "not filed".
+	token = confirm()
+	fake.setFail(http.StatusInternalServerError)
+	if code, body := postBody(token, "alice", "create_ticket", args); code != http.StatusInternalServerError || body["failed"] != "" {
+		t.Fatalf("with Forgejo failing: %d %v", code, body)
+	}
+	fake.setFail(0)
 	if n := fake.filed(); n != 1 {
 		t.Fatalf("%d issues filed, want 1", n)
 	}
@@ -269,7 +283,7 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	}
 
 	var outcomes string
-	if err := admin.QueryRow(ctx, "SELECT string_agg(decision, ',' ORDER BY seq) FROM gateway.audit WHERE action = 'result'").Scan(&outcomes); err != nil || outcomes != "succeeded,failed,succeeded,succeeded" {
+	if err := admin.QueryRow(ctx, "SELECT string_agg(decision, ',' ORDER BY seq) FROM gateway.audit WHERE action = 'result'").Scan(&outcomes); err != nil || outcomes != "succeeded,failed,unknown,succeeded,succeeded" {
 		t.Fatalf("result entries: %q, %v", outcomes, err)
 	}
 	if bad, _, err := store.VerifyAudit(ctx); err != nil || bad != 0 {
