@@ -31,7 +31,9 @@ func newForgejo(base, token, org string) *forgejo {
 // request Forgejo rejected, says the issue does not exist: a 5xx may come after Forgejo created it.
 type refusedError struct{ status int }
 
-func (e *refusedError) Error() string { return fmt.Sprintf("Forgejo refused the issue: %d", e.status) }
+func (e *refusedError) Error() string {
+	return fmt.Sprintf("Forgejo answered the create call with %d", e.status)
+}
 
 func (e *refusedError) certain() bool { return e.status >= 400 && e.status < 500 }
 

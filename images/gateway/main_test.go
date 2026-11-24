@@ -690,7 +690,8 @@ func TestConfirmationPage(t *testing.T) {
 		status int
 		answer string
 	}{{http.StatusInternalServerError, `{"error":"execution failed"}`}, {http.StatusOK, `{"issue":8}`}, {0, ""},
-		{http.StatusBadGateway, `{"error":"execution failed"}`}, {http.StatusInternalServerError, `{"failed":"x"}`}} {
+		{http.StatusBadGateway, `{"error":"execution failed"}`}, {http.StatusInternalServerError, `{"failed":"x"}`},
+		{http.StatusBadGateway, `{"failed":"anything else"}`}, {http.StatusBadGateway, `{"failed":"Forgejo refused the ticket (500)"}`}} {
 		h.executor.set(c.status, c.answer)
 		pn := propose("alice", `{"title":"Third","body":"b","priority":"low"}`)
 		failed := alice.post("/proposals/"+pn.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil)
@@ -718,9 +719,9 @@ func TestConfirmationPage(t *testing.T) {
 	if got := alice.get(path); got.status != http.StatusSeeOther {
 		t.Error("the session outlived sign-out")
 	}
-	// The genuine call, two with bad answers, a refusal, a certain failure, five lost results: none retried.
-	if n := len(h.executor.calls()); n != 10 {
-		t.Errorf("executor calls: %d, want 10", n)
+	// The genuine call, two with bad answers, a refusal, a certain failure, seven lost results: none retried.
+	if n := len(h.executor.calls()); n != 12 {
+		t.Errorf("executor calls: %d, want 12", n)
 	}
 }
 

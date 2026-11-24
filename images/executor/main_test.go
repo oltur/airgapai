@@ -248,6 +248,14 @@ func TestExecuteFilesOnlyConfirmedCalls(t *testing.T) {
 	if code := post(token, "alice", "create_ticket", args); code != http.StatusForbidden {
 		t.Fatalf("a retry of a consumed token: %d", code)
 	}
+	// A check that cannot be made, here for a request already cancelled, files nothing for certain.
+	gone, cancelGone := context.WithCancel(ctx)
+	cancelGone()
+	_, _, err = s.run(gone, executeRequest{Token: confirm(), User: "alice", Tool: "create_ticket", Args: json.RawMessage(args)})
+	var notFiled *notFiledError
+	if !errors.As(err, &notFiled) || notFiled.reason != "the execution could not be checked" {
+		t.Fatalf("with the check failing: %v", err)
+	}
 	// A 5xx may come after Forgejo created the issue, so the result is unknown, not "not filed".
 	token = confirm()
 	fake.setFail(http.StatusInternalServerError)

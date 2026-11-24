@@ -49,12 +49,10 @@ func ticketBody(ex approval.Execution, args map[string]string) string {
 // finishTimeout bounds the work after a confirmation is consumed.
 const finishTimeout = 30 * time.Second
 
-// run executes one confirmed call. A refusal is returned as such; the token is consumed only if the
-// call is allowed, and the outcome is logged either way.
-// It returns the issue's number and the repository it was filed in, as org/repo.
 // notFiledError is an execution that certainly filed nothing: it stopped before the create call
 // reached Forgejo, or Forgejo rejected the call. Any other failure after the token is used may have
-// filed the issue, and is reported as an unknown result.
+// filed the issue, and is reported as an unknown result. The reason is one of a fixed few, which the
+// gateway checks before it shows one.
 type notFiledError struct {
 	reason string
 	err    error
@@ -63,6 +61,9 @@ type notFiledError struct {
 func (e *notFiledError) Error() string { return e.reason + ": " + e.err.Error() }
 func (e *notFiledError) Unwrap() error { return e.err }
 
+// run executes one confirmed call. A refusal is returned as such; the token is consumed only if the
+// call is allowed, and the outcome is logged either way.
+// It returns the issue's number and the repository it was filed in, as org/repo.
 func (s *server) run(ctx context.Context, r executeRequest) (int64, string, error) {
 	ex, err := s.store.Execute(ctx, r.Token, r.User, r.Tool, r.Args)
 	if approval.IsDenied(err) {

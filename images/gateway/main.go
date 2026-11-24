@@ -363,6 +363,10 @@ func (s *server) handleReady(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.WriteString(w, "ok\n")
 }
 
+// notFiledReason is each reason the executor gives when nothing was filed for certain (ADR 0029).
+// Any other text is not taken for that certainty, so the page says the result is unknown.
+var notFiledReason = regexp.MustCompile(`^(the execution could not be checked|the stored arguments could not be read|Forgejo refused the ticket \(4[0-9]{2}\))$`)
+
 // executor calls the executor, the only holder of the ticket credential.
 type executor struct {
 	url    string
@@ -406,7 +410,7 @@ func (e *executor) execute(ctx context.Context, token, user, tool, args string) 
 		return outcome{issue: answer.Issue, repo: answer.Repo}
 	case resp.StatusCode == http.StatusForbidden && answer.Denied != "":
 		return outcome{denied: answer.Denied}
-	case resp.StatusCode == http.StatusBadGateway && answer.Failed != "":
+	case resp.StatusCode == http.StatusBadGateway && notFiledReason.MatchString(answer.Failed):
 		return outcome{failed: answer.Failed}
 	}
 	return outcome{err: fmt.Errorf("executor answered %d", resp.StatusCode)}

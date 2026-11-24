@@ -25,7 +25,9 @@ the issue does not exist.
 - **A 5xx from Forgejo is an unknown result,** logged as `unknown` with its status, and answered as
   before: `500 execution failed`. So is no answer, or a 201 whose body cannot be read.
 - **The gateway shows "Not filed"** for a `502` with a `failed` reason: the reason, that nothing was
-  filed, and that the proposal has to be proposed anew, since the token was used. Any other answer
+  filed, and that the proposal has to be proposed anew, since the token was used. It accepts only the
+  executor's own reasons, with a 4xx status in Forgejo's; any other text is an unknown result, so a
+  wrong or forged answer cannot make the page say more than it knows. Any other answer
   that is not a result or a refusal stays "Result unknown", as ADR 0017 has it.
 - **A refusal before execution stays `403 denied`,** as before.
 
@@ -54,6 +56,9 @@ the issue does not exist.
 
 ### What this does not prove
 
+- **The stored-arguments cause, in a test.** The arguments reach that step only after they are
+  canonicalised and checked against the proposal's hash, so no test makes them fail to read there.
+
 - **That Forgejo never writes an issue before answering 4xx.** It is how its API is meant to work, and
   not tested against Forgejo itself: the tests use a fake Forgejo.
 - **The pages in the VM.** The change is in the executor's and gateway's images, which reach the VM
@@ -63,11 +68,13 @@ the issue does not exist.
 
 On 2026-11-24, `make test-db` passed, with:
 
-- the executor's test: a 422 from Forgejo gives `502` with `Forgejo refused the ticket (422)` and the
+- the executor's test: a check that cannot be made, for a cancelled request, is not filed for
+  certain; a 422 from Forgejo gives `502` with `Forgejo refused the ticket (422)` and the
   confirmation used up; a 500 gives `500` with no `failed`; the results logged are
   `succeeded,failed,unknown,succeeded,succeeded`
 - the gateway's test: `502` with a `failed` reason shows "Not filed" and not "may have been filed";
-  `502` without one, and `500` with one, show "Result unknown"
+  `502` without one, `502` with any other reason or a 5xx in it, and `500` with one, show "Result
+  unknown"
 - breaking the rule, so that every Forgejo refusal counted as certain, made the executor's test fail
   on the 500
 - `infra/build-go-image.sh` built main's executor and gateway sources to their pinned digests, and
