@@ -106,7 +106,8 @@ pinned in `infra/versions.env`, and Ministral 3 3B Instruct (Apache-2.0) at temp
   the run instead.
 - **After the fix and `make rebuild`,** which passed, the chat pod's memory peaked at 4050 MiB over the
   three runs, about 70 minutes, sampled each minute.
-- **The baseline, three runs,** recorded with the review's rules below: 1311, 1302 and 1309 s of
+- **The first baseline, three runs,** recorded with the review's rules below, and saved again for a
+  new gateway image at the end of this list: 1311, 1302 and 1309 s of
   turns, 28 s per turn on average. 45 of the 47 questions passed in every run, and the same two failed
   in every run, so the tolerance is 0. All 47 had the same searches, passages, citations and answer
   in all three runs. A first baseline under the earlier rules had the same failures, and one answer,
@@ -133,3 +134,12 @@ pinned in `infra/versions.env`, and Ministral 3 3B Instruct (Apache-2.0) at temp
 - **Retrieval across a rebuild:** after `make rebuild`, `make eval-retrieval` passed, and the top 5
   chunks were the same for all 47 questions as in ADR 0025's baseline, so the rebuilt HNSW index gave
   the same results this time.
+- **Saved again for ADRs 0029 and 0030,** which changed the gateway's image. On the VM rebuilt from
+  `3d70755`, whose gateway image the new baseline names, `make eval-generation` against the first
+  baseline exited 2 on the gateway image alone, with the same two questions failing. The three runs
+  saved on 2026-11-24 as the new baseline, in 1273, 1266 and 1262 s of turns, were identical to the
+  first baseline's three in every recorded field of all 47 questions, answers included, except the
+  seconds each turn took: 45 passed every run, tolerance 0. An unchanged `make eval-generation`
+  against it then passed the gate, in 1262 s of turns, the sum of its 47 turns as printed, the same
+  as the third saved run by chance. `make test-eval-gate` has not been run against the new baseline.
+  The figures in ADRs 0027 and 0028 were measured against the first.
