@@ -2,7 +2,8 @@
 
 Each claim this repository makes, the test that shows it, the latest run of that test, and what the
 test does not prove. The ADR named in each row holds the measurements and the longer list of limits.
-The [threat model](threat-model.md) maps the same tests to threats.
+The [threat model](threat-model.md) maps the same tests to threats, and the [demo](demo.md) shows
+the claim end to end in one command.
 
 ## The runs
 
