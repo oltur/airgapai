@@ -133,3 +133,9 @@ pinned in `infra/versions.env`, and Ministral 3 3B Instruct (Apache-2.0) at temp
 - **Retrieval across a rebuild:** after `make rebuild`, `make eval-retrieval` passed, and the top 5
   chunks were the same for all 47 questions as in ADR 0025's baseline, so the rebuilt HNSW index gave
   the same results this time.
+- **Re-recorded for ADRs 0029 and 0030,** which changed the gateway's image. On the VM rebuilt from
+  `3d70755`, `make eval-generation` against this baseline exited 2 on the gateway image alone, with
+  the same two questions failing. The three runs saved on 2026-11-24 as the new baseline, in 1273,
+  1266 and 1262 s of turns, were identical to this baseline's three in every recorded field of all
+  47 questions, answers included, except the seconds each turn took: 45 passed every run, tolerance
+  0. An unchanged run against it then passed the gate, in 1262 s of turns.

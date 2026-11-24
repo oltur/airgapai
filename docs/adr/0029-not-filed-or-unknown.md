@@ -50,7 +50,9 @@ the issue does not exist.
   generation gate fails every run, including the control in `make rebuild EVALS=generation`, on the
   changed deployment (ADR 0026), and exits 2. The change does not touch the chat loop, so the answers
   should be unchanged. That has to be shown by running it, after the next `make rebuild`, before a
-  new baseline is saved. `make rebuild` without `EVALS` does not check the gateway image.
+  new baseline is saved. `make rebuild` without `EVALS` does not check the gateway image. It was
+  shown: after ADR 0030, the gate exited 2 on the gateway image alone, and the baseline saved again
+  was the same as before but for the turns' times (ADR 0026).
 - **The gateway trusts the executor's `failed`,** as it trusts its `denied` and its results. Both are
   inside the cluster's network rules, and neither has TLS (residual risk 2).
 

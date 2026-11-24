@@ -11,7 +11,7 @@ those tools, and it counts time when Claude was working unattended.
 | 1: the air gap | 60 | 7.4 |
 | 2: light retrieval | 30 | 7.5 |
 | 3: agent gateway | 55 | 7.0 |
-| 4: evals and write-up | 30 | 7.7 |
+| 4: evals and write-up | 30 | 8.1 |
 
 ## By day
 
@@ -41,4 +41,4 @@ Each figure is rounded on its own, so days may not add up to the phase total. Da
 | 2026-11-22 | 4 | 0.9 |
 | 2026-11-23 | 4 | 2.0 |
 | 2026-11-24 | 4 | 1.9 |
-| 2026-11-25 | 4 | 0.1 |
+| 2026-11-25 | 4 | 0.5 |
