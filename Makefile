@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-generation eval-candidate test-eval-gate rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-generation eval-candidate test-eval-gate demo rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -119,6 +119,10 @@ eval-generation: ## Gate the model's answers on the golden set through the deplo
 eval-candidate: ## Gate a candidate gateway, CANDIDATE=deployed or a name in test/eval/candidates, against the saved baseline
 	@[ -n "$(CANDIDATE)" ] || { echo "set CANDIDATE: deployed, or a name in test/eval/candidates"; exit 1; }
 	@test/eval/generation.py --baseline --candidate $(CANDIDATE)
+
+demo: ## Show the claim end to end with the real model, about 3 minutes, on a VM make rebuild built; then copy the audit log
+	@cat test/lib/probe.sh test/lib/forgejo.sh test/lib/browser.sh demo/demo.sh | infra/vm-ssh.sh sudo bash -s
+	@$(MAKE) --no-print-directory audit-copy
 
 test-eval-gate: ## Show the generation gate passing an unchanged copy of the gateway and failing the worse prompt by its answers
 	@$(MAKE) --no-print-directory eval-candidate CANDIDATE=deployed

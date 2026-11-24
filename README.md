@@ -43,6 +43,7 @@ test does not prove, and what none of it shows: one node, one low-consequence ac
 no GPU, no independent review and no day-2 evidence. The latest full run, `make rebuild
 EVALS=generation` on 2026-11-23, passed every VM test and the retrieval gate, and the generation
 gate passed an unchanged copy of the deployed gateway and failed the worse prompt, as it should.
+The [demo](docs/demo.md) shows the claim end to end in about 3 minutes, with a recorded run.
 
 ## What Phase 1 contains
 
@@ -143,6 +144,7 @@ make eval-retrieval  # gate retrieval on the golden set against its saved baseli
 make eval-generation # gate the model's answers on the golden set through the gateway, against its baseline
 make eval-candidate CANDIDATE=worse-prompt # gate a copy of the gateway with a changed prompt; deployed is the control
 make test-eval-gate  # show the gate passes the control and fails the worse prompt by its answers
+make demo         # show the claim end to end with the real model, in about 3 minutes
 make test-egress  # test every egress path and the layer matrix from the host, with controls
 make rebuild      # destroy everything, rebuild from the bundle and run the tests and the retrieval gate;
                   # EVALS=generation adds test-eval-gate, about 55 minutes more
@@ -191,8 +193,8 @@ Confirming files the ticket in `maintenance/tickets`, which you can open from th
 ## Documentation
 
 [`docs/`](docs/README.md) holds the [architecture](docs/architecture.md), the
-[threat model](docs/threat-model.md), the [evidence index](docs/evidence.md), the architecture
-decision records and the hours log.
+[threat model](docs/threat-model.md), the [evidence index](docs/evidence.md), the
+[demo](docs/demo.md), the architecture decision records and the hours log.
 
 ## Licence
 
