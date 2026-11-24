@@ -15,7 +15,7 @@ It runs `demo/demo.sh` in the VM, then copies the audit log off it. In five step
    searches find no restricted passage; the engineer's do.
 4. **The model proposes a ticket, and only the user files it.** The turn files nothing, a
    confirmation without the session's CSRF token is refused, and the user's confirmation files
-   exactly one ticket.
+   exactly one ticket. The proposal's page then shows that ticket, and no second confirmation.
 5. **Every decision is in the audit log,** whose chain verifies, and which is then copied off the VM.
 
 ## What it checks, and what it only shows
@@ -26,12 +26,13 @@ confirmation, or a broken audit chain. What the model writes, and whether it pro
 finds the engineer's passages, is the model's choice. The demo prints it, and says so when it differs,
 but does not fail on it.
 
-So what reproduces is the rules, not necessarily the words. In three runs on 2026-11-24, on the VM
-from the [evidence index](evidence.md)'s run R, every rule held. The second and third runs gave the
-same model output, word for word. The first, the first turns after that rebuild's evals, differed
-from them: its first answer was worded differently, its passages came in another order, and the
-engineer's answer was shown, where the later runs withheld it for citing nothing. ADR 0026's three
-eval runs gave identical answers. Why the first demo run differed has not been established.
+So what reproduces is the rules, not necessarily the words. In six runs on 2026-11-24 and 25, every
+rule held. The first three ran on the VM from the [evidence index](evidence.md)'s run R, and the last three
+on a VM rebuilt from `3d70755`, with ADRs 0029 and 0030 deployed. Runs 2 to 6 gave the same model
+output, word for word, across that rebuild. Run 1, the first turns after run R's evals, differed:
+its first answer was worded differently, its passages came in another order, and the engineer's
+answer was shown, where the later runs withheld it for citing nothing. ADR 0026's three eval runs
+also gave identical answers. Why the first run differed has not been established.
 
 The demo fails on a gateway rule, with the outcome it saw: an answer is `cited` only if every passage
 it cites is one the page lists, and `withheld` or `stopped` when the gateway showed none. A ticket
@@ -44,7 +45,7 @@ rebuild`'s, listed in the [evidence index](evidence.md).
 
 ## A recorded run
 
-The third run, as printed. The answers and ticket text are the model's, cut at 400 and
+The sixth run, as printed, with the check of the proposal's page in step 4. The answers and ticket text are the model's, cut at 400 and
 200 characters.
 
 ```text
@@ -58,7 +59,7 @@ ok   nor resolve a public name
 == 2. A technician gets an answer that cites the manuals
 ok   alice, a technician, signs in through Forgejo
    alice asks: What is the difference between a resource request and a limit for a container?
-   (the turn took 33 s, on CPU)
+   (the turn took 32 s, on CPU)
 ok   the turn completed
    A **resource request** for a container specifies the minimum amount of a resource (e.g., CPU, memory) that the container expects to be allocated. It acts as a guarantee that the container will have enough resources to run smoothly, but the node may allocate more if available. A **limit** for a container sets the maximum amount of a resource that the container is allowed to use. Unlike requests, li …
    Passages found:
@@ -96,7 +97,7 @@ ok   the answer cites passages the turn found, or none is shown (withheld)
 ok   the turn completed
 ok   nothing was filed by the turn
    The page says: A ticket was proposed, not filed.
-   alice opens /proposals/7c61c1ee-b513-46ec-a8a1-d5f42ad91346. It shows what will be filed, marked as the model's, and where:
+   alice opens /proposals/bde09d23-c41a-4ea1-9ace-1d5f37e8711e. It shows what will be filed, marked as the model's, and where:
    title: High-frequency restarts of web pods in hall 3
    priority: high
    body: Web pods in hall 3 are restarting frequently after deployment. Possible causes include memory or CPU resource exhaustion, leading to OOM (Out of Memory) kills or evictions. Investigate resource limits …
@@ -107,10 +108,13 @@ ok   and files nothing
 ok   alice confirms
    ticket #5 was filed by the executor.
 ok   exactly one ticket filed
+ok   alice reopens the proposal
+   Back on the proposal's page: ticket #5
+ok   the proposal's page says alice confirmed it, names ticket #5, and offers no second confirmation
 
 == 5. Every decision is in the audit log
 ok   the audit chain is unbroken
-   62 rows, 4 of them written during this demo:
+   72 rows, 4 of them written during this demo:
    propose  allowed  alice
    confirm  allowed  alice
    execute  allowed  alice
@@ -118,7 +122,7 @@ ok   the audit chain is unbroken
    make demo now copies the log off the VM, where a later rewrite of these rows would show.
 
 demo: every rule held
-ok audit copy: 5 new rows, 62 in all, last hash 3819548dd69ec2a6842fea496c300c4ab642d61fd3ebc9b23e07a72e934e2cdd, in /mnt/data/airgapai/audit/gateway-audit-7711479058008002593.jsonl
+ok audit copy: 20 new rows, 72 in all, last hash 0a012132bcc10ea50b605223b6324bc44f0ce2d46aa7ea3518306e6673036400, in /mnt/data/airgapai/audit/gateway-audit-7711851951152590881.jsonl
 ```
 
-The run took 2 min 37 s, and the four turns 30 to 42 s each.
+Its four turns took 30 to 42 s each.

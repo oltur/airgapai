@@ -56,8 +56,9 @@ restricted ticket. The threat model listed it as a gap.
 
 ### What this does not prove
 
-- **The pages in the VM.** The change is in the gateway's and executor's images, which reach the VM
-  with the next `make rebuild`.
+- **Every outcome in the VM.** Only the filed one was seen there: after the `make rebuild` of
+  `3d70755` on 2026-11-24, which passed, `make demo` confirmed a proposal and its page named the
+  ticket filed, said it was confirmed, and offered no second confirmation.
 - **That every outcome is reachable through the real executor.** The test logs each result directly
   with the store, as the executor would, since the test's executor is a fake.
 

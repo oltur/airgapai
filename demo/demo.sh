@@ -152,8 +152,15 @@ else
   held "and files nothing" "$before" "$(count_issues)"
   browse alice get "$proposal" >/dev/null
   held "alice confirms" 200 "$(browse alice post "$proposal/confirm" genuine)"
-  say "$(grep -o 'ticket #[0-9]*' /tmp/gateway-test-alice.html | head -1) was filed by the executor."
+  filed="$(grep -o 'ticket #[0-9]*' /tmp/gateway-test-alice.html | head -1)"
+  say "${filed:-No ticket} was filed by the executor."
   held "exactly one ticket filed" "$((before + 1))" "$(count_issues)"
+  # The proposal's own page, not the result page, which also says "filed it as": only the proposal's
+  # says "You confirmed this at", and it must name the same ticket.
+  held "alice reopens the proposal" 200 "$(browse alice get "$proposal")"
+  say "Back on the proposal's page: $(grep -o 'ticket #[0-9]*' /tmp/gateway-test-alice.html | head -1 || true)"
+  held "the proposal's page says alice confirmed it, names ${filed:-the ticket}, and offers no second confirmation" "1 1 0" \
+    "$(shown alice 'You confirmed this at') $(shown alice ">${filed:-no ticket}</a>") $(shown alice 'Confirm and file')"
 fi
 
 step "5. Every decision is in the audit log"
