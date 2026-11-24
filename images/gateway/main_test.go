@@ -712,6 +712,85 @@ func TestConfirmationPage(t *testing.T) {
 		t.Errorf("confirming an expired proposal: %d", got.status)
 	}
 
+	// Once confirmed, the page says what became of the proposal, read from the confirmation and the
+	// logged result, and no longer offers it. The fake executor neither uses a token nor logs a
+	// result, so where one is needed the test does both with the token the gateway sent it.
+	executeAs := func(class, outcome string, detail map[string]any) string {
+		t.Helper()
+		const a = `{"title":"Fifth","body":"b","priority":"low"}`
+		pctx := withSession(ctx, session{identity: identity{user: "alice", role: "technician"}})
+		pe, err := h.store.Propose(pctx, "alice", "create_ticket", []byte(a),
+			[]approval.Source{{Path: "content/en/docs/concepts/overview.md", ChunkIndex: 3, ContentHash: strings.Repeat("ab", 32), Classification: class}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := alice.post("/proposals/"+pe.ID.String()+"/confirm", url.Values{"csrf": {token}}, nil); got.status != http.StatusForbidden {
+			t.Fatalf("the confirmation, refused by the fake executor: %d", got.status)
+		}
+		switch outcome {
+		case "":
+		case "expired":
+			h.clock.advance(h.store.ConfirmTTL)
+		default:
+			calls := h.executor.calls()
+			ex, err := h.store.Execute(pctx, calls[len(calls)-1]["token"].(string), "alice", "create_ticket", []byte(a))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if outcome != "none" {
+				if err := h.store.RecordResult(ctx, ex, outcome, detail); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		return alice.get("/proposals/" + pe.ID.String()).body
+	}
+	h.executor.set(http.StatusForbidden, `{"denied":"denied: the user has no role"}`)
+	for _, c := range []struct {
+		name, class, outcome string
+		detail               map[string]any
+		want, not            []string
+	}{
+		{"not used yet", "public", "", nil, []string{"has not used the confirmation yet", "Reload this page"}, []string{"nothing was filed", "ticket #"}},
+		{"expired unused", "public", "expired", nil, []string{"expired unused, so nothing was filed", "propose it anew"}, []string{"may have been filed"}},
+		{"filed", "public", "succeeded", map[string]any{"issue": 9, "repo": "maintenance/tickets"},
+			[]string{"ticket #9", "/maintenance/tickets/issues/9\""}, []string{"may have been filed"}},
+		{"not filed", "public", "failed", map[string]any{"stage": "forgejo", "status": 422},
+			[]string{"reports that nothing was filed", "propose it anew"}, []string{"may have been filed", "ticket #"}},
+		{"unknown", "public", "unknown", map[string]any{"stage": "forgejo"}, []string{"may have been filed", "Check maintenance/tickets "}, []string{"ticket #", "Only engineers"}},
+		{"unknown, restricted", "restricted", "unknown", map[string]any{"stage": "forgejo"},
+			[]string{"may have been filed", "Check maintenance/tickets-restricted ", "Only engineers can read it"}, []string{"ticket #"}},
+		{"used, no result logged", "public", "none", nil, []string{"may have been filed"}, []string{"ticket #"}},
+		{"a success naming no repository", "public", "succeeded", map[string]any{"issue": 9, "repo": "../../evil"},
+			[]string{"may have been filed"}, []string{"ticket #", "evil"}},
+		{"a success with no issue number", "public", "succeeded", map[string]any{"issue": 0, "repo": "maintenance/tickets"},
+			[]string{"may have been filed"}, []string{"ticket #"}},
+	} {
+		body := executeAs(c.class, c.outcome, c.detail)
+		for _, w := range append(c.want, "You confirmed this at", "cannot be confirmed again") {
+			if !strings.Contains(body, w) {
+				t.Errorf("%s: the page lacks %q", c.name, w)
+			}
+		}
+		for _, w := range append(c.not, "Confirm and file") {
+			if strings.Contains(body, w) {
+				t.Errorf("%s: the page has %q", c.name, w)
+			}
+		}
+	}
+	// A status that cannot be read, here with the audit log unreadable, offers no confirmation.
+	pu := propose("alice", `{"title":"Sixth","body":"b","priority":"low"}`)
+	if _, err := admin.Exec(ctx, "REVOKE SELECT ON gateway.audit FROM gateway_app"); err != nil {
+		t.Fatal(err)
+	}
+	unreadable := alice.get("/proposals/" + pu.ID.String()).body
+	if _, err := admin.Exec(ctx, "GRANT SELECT ON gateway.audit TO gateway_app"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(unreadable, "could not be read") || strings.Contains(unreadable, "Confirm and file") {
+		t.Error("a proposal whose status could not be read still offers confirmation")
+	}
+
 	// Signing out ends the session.
 	if got := alice.post("/logout", url.Values{"csrf": {token}}, nil); got.status != http.StatusSeeOther {
 		t.Errorf("sign out: %d", got.status)
@@ -719,9 +798,10 @@ func TestConfirmationPage(t *testing.T) {
 	if got := alice.get(path); got.status != http.StatusSeeOther {
 		t.Error("the session outlived sign-out")
 	}
-	// The genuine call, two with bad answers, a refusal, a certain failure, seven lost results: none retried.
-	if n := len(h.executor.calls()); n != 12 {
-		t.Errorf("executor calls: %d, want 12", n)
+	// The genuine call, two with bad answers, a refusal, a certain failure, seven lost results and nine
+	// confirmations whose outcome the page then shows: none retried.
+	if n := len(h.executor.calls()); n != 21 {
+		t.Errorf("executor calls: %d, want 21", n)
 	}
 }
 

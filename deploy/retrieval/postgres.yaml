@@ -156,6 +156,8 @@ data:
       prev_sha256 text NOT NULL,
       sha256 text NOT NULL
     );
+    -- A proposal's page finds its result by the proposal it names (ADR 0030).
+    CREATE INDEX audit_result_proposal ON gateway.audit (((detail::jsonb)->>'proposal')) WHERE action = 'result';
 
     RESET ROLE;
     GRANT USAGE ON SCHEMA gateway TO gateway_app;
