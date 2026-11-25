@@ -141,5 +141,6 @@ pinned in `infra/versions.env`, and Ministral 3 3B Instruct (Apache-2.0) at temp
   first baseline's three in every recorded field of all 47 questions, answers included, except the
   seconds each turn took: 45 passed every run, tolerance 0. An unchanged `make eval-generation`
   against it then passed the gate, in 1262 s of turns, the sum of its 47 turns as printed, the same
-  as the third saved run by chance. `make test-eval-gate` has not been run against the new baseline.
-  The figures in ADRs 0027 and 0028 were measured against the first.
+  as the third saved run by chance. On 2026-11-25, `make test-eval-gate` passed against the new
+  baseline, as ADR 0027 records. ADR 0027's other figures, and ADR 0028's, were measured against the
+  first.
