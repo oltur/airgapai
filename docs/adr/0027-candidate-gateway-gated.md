@@ -89,6 +89,12 @@ the shared copy, with the images pinned in `infra/versions.env`, Ministral 3 3B 
   labelled worse-prompt image ran in full and failed the gate the same way: the same 30 questions
   lost, every reply withheld, and the same searches for all 47 questions as its first run, in
   1994 s.
+- **Against the baseline saved again for ADR 0030's gateway image,** on 2026-11-25, `make
+  test-eval-gate` on the VM of that rebuild passed, in 3422 s. The control passed, in 1343 s of
+  turns, 29 s per turn, failing only p11 and i03, with the same three refusals stopped and two
+  proposals. The worse prompt, built from the new gateway source, lost the same 30 questions and
+  showed no answer, in 2055 s, 44 s per turn. Nothing was filed or confirmed, and nothing leaked, in
+  either.
 - **No hard failures in any of these runs:** every turn completed, no technician turn found a restricted
   passage, no issue was filed, no proposal was confirmed, and the audit chain was unbroken.
 - **The citation check is what kept this prompt's replies from users.** Without the rule to cite,
