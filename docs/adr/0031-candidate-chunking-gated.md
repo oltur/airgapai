@@ -40,8 +40,10 @@ the changed index until it is reverted.
   counts, which are what it changes. The retrieval and embedding images must still match, so the
   chunking is the only difference measured. The control must match in everything. An image built from
   another file than the host's is refused, as for prompts.
-- **`make test-retrieval-gate` shows both:** the control must pass and the worse chunking must fail
-  by its results, exit 1. `make eval-retrieval-candidate CANDIDATE=NAME` runs one.
+- **`make test-retrieval-gate` runs both:** the control must pass, and the worse chunking's result
+  is reported, failing the target only if its run does not complete. It was first written to require
+  the worse chunking to fail, which it did not; see the measurements.
+  `make eval-retrieval-candidate CANDIDATE=NAME` runs one.
 - **The run prints how many questions found the same top 5 chunks as the baseline.** It is not
   gated: an index built again need not rank the same, as ADR 0025 found for HNSW.
 
@@ -60,8 +62,12 @@ the changed index until it is reverted.
 
 ## Consequences
 
-- **Phase 4's deliverable can be shown for a chunking change,** without changing what the gateway
-  answers from.
+- **The retrieval gate does not see chunk size.** It asks whether a chunk from an expected page is
+  in the top 3. Chunks of 200 characters still come from the same pages, so the worse chunking kept
+  every hit, though none of its top 5 matched the baseline's. What a smaller chunk loses, the text
+  around a fact, is what the model answers from, and only the generation gate would see that.
+- **A chunking change can be gated without changing what the gateway answers from,** but it passes
+  this gate unless it moves pages out of the top 3.
 - **The candidate is two settings.** Other chunking changes, such as dropping the title or ignoring
   headings, would need their own swap.
 - **A run re-embeds the whole corpus,** about two minutes for the control, so it is not in CI, and not
@@ -71,8 +77,9 @@ the changed index until it is reverted.
 
 ### What this does not prove
 
-- **That the gate fails the worse chunking, until it has run.** Its image reaches the VM's read-only
-  registry only through a `make rebuild`, so it had not run when this was written.
+- **That the worse chunking is harmless.** It passed a gate that cannot see what it changed.
+- **That the generation gate would fail it.** It runs only on the deployed index; asking it through a
+  copy of the gateway that searches the candidate's index has not been built.
 - **That the gate sees a subtler chunking change,** such as 1200 characters instead of 1500.
 - **That no two runs overlap.** The check before a run and its set-up are seconds apart, and a run
   started in between is not refused.
@@ -94,6 +101,14 @@ On 2026-11-26, on the VM of the `make rebuild` of `3d70755`, with the images pin
   as it was.
 - **Torn down:** after the first run, no candidate pod or Job was left, and `rag_candidate` did not
   exist.
+- **After the `make rebuild` of `834a6ac`** on 2026-11-26, which passed, built in 278 s and tested in
+  1007 s, `make test-retrieval-gate` ran in 317 s. The control passed again, with 507 chunks in
+  128 s and the same top 5 as the baseline for 46 of 47 questions. **The worse chunking passed the
+  gate:** 3136 chunks, 1990 public and 1146 restricted, ingested in 175 s; all 33 questions with
+  expected pages met hit@3, 20 of 20 for technicians and 13 of 13 for engineers; no restricted chunk
+  reached a technician at k=20; and the same top 5 as the baseline for 0 of the 47 questions. The
+  target, then written to require exit 1, failed on that. After the run no candidate Job or
+  Deployment was left, and `rag_candidate` did not exist.
 - **A dry run of `worse-chunking`,** on the host over the pinned corpus: 3136 chunks, 1990 public and
   1146 restricted, the largest 289 characters with its title. The deployed chunker gave 507, as in
   ADR 0013. With minChars left at 400, it gave 3005, which is how the second change showed.
