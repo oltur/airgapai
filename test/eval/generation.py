@@ -96,7 +96,7 @@ def wrong_candidate(candidate, reported, deployed):
     if reported is None:
         return "the candidate's image was not reported"
     want = (deployed["images"]["gateway"][0]["image"] if candidate == "deployed"
-            else "10.43.0.50:5000/gateway-candidate@sha256:")
+            else f"{lab.REGISTRY}/gateway-candidate@sha256:")
     if reported == want or (candidate != "deployed" and reported.startswith(want)):
         return None
     return f"the candidate {candidate} ran {reported}, not {want}"

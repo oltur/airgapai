@@ -92,6 +92,7 @@ Each decision, with its results and limits, is in an architecture decision recor
 | [0028](docs/adr/0028-where-the-eval-gates-run.md) | Where the eval gates run |
 | [0029](docs/adr/0029-not-filed-or-unknown.md) | The executor says when nothing was filed |
 | [0030](docs/adr/0030-proposal-page-shows-its-outcome.md) | A confirmed proposal's page shows what became of it |
+| [0031](docs/adr/0031-candidate-chunking-gated.md) | Candidate chunkings, gated beside the deployed index |
 
 ## Requirements
 
@@ -143,6 +144,8 @@ make test-audit-copy # test that the off-VM audit copy catches a rewritten, rech
 make audit-copy      # copy new audit rows off the VM, after checking the copied ones are unchanged
 make measure-retrieval  # measure recall per role against an exact scan, in the VM
 make eval-retrieval  # gate retrieval on the golden set against its saved baseline, in about 5 s
+make eval-retrieval-candidate CANDIDATE=worse-chunking # gate an index with changed chunk sizes, beside the deployed one
+make test-retrieval-gate  # show the retrieval gate passes a copy of the deployed index and fails the worse chunking
 make eval-generation # gate the model's answers on the golden set through the gateway, against its baseline
 make eval-candidate CANDIDATE=worse-prompt # gate a copy of the gateway with a changed prompt; deployed is the control
 make test-eval-gate  # show the gate passes the control and fails the worse prompt by its answers

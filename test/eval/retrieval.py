@@ -12,16 +12,28 @@ that met k=3 in the baseline no longer does, beyond --tolerance such questions, 
 leaked.
 With --save, the run becomes the new baseline.
 
+With --candidate, the questions go instead to an index built beside the deployed one, in a
+database of its own, and a copy of the retrieval service reading it: "deployed" for the deployed
+ingest image, the control, or a name in test/eval/candidates with a .chunk-sizes file, such as
+"worse-chunking", for an ingest image built with those chunk sizes. The deployment is still
+compared with the baseline's, except for the ingest image and the chunk counts a candidate
+changes, so its chunking is the only difference measured. The control must match the baseline in
+those too.
+
 Exit status: 0 if the run passed, 1 if its results were worse or something leaked, 2 for anything
-else, such as other questions, a changed deployment or a crash.
+else, such as other questions, a changed deployment, the wrong candidate or a crash.
 
 The search uses the question, not the query the model would write, so this measures the index and
 the embeddings, not the model's searching.
 """
 import argparse
+import copy
 import datetime
+import hashlib
 import json
 import pathlib
+import re
+import socket
 import sys
 import traceback
 
@@ -30,16 +42,25 @@ import lab  # noqa: E402
 
 GOLDEN = lab.ROOT / "test/eval/golden.json"
 BASELINE = lab.ROOT / "test/eval/baseline/retrieval.json"
+CANDIDATES = lab.ROOT / "test/eval/candidates"
+CANDIDATE_NAME = re.compile(r"[a-z0-9-]+")
+CANDIDATE_SCRIPTS = ["test/lib/gateway-copy.sh", "test/eval/retrieval-candidate.sh"]
+CANDIDATE_PORT = 18192
+CANDIDATE_INGEST = f"{lab.REGISTRY}/ingest-candidate@sha256:"
+EMBED = [w for w in lab.RETRIEVAL if w[2] == "embed"]
 K = 5
 CHAT_K = 3
 LEAK_K = 20
 
 
-def evaluate(golden):
+def evaluate(golden, port=lab.PORT):
     prefix = golden["prefix"]
     results = {}
+
+    def search(query, role, k):
+        return lab.search(query, role, k, port=port)
     for q in golden["questions"]:
-        top = lab.search(q["question"], q["role"], K)
+        top = search(q["question"], q["role"], K)
         paths = [r["path"].removeprefix(prefix) for r in top]
         # What was asked: a baseline is only comparable for the same question, role and pages.
         entry = {"asked": {k: q[k] for k in ("question", "role", "kind", "expect")},
@@ -50,11 +71,11 @@ def evaluate(golden):
             entry["first_hit"] = ranks[0] if ranks else None
             entry[f"hit@{CHAT_K}"] = bool(ranks) and ranks[0] <= CHAT_K
             entry[f"hit@{K}"] = bool(ranks)
-        leaked = [r for r in lab.search(q["question"], "technician", LEAK_K)
+        leaked = [r for r in search(q["question"], "technician", LEAK_K)
                   if r["classification"] != "public"]
         entry["technician_restricted"] = len(leaked)
         if q["kind"] == "leak":  # The control: the question does find restricted text for a reader.
-            found = lab.search(q["question"], "engineer", LEAK_K)
+            found = search(q["question"], "engineer", LEAK_K)
             entry["engineer_restricted"] = sum(r["classification"] != "public" for r in found)
         results[q["id"]] = entry
     return results
@@ -97,11 +118,84 @@ def gate(baseline, results, tolerance, deployed=None):
     return other, worse
 
 
+def same_top(baseline, results):
+    """How many questions found the same chunks, in the same order, as in the baseline. Not gated:
+    an index built again need not come out the same, and chunks of another size never do."""
+    return sum(b.get("top") == results.get(i, {}).get("top")
+               for i, b in baseline["results"].items())
+
+
 def compare(baseline, results, tolerance, deployed=None):
     """Every way this run is worse than the baseline, as lines; empty if it passes. A run of other
     questions, or against another deployment, is not comparable, and fails as such."""
     other, worse = gate(baseline, results, tolerance, deployed)
     return other + worse
+
+
+def candidates():
+    """The candidates that can be asked for: the control, and each chunking in
+    test/eval/candidates."""
+    return ["deployed"] + sorted(p.stem for p in CANDIDATES.glob("*.chunk-sizes")
+                                 if CANDIDATE_NAME.fullmatch(p.stem))
+
+
+def candidate_env(candidate):
+    """What retrieval-candidate.sh needs to set a candidate up: its name and, for a chunking, the
+    hash of its file, which the image must carry as its label."""
+    env = {"ACTION": "up", "CANDIDATE": candidate}
+    if candidate != "deployed":
+        env["CHUNKING_SHA256"] = hashlib.sha256(
+            (CANDIDATES / f"{candidate}.chunk-sizes").read_bytes()).hexdigest()
+    return env
+
+
+def candidate_deployed(deployed, setup):
+    """What a candidate's run measured: the deployed embedding server, and the copies' images and
+    chunk counts, as setup reported them."""
+    return {"images": {"retrieval": [setup.get("retrieval")], "ingest": [setup.get("ingest")],
+                       "embed": deployed["images"]["embed"]},
+            "rows": setup.get("rows", "").split()}
+
+
+def candidate_expected(baseline_deployed, candidate, measured):
+    """The deployment a candidate's run must match: the baseline's, except that a chunking
+    candidate brings its own ingest image and chunk counts. The control brings neither. Returns it,
+    and why the candidate is wrong, if it is."""
+    expected = copy.deepcopy(baseline_deployed)
+    if candidate == "deployed":
+        return expected, None
+    ingest = measured["images"]["ingest"][0] or ""
+    if not ingest.startswith(CANDIDATE_INGEST):
+        return expected, (f"the candidate {candidate} ran {ingest or 'no ingest image'}, "
+                          f"not an image from {CANDIDATE_INGEST}")
+    expected["images"]["ingest"], expected["rows"] = [ingest], measured["rows"]
+    return expected, None
+
+
+def set_up(candidate):
+    """Sets up the candidate's index in the VM, and returns what it reported."""
+    setup = {}
+    for line in lab.in_vm(CANDIDATE_SCRIPTS, candidate_env(candidate)):
+        kind, _, rest = line.partition(" ")
+        if kind in ("ingest", "retrieval", "rows"):
+            setup[kind] = rest
+        print(f"  {line}", flush=True)
+    return setup
+
+
+def check_free():
+    """Refuses, before anything is changed, if another run's candidate is in the VM or its port is
+    in use here: setting up removes whatever is there, which would break that run."""
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", CANDIDATE_PORT)) == 0:
+            raise SystemExit(f"port {CANDIDATE_PORT} is in use, perhaps by another candidate run")
+    for line in lab.in_vm(CANDIDATE_SCRIPTS, {"ACTION": "check"}):
+        print(f"  {line}", flush=True)
+
+
+def tear_down():
+    for line in lab.in_vm(CANDIDATE_SCRIPTS, {"ACTION": "down"}):
+        print(f"  {line}", flush=True)
 
 
 def main():
@@ -113,15 +207,33 @@ def main():
                         help=f"questions that may lose their hit@{CHAT_K}, set from repeated runs")
     parser.add_argument("--save", type=pathlib.Path, nargs="?", const=BASELINE,
                         help="save this run, by default as the baseline")
+    parser.add_argument("--candidate", choices=candidates(),
+                        help="ask an index built beside the deployed one: deployed, the "
+                             "control, or a chunking in test/eval/candidates")
     args = parser.parse_args()
     if args.save and args.baseline:
         parser.error("--save and --baseline together would compare the run with itself")
+    if args.save and args.candidate:
+        parser.error("a baseline is saved from the deployed index, not a candidate's")
     golden = json.loads(GOLDEN.read_text())
 
-    with lab.tunnel():
-        results = evaluate(golden)
+    wrong = None
+    if args.candidate:
+        check_free()
+        try:
+            setup = set_up(args.candidate)
+            with lab.tunnel(CANDIDATE_PORT, "deployment/retrieval-candidate"):
+                results = evaluate(golden, CANDIDATE_PORT)
+            deployed = candidate_deployed(lab.deployed(EMBED, rows=False), setup)
+        finally:
+            tear_down()
+        print(f"candidate {args.candidate}: ingest {setup.get('ingest')}")
+    else:
+        with lab.tunnel():
+            results = evaluate(golden)
+        deployed = lab.deployed()
     run = {"when": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-           "deployed": lab.deployed(), "summary": summarise(results), "results": results}
+           "deployed": deployed, "summary": summarise(results), "results": results}
     for name, value in run["summary"].items():
         print(f"{name}: {value}")
     if args.save:
@@ -129,8 +241,15 @@ def main():
         args.save.write_text(json.dumps(run, indent=2) + "\n")
         print(f"saved {args.save}")
     if args.baseline:
-        other, worse = gate(json.loads(args.baseline.read_text()), results, args.tolerance,
-                            run["deployed"])
+        baseline = json.loads(args.baseline.read_text())
+        if args.candidate:
+            baseline["deployed"], wrong = candidate_expected(baseline.get("deployed"),
+                                                             args.candidate, deployed)
+        print(f"top {K} the same as the baseline's: {same_top(baseline, results)} of "
+              f"{len(results)} questions")
+        other, worse = gate(baseline, results, args.tolerance, run["deployed"])
+        if wrong:
+            other = [wrong] + other
         for line in other + worse:
             print(f"FAIL {line}")
         if other:

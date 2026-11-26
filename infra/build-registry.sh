@@ -153,6 +153,21 @@ for candidate in "$here"/../test/eval/candidates/*.prompt; do
     -t "$local_reg/gateway-candidate:$name" "$local_reg/gateway-candidate:$name" >/dev/null 2>&1
   sign gateway-candidate "$("$crane" digest "$local_reg/gateway-candidate:$name")" "$keys/cosign.key"
 done
+# Candidate ingest images for the retrieval gate: the ingest program with only its chunk sizes
+# replaced by those in test/eval/candidates, and the same pinned corpus. Only
+# test/eval/retrieval-candidate.sh runs them, into a database of their own, while it runs. Signed and
+# labelled like the candidate gateways, with the hash of the chunk-sizes file.
+for candidate in "$here"/../test/eval/candidates/*.chunk-sizes; do
+  [[ -e $candidate ]] || continue # none
+  name="$(basename "$candidate" .chunk-sizes)"
+  [[ $name =~ ^[a-z0-9-]+$ ]] || { echo "candidate $name is not a registry tag: use a-z, 0-9 and -"; exit 1; }
+  cp -r "$here/../images/ingest" "$tmp/ingest-$name"
+  python3 -I "$here/../test/eval/candidates/swap-chunk-sizes.py" "$tmp/ingest-$name/chunk.go" "$candidate"
+  GO_IMAGE_SRC="$tmp/ingest-$name" "$here/build-ingest-image.sh" "$crane" "$corpus" "$local_reg/ingest-candidate:$name" >/dev/null
+  "$crane" mutate --label "airgapai.chunking-sha256=$(sha256sum "$candidate" | cut -d' ' -f1)" \
+    -t "$local_reg/ingest-candidate:$name" "$local_reg/ingest-candidate:$name" >/dev/null 2>&1
+  sign ingest-candidate "$("$crane" digest "$local_reg/ingest-candidate:$name")" "$keys/cosign.key"
+done
 
 "$cosign" verify --key "$keys/cosign.pub" --insecure-ignore-tlog --allow-http-registry "$local_reg/probe@$probe" >/dev/null 2>&1 \
   || { echo "signature does not verify"; exit 1; }

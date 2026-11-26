@@ -2,7 +2,7 @@ GITLEAKS_VERSION := 8.30.1
 export PATH := $(HOME)/.local/bin:$(PATH)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-generation eval-candidate test-eval-gate demo rebuild
+.PHONY: help setup check test-secrets tools lint test-db hours bundle vm-up vm-ssh vm-down test-hardening test-signed-images test-gitops test-egress test-rls test-ingest test-retrieval test-executor test-gateway test-adversarial test-poisoned audit-copy test-audit-copy measure-inference measure-retrieval eval-retrieval eval-retrieval-candidate test-retrieval-gate eval-generation eval-candidate test-eval-gate demo rebuild
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-14s %s\n", $$1, $$2}'
@@ -112,6 +112,16 @@ measure-retrieval: ## Measure recall per role against an exact scan, and search 
 
 eval-retrieval: ## Gate retrieval on the golden set in the VM against the saved baseline, and check nothing leaks
 	@test/eval/retrieval.py --baseline
+
+eval-retrieval-candidate: ## Gate a candidate index beside the deployed one, CANDIDATE=deployed or a chunking in test/eval/candidates
+	@[ -n "$(CANDIDATE)" ] || { echo "set CANDIDATE: deployed, or a name in test/eval/candidates"; exit 1; }
+	@test/eval/retrieval.py --baseline --candidate $(CANDIDATE)
+
+test-retrieval-gate: ## Show the retrieval gate passing a copy of the deployed index and failing the worse chunking
+	@$(MAKE) --no-print-directory eval-retrieval-candidate CANDIDATE=deployed
+	@test/eval/retrieval.py --baseline --candidate worse-chunking; code=$$?; \
+	if [ $$code -eq 1 ]; then echo "ok   the gate failed the worse chunking by its results, as it should"; \
+	else echo "FAIL the worse chunking should fail the gate by its results, exit 1, but exited $$code"; exit 1; fi
 
 eval-generation: ## Gate the model's answers on the golden set through the deployed gateway, against the saved baseline
 	@test/eval/generation.py --baseline

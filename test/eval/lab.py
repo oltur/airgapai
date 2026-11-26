@@ -14,6 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 VM_SSH = str(ROOT / "infra/vm-ssh.sh")
 KUBECTL = "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
 PORT = 18191
+REGISTRY = "10.43.0.50:5000"  # the in-cluster registry, as images are named in the cluster
 
 
 def vm(command):
@@ -25,16 +26,17 @@ def url(port=PORT):
 
 
 @contextlib.contextmanager
-def tunnel(port=PORT):
-    """Forward the retrieval service to the host. The terminal makes the remote forward end with
-    SSH. The port must be free, so that a forward left from another run is never measured."""
+def tunnel(port=PORT, target="svc/retrieval"):
+    """Forward the retrieval service, or another target in its namespace, to the host. The terminal
+    makes the remote forward end with SSH. The port must be free, so that a forward left from
+    another run is never measured."""
     with socket.socket() as probe:
         if probe.connect_ex(("127.0.0.1", port)) == 0:
             raise SystemExit(f"port {port} is already in use, perhaps by a forward left running")
     with tempfile.TemporaryFile("w+") as errors:
         process = subprocess.Popen(
             [VM_SSH, "-tt", "-L", f"{port}:127.0.0.1:{port}",
-             f"{KUBECTL} -n retrieval port-forward svc/retrieval {port}:8080 >/dev/null"],
+             f"{KUBECTL} -n retrieval port-forward {target} {port}:8080 >/dev/null"],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors)
         try:
             for _ in range(60):
@@ -84,7 +86,7 @@ RETRIEVAL = [("retrieval", "deployment", "retrieval"), ("retrieval", "job", "ing
 GENERATION = RETRIEVAL + [("gateway", "deployment", "gateway"), ("inference", "deployment", "chat")]
 
 
-def deployed(workloads=RETRIEVAL, args=False):
+def deployed(workloads=RETRIEVAL, args=False, rows=True):
     """What the run measured: the images of the workloads that make the result what it is, and the
     rows by label. With args, also each container's arguments and environment, which change a
     server as much: the environment as written, so a secret appears only as its Secret's name."""
@@ -95,7 +97,7 @@ def deployed(workloads=RETRIEVAL, args=False):
         containers = spec.get("initContainers", []) + spec["containers"]
         images[name] = [{"image": c["image"], "args": c.get("args", []), "env": c.get("env", [])}
                         if args else c["image"] for c in containers]
-    return {"images": images, "rows": chunk_counts()}
+    return {"images": images, "rows": chunk_counts()} if rows else {"images": images}
 
 
 def incomparable(baseline_asked, asked):
