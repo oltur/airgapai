@@ -117,13 +117,13 @@ eval-retrieval-candidate: ## Gate a candidate index beside the deployed one, CAN
 	@[ -n "$(CANDIDATE)" ] || { echo "set CANDIDATE: deployed, or a name in test/eval/candidates"; exit 1; }
 	@test/eval/retrieval.py --baseline --candidate $(CANDIDATE)
 
-test-retrieval-gate: ## Show the retrieval gate passing a copy of the deployed index, and what it does with the worse chunking
+test-retrieval-gate: ## Show the retrieval gate passing a copy of the deployed index, and the worse chunking, as ADR 0031 measured
 	@$(MAKE) --no-print-directory eval-retrieval-candidate CANDIDATE=deployed
 	@test/eval/retrieval.py --baseline --candidate worse-chunking; code=$$?; \
 	case $$code in \
-	  0) echo "info the gate passed the worse chunking: it scores pages, and smaller chunks keep their page (ADR 0031)" ;; \
-	  1) echo "info the gate failed the worse chunking by its results" ;; \
-	  *) echo "FAIL the worse chunking's run did not complete, exit $$code"; exit 1 ;; \
+	  0) echo "ok   the gate passed the worse chunking, as ADR 0031 measured: it does not see chunk size" ;; \
+	  1) echo "FAIL the gate now fails the worse chunking by its results, unlike ADR 0031's run: record what changed"; exit 1 ;; \
+	  *) echo "FAIL the worse chunking's run was refused or did not complete, exit $$code: see the lines above"; exit 1 ;; \
 	esac
 
 eval-generation: ## Gate the model's answers on the golden set through the deployed gateway, against the saved baseline
