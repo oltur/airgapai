@@ -77,7 +77,7 @@ added that archives `maintenance/tickets` and confirms a proposal. Forgejo answe
 `423`, and the gateway answered `502` with the page titled "Not filed", the reason "Forgejo refused
 the ticket (423)", and no "Result unknown". The issue count did not change, one `result` row was
 logged as `failed`, and the reopened proposal's page said nothing was filed and offered no second
-confirmation. Once the repository was unarchived, the next confirmation in the same test filed its
+confirmation. Once the repository was unarchived, a control confirmation right after filed its
 ticket.
 
 On 2026-11-24, `make test-db` passed, with:

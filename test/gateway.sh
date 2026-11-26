@@ -4,8 +4,8 @@
 # escaped, and a confirmation files exactly one ticket through the executor. Forms without the
 # session's CSRF token or from another origin are refused, a second confirmation is refused, a team
 # change after sign-in is caught at execution, and a ticket Forgejo refuses is shown as not filed, with
-# nothing filed. Every decision is in an unbroken audit chain, and the
-# gateway's network paths reach PostgreSQL, Forgejo and the executor only, with controls.
+# nothing filed. Every decision is in an unbroken audit chain, and the gateway's network paths reach
+# PostgreSQL, Forgejo and the executor only, with controls.
 # test/lib/probe.sh, forgejo.sh, browser.sh, gateway-copy.sh and stub.sh are sent ahead of it.
 #
 # The browser reaches the gateway and Forgejo through kubectl port-forward, on the addresses the
@@ -35,11 +35,23 @@ cleanup() {
   # shellcheck disable=SC2086 # two PIDs
   kill $forwards 2>/dev/null
   stop_stub
-  [[ -n ${archived:-} ]] && status PATCH /repos/maintenance/tickets '{"archived": false}' >/dev/null
+  [[ -n $archived ]] && archive_tickets false
+  if [[ -n $archived ]]; then
+    echo "FAIL maintenance/tickets could not be unarchived: it refuses every ticket until it is"
+    exit 1
+  fi
   rm -f /tmp/gateway-test-* /tmp/gateway-browser.py
   stop_probes gateway probe-gateway probe-gateway-other
 }
 trap cleanup EXIT
+# archive_tickets true|false: archives or restores maintenance/tickets, leaving Forgejo's status in
+# archive_status. Called directly, not in $(...), so that archived, which stays set until a restore is
+# answered 200, reaches cleanup, which then tries again.
+archived="" archive_status=""
+archive_tickets() {
+  archive_status="$(status PATCH /repos/maintenance/tickets "{\"archived\": $1}")"
+  if [[ $1 == true ]]; then archived=1; elif [[ $archive_status == 200 ]]; then archived=""; fi
+}
 for _ in $(seq 30); do
   curl -fs http://127.0.0.1:18092/ready >/dev/null && curl -fs http://127.0.0.1:13000/api/healthz >/dev/null && break
   sleep 1
@@ -121,21 +133,27 @@ status PUT "/teams/$technicians/members/alice" >/dev/null
 result "no issue filed" "$((before + 1))" "$(issues)"
 
 echo "== A ticket Forgejo refuses is shown as not filed (ADR 0029)"
-# Forgejo refuses an issue on an archived repository with a 4xx, which the executor reports as certain.
+# Forgejo refuses an issue on an archived repository with a 4xx, 423 in the version pinned, which the
+# executor reports as certain. The check is on any 4xx, the rule, and the status is printed.
 third="$(propose "Pump 6 leaks")"
-archived=1
-result "maintenance/tickets archived" 200 "$(status PATCH /repos/maintenance/tickets '{"archived": true}')"
+archive_tickets true
+result "maintenance/tickets archived" 200 "$archive_status"
 browse alice get "/proposals/$third" >/dev/null
 result "alice confirms while Forgejo refuses tickets" 502 "$(browse alice post "/proposals/$third/confirm" genuine)"
 result "the page says not filed" 1 "$(shown alice '<h1>Not filed</h1>')"
-result "with Forgejo's refusal as the reason" 1 "$(shown alice 'Forgejo refused the ticket (423)')"
+result "with Forgejo's 4xx refusal as the reason" 1 "$(shown alice 'Forgejo refused the ticket (4')"
+echo "info $(grep -o 'Forgejo refused the ticket ([0-9]*)' /tmp/gateway-test-alice.html | head -1)"
 result "and not that it may have been filed" 0 "$(shown alice 'Result unknown')"
-result "maintenance/tickets unarchived" 200 "$(status PATCH /repos/maintenance/tickets '{"archived": false}')"
-archived=""
+archive_tickets false
+result "maintenance/tickets unarchived" 200 "$archive_status"
 result "nothing was filed" "$((before + 1))" "$(issues)"
 result "alice reopens the proposal" 200 "$(browse alice get "/proposals/$third")"
 result "its page says nothing was filed" 1 "$(shown alice 'The executor reports that nothing was filed.')"
 result "and offers no second confirmation" 0 "$(shown alice 'Confirm and file')"
+fourth="$(propose "Pump 7 leaks")"
+browse alice get "/proposals/$fourth" >/dev/null
+result "once unarchived, a confirmation files its ticket (control)" 200 "$(browse alice post "/proposals/$fourth/confirm" genuine)"
+result "one more issue" "$((before + 2))" "$(issues)"
 
 # The stub was only for making proposals. Remove it now, so the rest runs against the deployed setup.
 stop_stub
@@ -146,9 +164,9 @@ echo "== Audit"
 chain="$(cli verify)"
 result "audit chain unbroken" 0 "$(json "d['first_bad_row']" <<<"$chain")"
 echo "info audit rows: $(json "d['rows']" <<<"$chain")"
-result "the three confirmations logged" "$((confirms_before + 3))" "$(decisions confirm allowed)"
+result "the four confirmations logged" "$((confirms_before + 4))" "$(decisions confirm allowed)"
 result "the second confirmation's refusal logged" "$((refused_before + 1))" "$(decisions confirm denied)"
-result "two executions allowed" "$((executed_before + 2))" "$(decisions execute allowed)"
+result "three executions allowed" "$((executed_before + 3))" "$(decisions execute allowed)"
 result "one of them logged as not filed" "$((not_filed_before + 1))" "$(decisions result failed)"
 result "the execution after the team change refused and logged" "$((exec_refused_before + 1))" "$(decisions execute denied)"
 
