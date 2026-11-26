@@ -25,16 +25,17 @@ def url(port=PORT):
 
 
 @contextlib.contextmanager
-def tunnel(port=PORT):
-    """Forward the retrieval service to the host. The terminal makes the remote forward end with
-    SSH. The port must be free, so that a forward left from another run is never measured."""
+def tunnel(port=PORT, target="svc/retrieval"):
+    """Forward the retrieval service, or another target in its namespace, to the host. The terminal
+    makes the remote forward end with SSH. The port must be free, so that a forward left from
+    another run is never measured."""
     with socket.socket() as probe:
         if probe.connect_ex(("127.0.0.1", port)) == 0:
             raise SystemExit(f"port {port} is already in use, perhaps by a forward left running")
     with tempfile.TemporaryFile("w+") as errors:
         process = subprocess.Popen(
             [VM_SSH, "-tt", "-L", f"{port}:127.0.0.1:{port}",
-             f"{KUBECTL} -n retrieval port-forward svc/retrieval {port}:8080 >/dev/null"],
+             f"{KUBECTL} -n retrieval port-forward {target} {port}:8080 >/dev/null"],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors)
         try:
             for _ in range(60):

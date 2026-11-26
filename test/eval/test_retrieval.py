@@ -4,7 +4,10 @@ import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from retrieval import compare, gate  # noqa: E402
+import retrieval  # noqa: E402
+
+CANDIDATE_INGEST, compare, gate = retrieval.CANDIDATE_INGEST, retrieval.compare, retrieval.gate
+candidate_deployed, candidate_expected = retrieval.candidate_deployed, retrieval.candidate_expected
 
 
 def run(**results):
@@ -85,3 +88,45 @@ class Gate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+BASE_DEPLOYED = {"images": {"retrieval": ["r"], "ingest": ["i"], "embed": ["e"]},
+                 "rows": ["public=314", "restricted=193"]}
+
+
+def measured(ingest="i", retrieval="r", rows="public=314 restricted=193"):
+    return candidate_deployed({"images": {"embed": ["e"]}},
+                              {"ingest": ingest, "retrieval": retrieval, "rows": rows})
+
+
+class Candidate(unittest.TestCase):
+    def check(self, candidate, now):
+        expected, wrong = candidate_expected(BASE_DEPLOYED, candidate, now)
+        base = {"deployed": expected, "results": {"a": hit(True)}}
+        return wrong, compare(base, {"a": hit(True)}, 0, now)
+
+    def test_the_control_matching_the_baseline_passes(self):
+        self.assertEqual(self.check("deployed", measured()), (None, []))
+
+    def test_the_control_with_other_chunks_fails_as_another_deployment(self):
+        wrong, failures = self.check("deployed", measured(rows="public=1 restricted=1"))
+        self.assertIsNone(wrong)
+        self.assertTrue(any("deployed" in f for f in failures))
+
+    def test_a_chunking_candidate_may_change_the_ingest_image_and_rows(self):
+        now = measured(ingest=CANDIDATE_INGEST + "f" * 64, rows="public=1914 restricted=1091")
+        self.assertEqual(self.check("worse-chunking", now), (None, []))
+
+    def test_a_chunking_candidate_with_another_retrieval_image_fails(self):
+        now = measured(ingest=CANDIDATE_INGEST + "f" * 64, retrieval="other")
+        self.assertTrue(any("deployed" in f for f in self.check("worse-chunking", now)[1]))
+
+    def test_a_chunking_candidate_running_the_deployed_ingest_image_is_wrong(self):
+        wrong, _ = self.check("worse-chunking", measured(ingest="i"))
+        self.assertIn("not an image from", wrong)
+
+    def test_the_baseline_is_not_changed_in_place(self):
+        now = measured(ingest=CANDIDATE_INGEST + "f" * 64)
+        candidate_expected(BASE_DEPLOYED, "worse-chunking", now)
+        self.assertEqual(BASE_DEPLOYED["images"]["ingest"], ["i"])
+
