@@ -64,12 +64,21 @@ the issue does not exist.
 - **The stored-arguments cause, in a test.** The arguments reach that step only after they are
   canonicalised and checked against the proposal's hash, so no test makes them fail to read there.
 
-- **That Forgejo never writes an issue before answering 4xx.** It is how its API is meant to work, and
-  not tested against Forgejo itself: the tests use a fake Forgejo.
-- **The "Not filed" page in the VM.** The change was deployed by the `make rebuild` of `3d70755` on
-  2026-11-24, which passed, but no VM test makes Forgejo refuse, so that page has not been seen there.
+- **That Forgejo never writes an issue before answering 4xx.** It is how its API is meant to work.
+  Against Forgejo itself, only one 4xx is tested, the 423 for an archived repository, which wrote
+  nothing. The other 4xx causes are tested against a fake Forgejo.
+- **That the VM test would fail with the rule broken.** Breaking it was shown only in `make test-db`:
+  the VM runs the pinned images, and a broken image is not built for it.
 
 ## Measurements
+
+On 2026-11-26, `make test-gateway` passed on the VM of the `make rebuild` of `3d70755`, with a step
+added that archives `maintenance/tickets` and confirms a proposal. Forgejo answered the create call
+`423`, and the gateway answered `502` with the page titled "Not filed", the reason "Forgejo refused
+the ticket (423)", and no "Result unknown". The issue count did not change, one `result` row was
+logged as `failed`, and the reopened proposal's page said nothing was filed and offered no second
+confirmation. Once the repository was unarchived, a control confirmation right after filed its
+ticket.
 
 On 2026-11-24, `make test-db` passed, with:
 

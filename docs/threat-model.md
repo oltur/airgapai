@@ -180,7 +180,7 @@ The rule is to fail closed: when a part the decision depends on is missing, noth
 | What fails | What happens | Evidence |
 |---|---|---|
 | The audit write | The action fails, and the confirmation stays unused | `make test-db`, ADR 0015 |
-| Forgejo rejects the create call, with a 4xx | Logged as `failed`. The executor tells the gateway nothing was filed, and the page, titled "Not filed", says so | `make test-db`, ADRs 0016 and 0029 |
+| Forgejo rejects the create call, with a 4xx | Logged as `failed`. The executor tells the gateway nothing was filed, and the page, titled "Not filed", says so | `make test-db`; `make test-gateway` with an archived repository's 423; ADRs 0016 and 0029 |
 | Forgejo gives no answer to the create call, or a 5xx | The outcome is logged as `unknown`, since the issue may exist | `make test-db`, ADRs 0016 and 0029 |
 | Forgejo, at sign-in | The sign-in fails | The gateway's code; not tested |
 | The executor refuses | The page says nothing was filed. The proposal cannot be confirmed again, and has to be proposed again | `make test-db`, ADR 0017 |
