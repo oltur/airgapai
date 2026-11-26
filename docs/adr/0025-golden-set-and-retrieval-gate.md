@@ -84,8 +84,9 @@ known answers.
 
 ### What this does not prove
 
-- **That the gate fails a worse change.** Its failure rules are unit tested, but no worse chunking,
-  prompt or model has been run against it yet.
+- **That the gate fails a worse change.** Its failure rules are unit tested, but no worse change
+  has failed it. ADR 0031 ran chunks of 200 characters, against 1500, and the gate passed them: it
+  scores pages, and smaller chunks keep their page.
 - **That retrieval is good.** It shows that, for these 47 questions, the expected page is found.
 - **Anything about answers.** That is the generation eval's job.
 

@@ -22,5 +22,6 @@ The candidates:
   reference material. It is here to show that the generation gate fails it.
 - `worse-chunking.chunk-sizes` is deliberately worse: at most 200 characters of a page in each chunk,
   after its title, against 1500 deployed, with minChars 50 against 400, in about the same ratio. A
-  dry run over the corpus cut it into 3136 chunks, against 507. It is here to show that the retrieval
-  gate fails it.
+  dry run over the corpus cut it into 3136 chunks, against 507. It was meant to show that the
+  retrieval gate fails it. It passed: the gate scores pages, and smaller chunks keep their page. See
+  ADR 0031.

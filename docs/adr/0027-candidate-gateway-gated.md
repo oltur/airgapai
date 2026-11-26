@@ -50,8 +50,9 @@ about its answers. Deploying it also takes a rebuild, since the registry in the 
 
 - **Each candidate costs a rebuild to add,** since its image goes into the bundle. Running it again
   does not.
-- **A prompt is the only kind of candidate so far.** A worse chunking change or model needs another
-  kind: a copy of the ingestion and retrieval, or of the chat server.
+- **A prompt was the first kind of candidate.** ADR 0031 added a chunking candidate, with copies of
+  the ingestion and retrieval, gated by retrieval only. A worse model needs a copy of the chat
+  server.
 - **The candidate shares the deployment's database, executor and audit log,** as the stub's copy
   does. The run's hard failures still check that nothing was filed or confirmed.
 
@@ -62,8 +63,9 @@ about its answers. Deploying it also takes a rebuild, since the registry in the 
   refusals, is a subtler change, and how small a change the gate can see is not measured.
 - **That the refusal and leak checks see a worse prompt.** They passed for this one only because the
   gateway withheld every reply. The answer questions are what failed it.
-- **Anything about a worse chunking change or model.** Neither has been run. Phase 4's done-when
-  names any one of the three; the others are for when there is a reason to change them.
+- **Anything about a worse chunking change or model through this gate.** Neither has been run
+  through it. ADR 0031 ran a worse chunking through the retrieval gate, which passed it. Phase 4's
+  done-when names any one of the three.
 - **That a candidate behaves as it would deployed.** It runs as a copy, with the deployed gateway's
   settings, against the same servers. The control shows the copy changes nothing on its own, for this
   run.
