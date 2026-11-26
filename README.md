@@ -144,7 +144,7 @@ make test-audit-copy # test that the off-VM audit copy catches a rewritten, rech
 make audit-copy      # copy new audit rows off the VM, after checking the copied ones are unchanged
 make measure-retrieval  # measure recall per role against an exact scan, in the VM
 make eval-retrieval  # gate retrieval on the golden set against its saved baseline, in about 5 s
-make eval-retrieval-candidate CANDIDATE=worse-chunking # gate an index with a changed chunk size, beside the deployed one
+make eval-retrieval-candidate CANDIDATE=worse-chunking # gate an index with changed chunk sizes, beside the deployed one
 make test-retrieval-gate  # show the retrieval gate passes a copy of the deployed index and fails the worse chunking
 make eval-generation # gate the model's answers on the golden set through the gateway, against its baseline
 make eval-candidate CANDIDATE=worse-prompt # gate a copy of the gateway with a changed prompt; deployed is the control

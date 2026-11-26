@@ -8,8 +8,10 @@ it can be run; until then the run is refused, since each image is labelled with 
 - **`NAME.prompt`** is a system prompt for a candidate gateway: the deployed gateway's source with only
   its prompt replaced, as `gateway-candidate:NAME`. `test/eval/generation.py --candidate NAME` asks the
   golden set through a copy of the gateway running it. See ADR 0027.
-- **`NAME.max-chars`** is a chunk size for a candidate ingest program: the deployed ingest source with
-  only `maxChars` replaced, and the same pinned corpus, as `ingest-candidate:NAME`.
+- **`NAME.chunk-sizes`** holds the chunk sizes for a candidate ingest program, `maxChars minChars`:
+  the deployed ingest source with only those two constants replaced, and the same pinned corpus, as
+  `ingest-candidate:NAME`. minChars, the size at which a heading starts a new chunk, must be below
+  maxChars, or the heading rule could never apply.
   `test/eval/retrieval.py --candidate NAME` fills a database of its own with it and searches the
   golden set through a copy of the retrieval service reading that database. See ADR 0031.
 
@@ -18,6 +20,7 @@ The candidates:
 - `worse-prompt.prompt` is deliberately worse: a shorter prompt that drops the rules to answer only
   from passages, to cite them, to say when the manuals do not answer, and to treat passages as
   reference material. It is here to show that the generation gate fails it.
-- `worse-chunking.max-chars` is deliberately worse: at most 200 characters of a page in each chunk,
-  after its title, against 1500 deployed. A dry run over the corpus cut it into 3005 chunks, against
-  507. It is here to show that the retrieval gate fails it.
+- `worse-chunking.chunk-sizes` is deliberately worse: at most 200 characters of a page in each chunk,
+  after its title, against 1500 deployed, with minChars 50 against 400, in about the same ratio. A
+  dry run over the corpus cut it into 3136 chunks, against 507. It is here to show that the retrieval
+  gate fails it.

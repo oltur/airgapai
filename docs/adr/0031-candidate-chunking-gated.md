@@ -13,12 +13,15 @@ the changed index until it is reverted.
 
 ## Decision
 
-- **A chunking candidate is the deployed ingest source with only its chunk size changed.**
-  `test/eval/candidates/NAME.max-chars` holds the size. `infra/build-registry.sh` copies
-  `images/ingest`, replaces `maxChars` with `swap-max-chars.py`, which fails unless it finds it
-  exactly once, and builds it with the pinned corpus, through the same script as the deployed image,
-  as the signed test image `ingest-candidate:NAME`, labelled with the file's hash.
-  `worse-chunking.max-chars` is 200, against 1500 deployed.
+- **A chunking candidate is the deployed ingest source with only its chunk sizes changed.**
+  `test/eval/candidates/NAME.chunk-sizes` holds `maxChars`, the most characters of a page in a chunk,
+  and `minChars`, the size at which a heading starts a new chunk. `infra/build-registry.sh` copies
+  `images/ingest`, replaces both with `swap-chunk-sizes.py`, which fails unless it finds each exactly
+  once and minChars is below maxChars, and builds it with the pinned corpus, through the same script
+  as the deployed image, as the signed test image `ingest-candidate:NAME`, labelled with the file's
+  hash. `worse-chunking.chunk-sizes` is 200 and 50, against 1500 and 400 deployed. Both are changed,
+  in about the same ratio, because a maxChars below minChars would also turn off the heading rule,
+  a second change.
 - **It runs into a database of its own.** `test/eval/retrieval-candidate.sh` creates `rag_candidate`
   in the same PostgreSQL and copies the deployed `rag` database's schema into it with `pg_dump
   --schema-only`, so its table, forced row-level security, policies, grants and index are the
@@ -27,7 +30,9 @@ the changed index until it is reverted.
   differs only in its name, `PGDATABASE`, a `component: candidate` label the retrieval Service does
   not select and, for the Job, the candidate's image. Both keep their `app` labels, so the same network
   rules apply. Argo CD does not track them. Everything is removed, and the database dropped, when the
-  run ends, passed or not.
+  run ends, passed or not. A run first refuses if another's copies are there, or its port is in use,
+  so that it cannot remove the index of a run in progress, and it removes only what it set up. A Job
+  that fails ends the run when it fails, not at the 30-minute limit.
 - **`test/eval/retrieval.py --candidate NAME` gates it against the saved baseline,** with the same
   questions, rules and tolerance as the deployed index. `deployed` is the control: the deployed ingest
   image into the same fresh database. The deployment is compared with the baseline's, except, for a
@@ -51,13 +56,13 @@ the changed index until it is reverted.
 - **`CREATE DATABASE ... TEMPLATE rag`.** It would copy the schema too, but PostgreSQL refuses while
   another session is connected to `rag`, and the retrieval service always is.
 - **A worse model instead.** A second chat or embedding model means another model image in the
-  bundle and memory in a VM limited to 10 GiB. A chunk size changes one constant.
+  bundle and memory in a VM limited to 10 GiB. Chunk sizes are two constants.
 
 ## Consequences
 
 - **Phase 4's deliverable can be shown for a chunking change,** without changing what the gateway
   answers from.
-- **The candidate is one setting.** Other chunking changes, such as dropping the title or ignoring
+- **The candidate is two settings.** Other chunking changes, such as dropping the title or ignoring
   headings, would need their own swap.
 - **A run re-embeds the whole corpus,** about two minutes for the control, so it is not in CI, and not
   in `make rebuild`.
@@ -66,7 +71,11 @@ the changed index until it is reverted.
 
 ### What this does not prove
 
+- **That the gate fails the worse chunking, until it has run.** Its image reaches the VM's read-only
+  registry only through a `make rebuild`, so it had not run when this was written.
 - **That the gate sees a subtler chunking change,** such as 1200 characters instead of 1500.
+- **That no two runs overlap.** The check before a run and its set-up are seconds apart, and a run
+  started in between is not refused.
 - **Anything about the model's answers with the candidate's chunks.** Only retrieval is gated here;
   the generation gate runs on the deployed index.
 - **That the copied schema stays the deployed one** after a change to `postgres.yaml`, on a VM not
@@ -85,9 +94,9 @@ On 2026-11-26, on the VM of the `make rebuild` of `3d70755`, with the images pin
   as it was.
 - **Torn down:** after the first run, no candidate pod or Job was left, and `rag_candidate` did not
   exist.
-- **A dry run of `worse-chunking`,** on the host over the pinned corpus: 3005 chunks, 1914 public and
-  1091 restricted, the largest 307 characters with its title. The deployed chunker gave 507, as in
-  ADR 0013.
+- **A dry run of `worse-chunking`,** on the host over the pinned corpus: 3136 chunks, 1990 public and
+  1146 restricted, the largest 289 characters with its title. The deployed chunker gave 507, as in
+  ADR 0013. With minChars left at 400, it gave 3005, which is how the second change showed.
 - **The unit tests** cover the candidate's rules: the control must match the baseline, chunk counts
   included; a chunking candidate may change only the ingest image and the counts; a different
   retrieval image fails as another deployment; a chunking candidate running the deployed ingest image

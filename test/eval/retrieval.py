@@ -14,8 +14,8 @@ With --save, the run becomes the new baseline.
 
 With --candidate, the questions go instead to an index built beside the deployed one, in a
 database of its own, and a copy of the retrieval service reading it: "deployed" for the deployed
-ingest image, the control, or a name in test/eval/candidates with a .max-chars file, such as
-"worse-chunking", for an ingest image built with that chunk size. The deployment is still
+ingest image, the control, or a name in test/eval/candidates with a .chunk-sizes file, such as
+"worse-chunking", for an ingest image built with those chunk sizes. The deployment is still
 compared with the baseline's, except for the ingest image and the chunk counts a candidate
 changes, so its chunking is the only difference measured. The control must match the baseline in
 those too.
@@ -33,6 +33,7 @@ import hashlib
 import json
 import pathlib
 import re
+import socket
 import sys
 import traceback
 
@@ -45,7 +46,8 @@ CANDIDATES = lab.ROOT / "test/eval/candidates"
 CANDIDATE_NAME = re.compile(r"[a-z0-9-]+")
 CANDIDATE_SCRIPTS = ["test/lib/gateway-copy.sh", "test/eval/retrieval-candidate.sh"]
 CANDIDATE_PORT = 18192
-CANDIDATE_INGEST = "10.43.0.50:5000/ingest-candidate@sha256:"
+CANDIDATE_INGEST = f"{lab.REGISTRY}/ingest-candidate@sha256:"
+EMBED = [w for w in lab.RETRIEVAL if w[2] == "embed"]
 K = 5
 CHAT_K = 3
 LEAK_K = 20
@@ -131,19 +133,19 @@ def compare(baseline, results, tolerance, deployed=None):
 
 
 def candidates():
-    """The candidates that can be asked for: the control, and each chunk size in
+    """The candidates that can be asked for: the control, and each chunking in
     test/eval/candidates."""
-    return ["deployed"] + sorted(p.stem for p in CANDIDATES.glob("*.max-chars")
+    return ["deployed"] + sorted(p.stem for p in CANDIDATES.glob("*.chunk-sizes")
                                  if CANDIDATE_NAME.fullmatch(p.stem))
 
 
 def candidate_env(candidate):
-    """What retrieval-candidate.sh needs to set a candidate up: its name and, for a chunk size, the
+    """What retrieval-candidate.sh needs to set a candidate up: its name and, for a chunking, the
     hash of its file, which the image must carry as its label."""
     env = {"ACTION": "up", "CANDIDATE": candidate}
     if candidate != "deployed":
         env["CHUNKING_SHA256"] = hashlib.sha256(
-            (CANDIDATES / f"{candidate}.max-chars").read_bytes()).hexdigest()
+            (CANDIDATES / f"{candidate}.chunk-sizes").read_bytes()).hexdigest()
     return env
 
 
@@ -181,6 +183,16 @@ def set_up(candidate):
     return setup
 
 
+def check_free():
+    """Refuses, before anything is changed, if another run's candidate is in the VM or its port is
+    in use here: setting up removes whatever is there, which would break that run."""
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", CANDIDATE_PORT)) == 0:
+            raise SystemExit(f"port {CANDIDATE_PORT} is in use, perhaps by another candidate run")
+    for line in lab.in_vm(CANDIDATE_SCRIPTS, {"ACTION": "check"}):
+        print(f"  {line}", flush=True)
+
+
 def tear_down():
     for line in lab.in_vm(CANDIDATE_SCRIPTS, {"ACTION": "down"}):
         print(f"  {line}", flush=True)
@@ -197,7 +209,7 @@ def main():
                         help="save this run, by default as the baseline")
     parser.add_argument("--candidate", choices=candidates(),
                         help="ask an index built beside the deployed one: deployed, the "
-                             "control, or a chunk size in test/eval/candidates")
+                             "control, or a chunking in test/eval/candidates")
     args = parser.parse_args()
     if args.save and args.baseline:
         parser.error("--save and --baseline together would compare the run with itself")
@@ -207,11 +219,12 @@ def main():
 
     wrong = None
     if args.candidate:
+        check_free()
         try:
             setup = set_up(args.candidate)
             with lab.tunnel(CANDIDATE_PORT, "deployment/retrieval-candidate"):
                 results = evaluate(golden, CANDIDATE_PORT)
-            deployed = candidate_deployed(lab.deployed(), setup)
+            deployed = candidate_deployed(lab.deployed(EMBED, rows=False), setup)
         finally:
             tear_down()
         print(f"candidate {args.candidate}: ingest {setup.get('ingest')}")

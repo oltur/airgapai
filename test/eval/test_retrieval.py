@@ -86,9 +86,6 @@ class Gate(unittest.TestCase):
         self.assertEqual(len(worse), 1)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 BASE_DEPLOYED = {"images": {"retrieval": ["r"], "ingest": ["i"], "embed": ["e"]},
                  "rows": ["public=314", "restricted=193"]}
@@ -130,3 +127,6 @@ class Candidate(unittest.TestCase):
         candidate_expected(BASE_DEPLOYED, "worse-chunking", now)
         self.assertEqual(BASE_DEPLOYED["images"]["ingest"], ["i"])
 
+
+if __name__ == "__main__":
+    unittest.main()

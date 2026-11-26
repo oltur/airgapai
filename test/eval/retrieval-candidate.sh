@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Runs inside the VM as root, for test/eval/retrieval.py --candidate on the host. ACTION=up sets up a
-# candidate's index beside the deployed one, and ACTION=down removes it.
+# candidate's index beside the deployed one, and ACTION=down removes it. ACTION=check fails if a
+# candidate's copies are there already, which up would remove: the host checks first, so that a
+# second run cannot break one in progress, and tears down only what its own up made.
 #
 # Up: a database, rag_candidate, gets the deployed rag database's schema, copied with pg_dump, so its
 # table, row-level security, grants and index are the deployed ones. A copy of the deployed ingest
@@ -28,8 +30,12 @@ down() {
 
 case ${ACTION:-} in
   down) down; exit ;;
+  check)
+    left="$(kubectl -n retrieval get job,deployment -l component=candidate -o name 2>&1)"
+    [[ -z $left ]] || { echo "FAIL another candidate run is in progress, or left: $left"; exit 1; }
+    exit ;;
   up) ;;
-  *) echo "FAIL ACTION must be up or down"; exit 1 ;;
+  *) echo "FAIL ACTION must be up, down or check"; exit 1 ;;
 esac
 [[ ${CANDIDATE:-} =~ ^[a-z0-9-]+$ ]] || { echo "FAIL CANDIDATE is not a tag: ${CANDIDATE:-}"; exit 1; }
 kubectl -n retrieval rollout status deployment/retrieval --timeout=120s >/dev/null || { echo "FAIL the retrieval service is not running"; exit 1; }
@@ -86,8 +92,14 @@ print(json.dumps(d))' "$1" "$3" | kubectl apply -f - >/dev/null
 started=$SECONDS
 copy job ingest "$image" || { echo "FAIL the ingest Job could not be copied"; exit 1; }
 echo "ingest-candidate started with $image"
-kubectl -n retrieval wait --for=condition=complete job/ingest-candidate --timeout=1800s >/dev/null ||
-  { echo "FAIL the candidate's ingestion did not complete"; kubectl -n retrieval logs job/ingest-candidate --tail=5; exit 1; }
+# Complete or Failed, whichever comes first: a Job that fails must not wait out the timeout.
+state=""
+until [[ $state == *Complete* || $state == *Failed* ]] || (( SECONDS - started > 1800 )); do
+  sleep 5
+  state="$(kubectl -n retrieval get job ingest-candidate -o jsonpath='{.status.conditions[?(@.status=="True")].type}')"
+done
+[[ $state == *Complete* ]] ||
+  { echo "FAIL the candidate's ingestion did not complete: ${state:-timed out}"; kubectl -n retrieval logs job/ingest-candidate --tail=5; exit 1; }
 echo "ingestion took $((SECONDS - started)) s: $(kubectl -n retrieval logs job/ingest-candidate --tail=1)"
 copy deployment retrieval "" || { echo "FAIL the retrieval service could not be copied"; exit 1; }
 kubectl -n retrieval rollout status deployment/retrieval-candidate --timeout=120s >/dev/null ||

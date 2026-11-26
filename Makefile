@@ -113,7 +113,7 @@ measure-retrieval: ## Measure recall per role against an exact scan, and search 
 eval-retrieval: ## Gate retrieval on the golden set in the VM against the saved baseline, and check nothing leaks
 	@test/eval/retrieval.py --baseline
 
-eval-retrieval-candidate: ## Gate a candidate index beside the deployed one, CANDIDATE=deployed or a chunk size in test/eval/candidates
+eval-retrieval-candidate: ## Gate a candidate index beside the deployed one, CANDIDATE=deployed or a chunking in test/eval/candidates
 	@[ -n "$(CANDIDATE)" ] || { echo "set CANDIDATE: deployed, or a name in test/eval/candidates"; exit 1; }
 	@test/eval/retrieval.py --baseline --candidate $(CANDIDATE)
 

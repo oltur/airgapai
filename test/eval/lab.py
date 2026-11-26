@@ -14,6 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 VM_SSH = str(ROOT / "infra/vm-ssh.sh")
 KUBECTL = "sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
 PORT = 18191
+REGISTRY = "10.43.0.50:5000"  # the in-cluster registry, as images are named in the cluster
 
 
 def vm(command):
@@ -85,7 +86,7 @@ RETRIEVAL = [("retrieval", "deployment", "retrieval"), ("retrieval", "job", "ing
 GENERATION = RETRIEVAL + [("gateway", "deployment", "gateway"), ("inference", "deployment", "chat")]
 
 
-def deployed(workloads=RETRIEVAL, args=False):
+def deployed(workloads=RETRIEVAL, args=False, rows=True):
     """What the run measured: the images of the workloads that make the result what it is, and the
     rows by label. With args, also each container's arguments and environment, which change a
     server as much: the environment as written, so a secret appears only as its Secret's name."""
@@ -96,7 +97,7 @@ def deployed(workloads=RETRIEVAL, args=False):
         containers = spec.get("initContainers", []) + spec["containers"]
         images[name] = [{"image": c["image"], "args": c.get("args", []), "env": c.get("env", [])}
                         if args else c["image"] for c in containers]
-    return {"images": images, "rows": chunk_counts()}
+    return {"images": images, "rows": chunk_counts()} if rows else {"images": images}
 
 
 def incomparable(baseline_asked, asked):
