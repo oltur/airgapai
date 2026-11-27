@@ -39,5 +39,5 @@ stop_probes() {
   kubectl -n "$ns" delete pod "$@" --ignore-not-found --wait=false >/dev/null 2>&1
 }
 
-# probe NAMESPACE POD HOST:PORT: prints reached, refused, timeout, no-route or dns-failed.
+# probe NAMESPACE POD HOST:PORT: prints reached, refused, timeout, no-route, dns-failed or error.
 probe() { kubectl -n "$1" exec "$2" -- /probe connect "$3" 2>/dev/null; }
