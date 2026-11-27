@@ -64,7 +64,7 @@ func check(label, want, got string) {
 
 // A blocked attempt must fail without any answer. "refused" and "error" are not blocks.
 func checkBlocked(label, got string) {
-	if slices.Contains([]string{"timeout", "no-route", "dns-failed"}, got) {
+	if slices.Contains([]string{"timeout", "no-route", "blackhole", "dns-failed"}, got) {
 		fmt.Printf("ok   %s: blocked (%s)\n", label, got)
 		return
 	}
@@ -153,8 +153,26 @@ func fromNode(addr string) string {
 		return "timeout"
 	case strings.Contains(out, "refused"):
 		return "refused"
+	case strings.Contains(out, "No route to host"), strings.Contains(out, "Network is unreachable"):
+		return "no-route"
+	case strings.Contains(out, "Invalid argument"):
+		// What connect gives for the VM's black-hole default route (ADR 0004).
+		return "blackhole"
 	}
-	return "no-route"
+	// Anything else is shown as it came, and never counts as blocked.
+	msg, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
+	return "other(" + msg + ")"
+}
+
+// fromNodeUntil allows for the node's service rules still catching up with a new endpoint.
+func fromNodeUntil(want, addr string) string {
+	var got string
+	for deadline := time.Now().Add(45 * time.Second); time.Now().Before(deadline); time.Sleep(3 * time.Second) {
+		if got = fromNode(addr); got == want {
+			break
+		}
+	}
+	return got
 }
 
 func fromHost(addr string) string {
@@ -749,7 +767,7 @@ func registryOutage(signed, unsigned string) {
 
 	mustKube("-n zot scale deployment zot --replicas=1")
 	mustKube("-n zot rollout status deployment/zot --timeout=180s")
-	check("registry back (control)", "reached", fromNode(registry))
+	check("registry back (control)", "reached", fromNodeUntil("reached", registry))
 	var back string
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(3 * time.Second) {
 		if back = admission(podYAML(ns, "after", signed, false), marker); back == "admitted" {
