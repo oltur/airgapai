@@ -63,6 +63,23 @@ Controls found two faults that a block alone would have hidden:
 | The forwarder control logged nothing: the Corefile says `cache  30` with two spaces, so the test's edit did nothing | The edit matches any spacing, and the test stops if no forwarder was added |
 | `signed-images.sh` accepted the `Running` phase, and its pod's `sleep` argument made the probe exit: a crash-looping pod would have passed | The pod now serves, and the check requires it to be ready |
 
+On 2026-11-27, in the `make rebuild` of `8416b05`, the registry-back control failed once: it
+connected from the VM a single time, straight after Zot's rollout was ready, and got an answer it did
+not recognise, which it reported as `no-route`. The next check, a signed pod admitted within 60 s,
+passed, and so did the whole test when run again on that VM. What the failed attempt got is not
+known, as the label hid it, so a slow service update is the likely cause, not a shown one. The VM's
+controls, the registry down and back, the firewall opened and the canary path open, now try every 3 s
+and start no new attempt after 45 s, as the pod probes do. The same fault labelled every answer the
+VM's probe did not recognise as `no-route`, a block: once it showed what came, the four VM checks to a
+public IP and the closed canary gave `connect: Invalid argument`, which is how the black-hole route of
+ADR 0004 answers. They are now reported as `blackhole`. `timeout`, `refused`, "No route to host" and
+"Network is unreachable" keep their labels, and any other answer is shown as it came and counts as a
+failure, not a block. "Invalid argument" is not only the black-hole route's answer, but the test's
+addresses are fixed, and one that does not parse is now reported as such. The pod probe still calls
+"Invalid argument" `no-route`: it is built into the signed probe image, so changing it waits for a
+rebuild. The test passed after the change, on the same VM, with each of those four blocked by the
+black-hole route; no `make rebuild` has run it yet.
+
 What this does not prove:
 
 - **The canary is on the host, not on a remote network.** The test shows the path to one address opens

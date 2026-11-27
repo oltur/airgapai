@@ -64,7 +64,7 @@ func check(label, want, got string) {
 
 // A blocked attempt must fail without any answer. "refused" and "error" are not blocks.
 func checkBlocked(label, got string) {
-	if slices.Contains([]string{"timeout", "no-route", "dns-failed"}, got) {
+	if slices.Contains([]string{"timeout", "no-route", "blackhole", "dns-failed"}, got) {
 		fmt.Printf("ok   %s: blocked (%s)\n", label, got)
 		return
 	}
@@ -128,20 +128,29 @@ func probe(ns, pod string, args ...string) string {
 	return out
 }
 
-// probeUntil allows for a policy or route change still reaching the dataplane.
-func probeUntil(want, ns, pod string, args ...string) string {
+// until tries every 3 s until it gets want. It starts no attempt after budget, so the last one
+// can end a little later.
+func until(want string, budget time.Duration, try func() string) string {
 	var got string
-	for deadline := time.Now().Add(45 * time.Second); time.Now().Before(deadline); time.Sleep(3 * time.Second) {
-		if got = probe(ns, pod, args...); got == want {
+	for deadline := time.Now().Add(budget); time.Now().Before(deadline); time.Sleep(3 * time.Second) {
+		if got = try(); got == want {
 			break
 		}
 	}
 	return got
 }
 
+// probeUntil allows for a policy or route change still reaching the dataplane.
+func probeUntil(want, ns, pod string, args ...string) string {
+	return until(want, 45*time.Second, func() string { return probe(ns, pod, args...) })
+}
+
 // fromNode connects from the VM itself, outside any pod.
 func fromNode(addr string) string {
-	h, p, _ := net.SplitHostPort(addr)
+	h, p, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "bad-address"
+	}
 	out, err := vm("", fmt.Sprintf("timeout 6 bash -c '</dev/tcp/%s/%s' 2>&1; echo rc=$?", h, p))
 	if err != nil {
 		return "ssh-failed"
@@ -153,8 +162,20 @@ func fromNode(addr string) string {
 		return "timeout"
 	case strings.Contains(out, "refused"):
 		return "refused"
+	case strings.Contains(out, "No route to host"), strings.Contains(out, "Network is unreachable"):
+		return "no-route"
+	case strings.Contains(out, "Invalid argument"):
+		// What connect gives for the VM's black-hole default route (ADR 0004).
+		return "blackhole"
 	}
-	return "no-route"
+	// Anything else is shown as it came, and never counts as blocked.
+	msg, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
+	return "other(" + msg + ")"
+}
+
+// fromNodeUntil allows for a firewall, route or service change still reaching the node.
+func fromNodeUntil(want, addr string) string {
+	return until(want, 45*time.Second, func() string { return fromNode(addr) })
 }
 
 func fromHost(addr string) string {
@@ -590,7 +611,7 @@ func matrix(pod [2]string, others [][2]string, system [2]string) {
 
 	mustHost("nft", "insert", "rule", "inet", "airgapai", "input", "iifname", "virbr-airgap", "ip", "daddr", hostIP, "tcp", "dport", bridgeTCP, "accept")
 	check("host listener from a pod, firewall opened (control)", "reached", probeUntil("reached", ns, name, "connect", bridge))
-	check("host listener from the VM, firewall opened (control)", "reached", fromNode(bridge))
+	check("host listener from the VM, firewall opened (control)", "reached", fromNodeUntil("reached", bridge))
 	mustHost("nft", "-f", "/etc/airgapai/firewall.nft")
 
 	openVMPath()
@@ -600,7 +621,7 @@ func matrix(pod [2]string, others [][2]string, system [2]string) {
 	cell("VM path open, policy on", false)
 	section("VM path open, policy on: other namespaces")
 	check("kube-system pod to the canary (control: the path is open)", "reached", probeUntil("reached", system[0], system[1], "connect", canaryIP+":"+canaryTCP))
-	check("VM to the canary (control: the path is open)", "reached", fromNode(canaryIP+":"+canaryTCP))
+	check("VM to the canary (control: the path is open)", "reached", fromNodeUntil("reached", canaryIP+":"+canaryTCP))
 	results := make([]string, len(others))
 	parallel(len(others), func(i int) { results[i] = probe(others[i][0], others[i][1], "connect", canaryIP+":"+canaryTCP) })
 	for i, other := range others {
@@ -726,7 +747,7 @@ func registryOutage(signed, unsigned string) {
 	mustKube("-n zot scale deployment zot --replicas=0")
 	mustKube("-n zot wait --for=delete pod -l app=zot --timeout=120s")
 	// Refused, not dropped: the service has no endpoints, so kube-proxy rejects the connection.
-	check("registry from the VM (control: it is down)", "refused", fromNode(registry))
+	check("registry from the VM (control: it is down)", "refused", fromNodeUntil("refused", registry))
 	check("running pod continues", "true", mustKube("-n "+ns+" get pod running -o jsonpath={.status.containerStatuses[0].ready}"))
 
 	if _, err := vm("", crictl+"stop "+id); err != nil {
@@ -749,13 +770,8 @@ func registryOutage(signed, unsigned string) {
 
 	mustKube("-n zot scale deployment zot --replicas=1")
 	mustKube("-n zot rollout status deployment/zot --timeout=180s")
-	check("registry back (control)", "reached", fromNode(registry))
-	var back string
-	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(3 * time.Second) {
-		if back = admission(podYAML(ns, "after", signed, false), marker); back == "admitted" {
-			break
-		}
-	}
+	check("registry back (control)", "reached", fromNodeUntil("reached", registry))
+	back := until("admitted", 60*time.Second, func() string { return admission(podYAML(ns, "after", signed, false), marker) })
 	check("new signed pod after the outage", "admitted", back)
 }
 
